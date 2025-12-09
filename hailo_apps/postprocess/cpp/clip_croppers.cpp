@@ -16,6 +16,9 @@
 #define FACE_LABEL "face"                       // 3
 #define LICENSE_PLATE_LABEL "license-plates"    // 4
 
+#define DEFAULT_CROP_EVERY_X_FRAMES 15
+#define DEFAULT_MAX_CROPS_PER_FRAME 8
+
 /**
 * @brief Get the tracking Hailo Unique Id object from a Hailo Detection.
 * 
@@ -145,25 +148,25 @@ int crop_every_x_frames=30, int max_crops_per_frame=5)
 
 std::vector<HailoROIPtr> object_cropper(std::shared_ptr<HailoMat> image, HailoROIPtr roi)
 {
-    return object_crop(image, roi, OBJECT_LABEL, 15, 8);
+    return object_crop(image, roi, OBJECT_LABEL, DEFAULT_CROP_EVERY_X_FRAMES, DEFAULT_MAX_CROPS_PER_FRAME);
 }
 
 std::vector<HailoROIPtr> person_cropper(std::shared_ptr<HailoMat> image, HailoROIPtr roi)
 {
-    return object_crop(image, roi, PERSON_LABEL, 15, 8);
+    return object_crop(image, roi, PERSON_LABEL, DEFAULT_CROP_EVERY_X_FRAMES, DEFAULT_MAX_CROPS_PER_FRAME);
 }
 
 std::vector<HailoROIPtr> vehicle_cropper(std::shared_ptr<HailoMat> image, HailoROIPtr roi)
 {
-    return object_crop(image, roi, VEHICLE_LABEL, 15, 8);
+    return object_crop(image, roi, VEHICLE_LABEL, DEFAULT_CROP_EVERY_X_FRAMES, DEFAULT_MAX_CROPS_PER_FRAME);
 }
 
 std::vector<HailoROIPtr> face_cropper(std::shared_ptr<HailoMat> image, HailoROIPtr roi)
 {
-    return object_crop(image, roi, FACE_LABEL, 15, 8);
+    return object_crop(image, roi, FACE_LABEL, DEFAULT_CROP_EVERY_X_FRAMES, DEFAULT_MAX_CROPS_PER_FRAME);
 }
 
 std::vector<HailoROIPtr> license_plate_cropper(std::shared_ptr<HailoMat> image, HailoROIPtr roi)
 {
-    return object_crop(image, roi, LICENSE_PLATE_LABEL, 15, 8);
+    return object_crop(image, roi, LICENSE_PLATE_LABEL, DEFAULT_CROP_EVERY_X_FRAMES, DEFAULT_MAX_CROPS_PER_FRAME);
 }

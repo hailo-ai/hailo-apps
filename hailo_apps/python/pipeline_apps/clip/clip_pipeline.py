@@ -13,6 +13,17 @@ from gi.repository import Gst
 # Local application-specific imports
 import hailo
 from hailo_apps.python.core.common.defines import (
+    CLIP_CROPPER_FACE_POSTPROCESS_FUNCTION_NAME,
+    CLIP_CROPPER_LICENSE_PLATE_POSTPROCESS_FUNCTION_NAME,
+    CLIP_CROPPER_OBJECT_POSTPROCESS_FUNCTION_NAME,
+    CLIP_CROPPER_PERSON_POSTPROCESS_FUNCTION_NAME,
+    CLIP_CROPPER_VEHICLE_POSTPROCESS_FUNCTION_NAME,
+    CLIP_DETECTION_POSTPROCESS_FUNCTION_NAME,
+    CLIP_DETECTOR_TYPE_FACE,
+    CLIP_DETECTOR_TYPE_LICENSE_PLATE,
+    CLIP_DETECTOR_TYPE_PERSON,
+    CLIP_DETECTOR_TYPE_VEHICLE,
+    CLIP_POSTPROCESS_FUNCTION_NAME,
     RESOURCES_SO_DIR_NAME,
     RESOURCES_MODELS_DIR_NAME,
     RESOURCES_VIDEOS_DIR_NAME,
@@ -73,24 +84,23 @@ class GStreamerClipApp(GStreamerApp):
         self.post_process_so_clip = get_resource_path(pipeline_name=None, resource_type=RESOURCES_SO_DIR_NAME, model=CLIP_POSTPROCESS_SO_FILENAME)
         self.post_process_so_cropper = get_resource_path(pipeline_name=None, resource_type=RESOURCES_SO_DIR_NAME, model=CLIP_CROPPER_POSTPROCESS_SO_FILENAME)
 
-        self.detection_post_process_function_name = 'yolov8n_personface'
-
-        self.clip_post_process_function_name = 'filter'
-        if self.options_menu.detector == 'person':
+        self.clip_post_process_function_name = CLIP_POSTPROCESS_FUNCTION_NAME
+        self.detection_post_process_function_name = CLIP_DETECTION_POSTPROCESS_FUNCTION_NAME
+        if self.options_menu.detector == CLIP_DETECTOR_TYPE_PERSON:
             self.class_id = 1
-            self.cropper_post_process_function_name = 'person_cropper'
-        elif self.options_menu.detector == 'vehicle':
+            self.cropper_post_process_function_name = CLIP_CROPPER_PERSON_POSTPROCESS_FUNCTION_NAME
+        elif self.options_menu.detector == CLIP_DETECTOR_TYPE_VEHICLE:
             self.class_id = 2
-            self.cropper_post_process_function_name = 'vehicle_cropper'
-        elif self.options_menu.detector == 'face':
+            self.cropper_post_process_function_name = CLIP_CROPPER_VEHICLE_POSTPROCESS_FUNCTION_NAME
+        elif self.options_menu.detector == CLIP_DETECTOR_TYPE_FACE:
             self.class_id = 3
-            self.cropper_post_process_function_name = 'face_cropper'
-        elif self.options_menu.detector == 'license-plate':
+            self.cropper_post_process_function_name = CLIP_CROPPER_FACE_POSTPROCESS_FUNCTION_NAME
+        elif self.options_menu.detector == CLIP_DETECTOR_TYPE_LICENSE_PLATE :
             self.class_id = 4
-            self.cropper_post_process_function_name = 'license_plate_cropper'
+            self.cropper_post_process_function_name = CLIP_CROPPER_LICENSE_PLATE_POSTPROCESS_FUNCTION_NAME
         else:
             self.class_id = 0
-            self.cropper_post_process_function_name = 'object_cropper'
+            self.cropper_post_process_function_name = CLIP_CROPPER_OBJECT_POSTPROCESS_FUNCTION_NAME
 
         self.classified_tracks = set()  # Track which track_ids have already been classified
 
