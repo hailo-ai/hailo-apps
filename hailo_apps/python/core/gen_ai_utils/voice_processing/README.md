@@ -35,9 +35,50 @@ cd local_resources/piper_models
 python3 -m piper.download_voices en_US-amy-low
 ```
 
-This will download:
-- `en_US-amy-low.onnx`
-- `en_US-amy-low.onnx.json`
+This will download two files (~65MB total):
+- `en_US-amy-low.onnx` - The neural network model
+- `en_US-amy-low.onnx.json` - Model configuration
+
+#### Verify Installation
+
+```bash
+ls -lh local_resources/piper_models/
+```
+
+You should see:
+```
+en_US-amy-low.onnx
+en_US-amy-low.onnx.json
+```
+
+### Using Alternative Voice Models
+
+Piper supports many voice models in different languages and styles. To use a different voice:
+
+1. **Browse available voices:**
+   - Visit: https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/API_PYTHON.md
+   - Or list voices: `python3 -m piper.download_voices --list`
+
+2. **Download your chosen voice:**
+   ```bash
+   cd local_resources/piper_models
+   python3 -m piper.download_voices <voice-name>
+   ```
+
+3. **Update the configuration:**
+   Edit `hailo_apps/python/core/common/defines.py`:
+   ```python
+   TTS_MODEL_NAME = "your-chosen-voice-name"
+   ```
+
+### Common Voice Options
+
+| Voice Name          | Language     | Gender | Size   | Quality    |
+| ------------------- | ------------ | ------ | ------ | ---------- |
+| `en_US-amy-low`     | English (US) | Female | ~65MB  | Low (fast) |
+| `en_US-amy-medium`  | English (US) | Female | ~100MB | Medium     |
+| `en_GB-alan-low`    | English (UK) | Male   | ~65MB  | Low (fast) |
+| `en_GB-alan-medium` | English (UK) | Male   | ~100MB | Medium     |
 
 ## Audio Configuration & Troubleshooting
 
