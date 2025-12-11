@@ -1,0 +1,68 @@
+capabilities:
+- Move servo to absolute angle
+- Move servo by relative angle
+- 'Angle range: -90 to 90 degrees'
+- Automatic angle clamping
+few_shot_examples:
+- final_response: Servo moved to 45°.
+  tool_call:
+    arguments:
+      angle: 45
+      mode: absolute
+    name: servo
+  tool_response: '{"ok": true, "result": "Servo moved to 45.0°"}'
+  user: Move servo to 45 degrees
+- final_response: Servo rotated left by 30°, now at 15°.
+  tool_call:
+    arguments:
+      angle: -30
+      mode: relative
+    name: servo
+  tool_response: '{"ok": true, "result": "Servo moved by -30.0° to 15.0°"}'
+  user: Rotate servo left 30 degrees
+metadata:
+  author: hailo-team
+  created: '2025-12-11'
+  description: Servo control tool
+output_format:
+  after_tool: Report servo position
+  direct_response: Confirm the action taken
+  tool_call: 'XML-wrapped JSON: <tool_call>{...}</tool_call>'
+persona:
+  constraints:
+  - Always use tool for servo requests
+  - Convert natural language to mode and angle
+  role: Servo Control Assistant
+  style: Precise, action-oriented
+test_cases:
+- difficulty: easy
+  expected:
+    tool_called: true
+    tool_name: servo
+  id: servo_001
+  input: move servo to 60 degrees
+  tags:
+  - basic
+  - absolute
+- difficulty: easy
+  expected:
+    tool_called: true
+    tool_name: servo
+  id: servo_002
+  input: rotate by 20 degrees
+  tags:
+  - relative
+tool_instructions: 'Use this tool for any servo control request.
+
+  Function name: ''servo''
+
+
+  Parameters:
+
+  - mode: REQUIRED - ''absolute'' or ''relative''
+
+  - angle: REQUIRED - angle in degrees
+
+  '
+tool_name: servo
+version: '1.0'

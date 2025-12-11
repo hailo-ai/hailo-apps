@@ -492,10 +492,13 @@ class AgentApp:
                 llm=self.llm,
                 prompt=prompt,
                 temperature=config.TEMPERATURE,
+                seed=config.SEED,
+                max_tokens=config.MAX_GENERATED_TOKENS,
                 prefix="Assistant: ",
                 debug_mode=is_debug,
                 token_callback=tts_callback,
             )
+            logger.debug("Raw response length: %d, content: %s", len(raw_response), raw_response[:200])
         except Exception as e:
             logger.error("LLM generation failed: %s", e)
             logger.debug("Traceback: %s", traceback.format_exc())

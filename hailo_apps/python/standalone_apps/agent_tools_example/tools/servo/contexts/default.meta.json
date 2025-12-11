@@ -1,0 +1,18 @@
+{
+  "state_name": "default",
+  "created": "2025-12-11T17:49:16.969288Z",
+  "yaml_hash": "sha256:79f0ff9f1c09715b",
+  "context_tokens": 1133,
+  "few_shot_count": 2,
+  "parent_state": "",
+  "performance": {
+    "tool_call_accuracy": 0.0,
+    "e2e_accuracy": 0.0,
+    "avg_latency_ms": 0.0,
+    "p95_latency_ms": 0.0,
+    "no_tool_precision": 0.0,
+    "test_cases_passed": 0,
+    "test_cases_total": 0
+  },
+  "notes": ""
+}
