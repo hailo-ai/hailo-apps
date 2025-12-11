@@ -594,6 +594,13 @@ def create_parser() -> argparse.ArgumentParser:
         default="default",
         help="Context state to load (default: 'default')",
     )
+    parser.add_argument(
+        "--tool",
+        "-t",
+        type=str,
+        default=None,
+        help="Tool to use (skips interactive selection). Use tool name (e.g., 'math', 'weather').",
+    )
 
     return parser
 
@@ -657,8 +664,23 @@ def main() -> None:
         sys.exit(1)
 
     # Tool selection
-    tool_thread, tool_result = tool_selection.start_tool_selection_thread(all_tools)
-    selected_tool = tool_selection.get_tool_selection_result(tool_thread, tool_result)
+    selected_tool = None
+
+    if args.tool:
+        # Find tool by name
+        tool_name = args.tool.lower().strip()
+        for tool in all_tools:
+            if tool.get("name", "").lower() == tool_name:
+                selected_tool = tool
+                break
+        if not selected_tool:
+            available = ", ".join(t.get("name", "") for t in all_tools)
+            logger.error("Tool '%s' not found. Available: %s", args.tool, available)
+            sys.exit(1)
+    else:
+        # Interactive selection
+        tool_thread, tool_result = tool_selection.start_tool_selection_thread(all_tools)
+        selected_tool = tool_selection.get_tool_selection_result(tool_thread, tool_result)
 
     if not selected_tool:
         sys.exit(0)

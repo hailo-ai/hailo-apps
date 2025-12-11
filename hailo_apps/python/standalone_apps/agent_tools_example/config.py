@@ -24,12 +24,15 @@ HARDWARE_MODE: str = "simulator"  # "real" or "simulator"
 NEOPIXEL_SPI_BUS: int = 0  # SPI bus number (0 = /dev/spidev0.x)
 NEOPIXEL_SPI_DEVICE: int = 0  # SPI device number (0 = /dev/spidev0.0)
 NEOPIXEL_COUNT: int = 1  # Number of LEDs in strip
-FLASK_PORT: int = 5000  # Port for simulator web server
+# Simulator Ports (using 8xxx range to avoid conflicts with Cursor IDE which uses 5xxx)
+FLASK_PORT: int = 8500  # Port for LED simulator web server
+SERVO_SIMULATOR_PORT: int = 8501  # Port for servo simulator web server
+ELEVATOR_SIMULATOR_PORT: int = 8502  # Port for elevator simulator web server
+
+# Servo Hardware Configuration
 SERVO_PWM_CHANNEL: int = 0  # Hardware PWM channel (0 or 1). Channel 0 = GPIO 18, Channel 1 = GPIO 19
-SERVO_SIMULATOR_PORT: int = 5001  # Port for servo simulator web server
 SERVO_MIN_ANGLE: float = -90.0  # Minimum servo angle in degrees
 SERVO_MAX_ANGLE: float = 90.0  # Maximum servo angle in degrees
-ELEVATOR_SIMULATOR_PORT: int = 5002  # Port for elevator simulator web server
 
 # Voice Configuration
 ENABLE_VOICE: bool = True
