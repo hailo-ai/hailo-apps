@@ -267,8 +267,11 @@ class AgentApp:
         Args:
             state_name: Name of state to load.
         """
-        # Build system prompt
-        self.system_text = system_prompt.create_system_prompt([self.selected_tool])
+        # Build system prompt (with YAML config if available)
+        self.system_text = system_prompt.create_system_prompt(
+            [self.selected_tool],
+            yaml_config=self.yaml_config,
+        )
         logger.debug("System prompt: %d chars", len(self.system_text))
 
         # Try to load saved state
@@ -291,6 +294,15 @@ class AgentApp:
         try:
             prompt = [message_formatter.messages_system(self.system_text)]
             context_manager.add_to_context(self.llm, prompt, logger)
+
+            # Add few-shot examples if available
+            if self.yaml_config and self.yaml_config.few_shot_examples:
+                logger.info("Adding %d few-shot examples to context", len(self.yaml_config.few_shot_examples))
+                system_prompt.add_few_shot_examples_to_context(
+                    self.llm,
+                    self.yaml_config.few_shot_examples,
+                    logger,
+                )
 
             # Save initial state
             yaml_dict = self.yaml_config.raw_config if self.yaml_config else {}
