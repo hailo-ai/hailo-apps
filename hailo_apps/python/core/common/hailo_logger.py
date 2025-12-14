@@ -213,8 +213,10 @@ def level_from_args(args: Any) -> str:
     )
 
 
-# If someone forgets to init, default to simple INFO console logging.
-if os.getenv("HAILO_LOG_AUTOCONFIG", "1") == "1":
+# Auto-configuration is opt-in via HAILO_LOG_AUTOCONFIG=1
+# Most applications should explicitly call init_logging() with their CLI arguments.
+# This fallback is only for cases where logging is needed before main() runs.
+if os.getenv("HAILO_LOG_AUTOCONFIG", "0") == "1":
     try:
         init_logging()
     except Exception:
