@@ -26,8 +26,12 @@ tool_instructions: |
 
   Parameters:
   - action: REQUIRED - 'on' or 'off'
-  - color: OPTIONAL - color name (red, blue, green, etc.)
-  - intensity: OPTIONAL - brightness 0-100
+  - color: OPTIONAL - color name (red, blue, green, etc.). ONLY include if user explicitly requests a color change.
+    DO NOT include color if user only asks to change intensity - current color will be preserved.
+  - intensity: OPTIONAL - brightness 0-100. If user only asks to change intensity, do NOT include color parameter.
+
+  IMPORTANT: If user asks to change ONLY intensity/brightness, include ONLY action='on' and intensity.
+  Do NOT include color - the LED will keep its current color.
 
   DEFAULT OPTION: If the user requests an unsupported color or operation, or if you cannot understand
   the LED control request, set 'default' to true. The tool will automatically generate an appropriate error message.
@@ -94,6 +98,27 @@ few_shot_examples:
         action: "on"
         color: "white"
         intensity: 100
+
+  - user: "Set intensity to 50%"
+    tool_call:
+      name: "rgb_led"
+      arguments:
+        action: "on"
+        intensity: 50
+
+  - user: "Change brightness to 75%"
+    tool_call:
+      name: "rgb_led"
+      arguments:
+        action: "on"
+        intensity: 75
+
+  - user: "Make it dimmer"
+    tool_call:
+      name: "rgb_led"
+      arguments:
+        action: "on"
+        intensity: 30
 
 test_cases:
   - id: "led_001"

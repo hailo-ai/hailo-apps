@@ -33,8 +33,13 @@ description: str = (
     "\n\n"
     "PARAMETER RULES:\n"
     "- action: REQUIRED - always 'on' or 'off'\n"
-    "- color: OPTIONAL - only include if user specifies a color name\n"
-    "- intensity: OPTIONAL - only include if user specifies brightness (0-100)\n"
+    "- color: OPTIONAL - ONLY include if the user EXPLICITLY requests a color change (e.g., 'make it red', 'change to blue', 'set color to green'). "
+    "  DO NOT include color if the user only asks to change intensity/brightness - the current color will be preserved.\n"
+    "- intensity: OPTIONAL - only include if user specifies brightness/intensity (0-100). "
+    "  If user only asks to change intensity, do NOT include color parameter - the LED will keep its current color.\n"
+    "\n"
+    "IMPORTANT: If the user asks to change ONLY intensity/brightness (e.g., 'set intensity to 50%', 'make it dimmer', 'brightness 75%'), "
+    "include ONLY action='on' and intensity. DO NOT include color - the current color will be preserved.\n"
     "\n"
     "Color names: red, blue, green, yellow, purple, cyan, white, orange, pink, magenta, lime, teal, navy\n\n"
     "DEFAULT OPTION: If the user requests an unsupported color or operation, or if you cannot understand the LED control request, "
@@ -115,7 +120,7 @@ schema: dict[str, Any] = {
         },
         "color": {
             "type": "string",
-            "description": "Color name (case-insensitive). OPTIONAL.",
+            "description": "Color name (case-insensitive). OPTIONAL. ONLY include if user explicitly requests a color change. Do NOT include if user only asks to change intensity - current color will be preserved.",
         },
         "intensity": {
             "type": "number",

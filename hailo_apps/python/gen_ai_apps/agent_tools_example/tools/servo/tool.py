@@ -21,19 +21,28 @@ name: str = "servo"
 
 # User-facing description
 display_description: str = (
-    "Control servo: move to absolute angle or by relative angle (-90 to 90 degrees)."
+    "Control servo: move to absolute angle or by relative angle."
 )
 
 # LLM instruction description
 description: str = (
     "CRITICAL: You MUST use this tool when the user asks to control, move, or do anything with a servo. "
-    "ALWAYS call this tool if the user mentions: servo, move servo, set angle, rotate, turn, position. "
+    "ALWAYS call this tool if the user mentions: servo, move servo, set angle, rotate, turn, position, home, center. "
     "NEVER respond about servo control without calling this tool. "
     "The function name is 'servo' (use this exact name in tool calls). "
     "Modes: 'absolute' (set to specific angle), 'relative' (move by delta). "
-    "Angle range: -90 to 90 degrees.\n\n"
-    "DEFAULT OPTION: If the user requests an angle outside -90 to 90 degrees, or if you cannot understand "
-    "the servo control request, set 'default' to true. The tool will automatically generate an appropriate error message."
+    "Angles are in degrees.\n\n"
+    "DIRECTION MAPPING (CRITICAL):\n"
+    "- 'right' or 'to the right' = POSITIVE angle (e.g., 'move right 70 degrees' → angle: 70)\n"
+    "- 'left' or 'to the left' = NEGATIVE angle (e.g., 'move left 70 degrees' → angle: -70)\n\n"
+    "When user says 'home', 'center', 'zero', or 'reset position', use mode='absolute' with angle=0. "
+    "\n"
+    "CRITICAL - DEFAULT OPTION: You MUST use default=true in these cases:\n"
+    "1. If the request mentions servo but you cannot extract a valid angle or direction (e.g., 'move servo to Japan')\n"
+    "2. If the request is unclear, ambiguous, or doesn't make sense for servo control\n"
+    "3. If the request doesn't contain a number or clear direction (left/right) that can be converted to an angle\n"
+    "When default=true, the tool will automatically generate an appropriate error message. "
+    "DO NOT guess angles or use angle=0 when the request is unclear - always use default=true instead."
 )
 
 # Initialize servo controller only when tool is selected
@@ -187,7 +196,7 @@ def run(input_dict: dict[str, Any]) -> dict[str, Any]:
         final_angle = final_state["angle"]
 
         if target_angle != clamped_angle:
-            result = f"Servo moved by {angle:.1f}° to {final_angle:.1f}° (clamped)"
+            result = f"Servo move by {angle:.1f}° was clamped to {final_angle:.1f}°"
         else:
             result = f"Servo moved by {angle:.1f}° to {final_angle:.1f}°"
 

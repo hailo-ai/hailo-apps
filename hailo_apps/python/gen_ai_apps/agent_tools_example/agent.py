@@ -162,7 +162,7 @@ class AgentApp:
         if config_path and Path(config_path).exists():
             self.yaml_config = load_yaml_config(Path(config_path))
             if self.yaml_config:
-                logger.info("Loaded YAML config: %s", config_path)
+                logger.debug("Loaded YAML config: %s", config_path)
 
         print("Initializing AI components...")
 
@@ -300,7 +300,7 @@ class AgentApp:
 
         # Fresh initialization (when --no-cache is used or state doesn't exist)
         # Generate system prompt only when needed for building context
-        logger.info("Initializing fresh context")
+        logger.debug("Initializing fresh context")
         try:
             # Build system prompt (with YAML config if available)
             self.system_text = system_prompt.create_system_prompt(
@@ -482,7 +482,7 @@ class AgentApp:
         """Handle context clear request."""
         try:
             self.llm.clear_context()
-            print("[Info] Context cleared.")
+            logger.debug("Context cleared.")
 
             # Reload from state
             if not self.state_manager.reload_state(self.llm):
@@ -502,10 +502,10 @@ class AgentApp:
         """Show available context states."""
         states = self.state_manager.list_states()
         if not states:
-            print("[Info] No saved states found.")
+            logger.info("No saved states found.")
             return
 
-        print("\n[Info] Available states:")
+        logger.debug("Available states:")
         for state in states:
             current = " (current)" if state.state_name == self.state_manager.current_state else ""
             print(f"  - {state.state_name}: {state.context_tokens} tokens{current}")
@@ -543,7 +543,7 @@ class AgentApp:
 
         # Generate response (agent responses are not sent to TTS, only tool results are)
         try:
-            is_debug = self.debug or logger.isEnabledFor(logging.DEBUG)
+            #is_debug = self.debug or logger.isEnabledFor(logging.DEBUG)
             raw_response = streaming.generate_and_stream_response(
                 llm=self.llm,
                 prompt=prompt,  # Pass prompt directly - llm.generate() adds it to context
@@ -551,7 +551,7 @@ class AgentApp:
                 seed=config.SEED,
                 max_tokens=config.MAX_GENERATED_TOKENS,
                 prefix="Assistant: ",
-                debug_mode=is_debug,
+            #    debug_mode=is_debug,
                 token_callback=None,  # Agent response not sent to TTS
             )
             logger.debug("Raw response length: %d, content: %s", len(raw_response), raw_response[:200])

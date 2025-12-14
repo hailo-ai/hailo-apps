@@ -243,6 +243,20 @@ def add_to_context(
             # Consume token to add prompt to context
             pass
 
+        # Verify context was updated
+        try:
+            new_usage = llm.get_context_usage_size()
+            max_capacity = llm.max_context_capacity()
+            if new_usage > max_capacity:
+                log.error(
+                    "Context exceeds capacity after update: %d/%d tokens. "
+                    "This may cause errors on next operation.",
+                    new_usage, max_capacity
+                )
+                return False
+        except Exception:
+            pass  # Verification failed, but operation may have succeeded
+
         log.debug("Context updated")
         return True
 

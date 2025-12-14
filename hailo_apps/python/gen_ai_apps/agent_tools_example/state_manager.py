@@ -14,6 +14,7 @@ import hashlib
 import json
 import logging
 import shutil
+import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -251,11 +252,29 @@ class StateManager:
                 with open(yaml_path, "w", encoding="utf-8") as f:
                     yaml.dump(yaml_config, f, default_flow_style=False, allow_unicode=True)
 
-            # 3. Save metadata
+            # 3. Save metadata and validate capacity
             try:
                 context_tokens = llm.get_context_usage_size()
-            except Exception:
+                max_capacity = llm.max_context_capacity()
+
+                # Validate that context doesn't exceed capacity
+                if context_tokens > max_capacity:
+                    logger.error(
+                        "Context exceeds capacity: %d tokens > %d max capacity. "
+                        "State may not load correctly.",
+                        context_tokens, max_capacity
+                    )
+                    # exit the program
+                    sys.exit(1)
+                elif context_tokens > max_capacity * 0.95:
+                    logger.warning(
+                        "Context near capacity: %d/%d tokens (%.1f%%)",
+                        context_tokens, max_capacity, (context_tokens * 100.0 / max_capacity)
+                    )
+            except Exception as e:
+                logger.warning("Could not validate context capacity: %s", e)
                 context_tokens = 0
+                max_capacity = 0
 
             state_info = StateInfo(
                 state_name=state_name,
@@ -313,7 +332,14 @@ class StateManager:
 
             llm.load_context(context_data)
             self._current_state_name = state_name
-            logger.debug("Loaded state: %s", state_name)
+
+            # Verify load was successful
+            try:
+                loaded_tokens = llm.get_context_usage_size()
+                logger.debug("Loaded state: %s (%d tokens)", state_name, loaded_tokens)
+            except Exception:
+                logger.debug("Loaded state: %s", state_name)
+
             return True
 
         except Exception as e:
