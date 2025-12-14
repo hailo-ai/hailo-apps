@@ -48,15 +48,12 @@ def create_system_prompt(
     tool_names_list = ", ".join(f'"{name}"' for name in tool_names)
     tools_json = json.dumps(tool_defs, separators=(",", ":"))
 
-    # Build introduction section
-    introduction = "You are Qwen, created by Alibaba Cloud. You are a helpful assistant."
-
     # Build persona section from YAML if available
     persona_section = ""
     if yaml_config and yaml_config.persona:
         components = yaml_config.get_system_prompt_components()
         if components["persona"]:
-            persona_section = f"\n# Persona\n{components['persona']}\n"
+            persona_section = f"# Persona\n{components['persona']}\n"
 
     # Build available tools section
     available_tools_section = f"""# Available Tools
@@ -72,15 +69,6 @@ Available tools: {tool_names_list}"""
         components = yaml_config.get_system_prompt_components()
         if components["capabilities"]:
             capabilities_section = f"\n# Capabilities\n{components['capabilities']}\n"
-
-    # Build role vs tool role section
-    role_section = """# CRITICAL: Your Role vs Tool Role
-- YOU are the ASSISTANT - you CALL tools, you do NOT respond as tools
-- YOU output <tool_call> tags to REQUEST tool execution
-- The SYSTEM executes the tool and sends you <tool_response> tags
-- YOU then respond to the user based on the tool result
-- NEVER output <tool_response> tags yourself - that's what the system sends TO you
-- ONLY output <tool_call> tags when you want to use a tool"""
 
     # Build tool instructions section (from YAML or tool description)
     tool_instructions_section = ""
@@ -129,11 +117,9 @@ BEFORE each response, think about whether to use a tool:
 
     # Combine all sections
     prompt_parts = [
-        introduction,
         persona_section,
         available_tools_section,
         capabilities_section,
-        role_section,
         tool_instructions_section,
         tool_usage_rules_section,
         how_to_call_section,

@@ -96,6 +96,10 @@ def print_tool_result(result: Dict[str, Any]) -> None:
     """
     Print tool execution result to the user.
 
+    Distinguishes between:
+    - Agent errors (ok=False): Tool was used incorrectly
+    - User errors (ok=True with error): Default option was correctly used
+
     Args:
         result: Tool execution result dictionary with 'ok' key.
     """
@@ -104,11 +108,19 @@ def print_tool_result(result: Dict[str, Any]) -> None:
         return
 
     if result.get("ok"):
-        tool_result_text = result.get("result", "")
-        if tool_result_text:
-            print(f"\n[Tool] {tool_result_text}\n")
+        # Success or user error (default option)
+        if result.get("error") and not result.get("result"):
+            # User error: default option was used, show error message
+            error_msg = result.get("error", "Unknown error")
+            print(f"\n[Tool] {error_msg}\n")
+        else:
+            # Success: show result
+            tool_result_text = result.get("result", "")
+            if tool_result_text:
+                print(f"\n[Tool] {tool_result_text}\n")
     else:
-        error_msg = result.get("error", "Unknown error")
-        logger.warning("%s", error_msg)
-        print(f"\n[Tool Error] {error_msg}\n")  # User-facing error message
+        # Agent error: tool was used incorrectly
+        # Use standard message (don't expose internal errors to user)
+        logger.warning("Agent error: %s", result.get("error", "Unknown error"))
+        print(f"\n[Tool Error] There was an error executing the tool. Please try rephrasing your request.\n")
 

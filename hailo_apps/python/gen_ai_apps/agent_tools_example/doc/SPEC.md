@@ -126,9 +126,6 @@ python -m hailo_apps.python.gen_ai_apps.agent_tools_example.agent --tool math --
 # Skip cached states and rebuild context from scratch
 python -m hailo_apps.python.gen_ai_apps.agent_tools_example.agent --no-cache
 
-# Continue conversation (don't reset to cached state each query)
-python -m hailo_apps.python.gen_ai_apps.agent_tools_example.agent --continue
-
 # Debug mode
 python -m hailo_apps.python.gen_ai_apps.agent_tools_example.agent --debug
 ```
@@ -145,7 +142,6 @@ class AgentApp:
         state_name: str = "default",
         voice_enabled: bool = False,
         no_tts: bool = False,
-        continue_mode: bool = False,
     ):
         # Core components
         self.tool = self._load_tool(tool_name)
@@ -180,8 +176,7 @@ class AgentApp:
 
     def process_query(self, user_text: str) -> AgentResponse:
         """Core query processing - shared by text and voice."""
-        # 1. Check context capacity
-        if context_manager.is_context_full(self.llm):
+        # 1. Reload state for fresh context (each query starts fresh)
             self.state_manager.reload_state(self.llm)
 
         # 2. Add user message to context
@@ -198,7 +193,7 @@ class AgentApp:
         tool_call = tool_parsing.parse_function_call(raw_response)
         if tool_call:
             result = tool_execution.execute_tool_call(tool_call, self.tools_lookup)
-            agent_utils.update_context_with_tool_result(self.llm, result)
+            # Note: Context is not updated with tool results (fresh mode)
             return AgentResponse(tool_called=True, result=result)
 
         return AgentResponse(tool_called=False, text=raw_response)
@@ -324,19 +319,14 @@ few_shot_examples:
       name: "math"
       arguments:
         expression: "5 + 3"
-    tool_response: '{"ok": true, "result": "5 + 3 = 8"}'
-    final_response: "8"
 
   - user: "Calculate 2 times 3 plus 4"
     tool_call:
       name: "math"
       arguments:
         expression: "2 * 3 + 4"
-    tool_response: '{"ok": true, "result": "2 * 3 + 4 = 10"}'
-    final_response: "10"
 
   - user: "Hello, how are you?"
-    final_response: "Hello! I'm here to help with calculations. What would you like me to compute?"
 
 # ═══════════════════════════════════════════════════════════════
 # TEST CASES - For benchmarking (not added to context)
@@ -390,7 +380,7 @@ llm:
 
 context:
   threshold: 0.95           # Clear at 95% capacity
-  default_mode: "fresh"     # "fresh" = reload state each query, "continue" = keep history
+  # Note: Currently all queries reload state (fresh mode). Continue mode not yet implemented.
 
 voice:
   whisper_model: "Whisper-Base"
@@ -426,8 +416,8 @@ hardware:
 │  For each example:                                              │
 │    message_formatter.messages_user(example.user)                │
 │    message_formatter.messages_assistant(tool_call_xml)          │
-│    message_formatter.messages_tool(tool_response)               │
-│    message_formatter.messages_assistant(final_response)         │
+│    # Note: tool_response and final_response are NOT added here  │
+│    # They will be used when continue mode is implemented        │
 │  context_manager.add_to_context(llm, [msg])                     │
 └─────────────────────────────────────────────────────────────────┘
                               ↓
@@ -443,11 +433,64 @@ hardware:
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │                    RUNTIME                                      │
-│  Load state, process queries, optionally save new states        │
+│  Load state, process queries (fresh context each query)        │
+│  Note: Continue mode not yet implemented                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.2 StateManager API
+### 7.2 Continue Mode (Future Implementation)
+
+**Status**: Not yet implemented. Currently, all queries reload the saved context state (fresh mode).
+
+**What will be needed for continue mode**:
+
+1. **Few-shot examples with full conversation**:
+   - Add `tool_response` and `final_response` fields to YAML config `few_shot_examples` entries
+   - Update `prepare_few_shot_examples_messages()` to include `tool_response` and `final_response` when continue mode is enabled
+   - This will show the model complete conversation examples including tool results
+   - Example YAML format:
+     ```yaml
+     few_shot_examples:
+       - user: "What is 5 plus 3?"
+         tool_call:
+           name: "math"
+           arguments:
+             expression: "5 + 3"
+         tool_response: '{"ok": true, "result": "5 + 3 = 8"}'
+         final_response: "8"
+     ```
+
+2. **Context accumulation**:
+   - In `process_query()`, add user messages, tool calls, tool results, and assistant responses to context
+   - Use `agent_utils.update_context_with_tool_result()` to add tool results
+   - Add assistant responses to context after generation
+
+3. **Context management**:
+   - Check context capacity before each query
+   - When context is full, reload state (reset to initial context)
+   - Optionally save conversation snapshots periodically
+
+4. **CLI flag**:
+   - Add `--continue` flag to enable conversation history
+   - Default behavior remains fresh mode (reload state each query)
+
+5. **State management**:
+   - Optionally save conversation states with different names
+   - Allow loading conversation snapshots
+
+**Benefits of continue mode**:
+- Multi-turn conversations with context awareness
+- Follow-up questions ("What was the result again?")
+- Complex workflows requiring multiple tool calls
+- Better user experience for interactive sessions
+
+**Current behavior (fresh mode)**:
+- Each query starts from the saved context state
+- No conversation history between queries
+- Consistent, reproducible behavior
+- Lower context usage
+
+### 7.3 StateManager API
 
 ```python
 class StateManager:

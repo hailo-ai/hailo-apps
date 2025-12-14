@@ -27,7 +27,9 @@ description: str = (
     "If you don't know the location of the query, do not call this tool. Ask the user for the location."
     "Supported requests: current temperature, forecasts for future days, rain/precipitation queries. "
     "For dates: use the 'future_days' parameter (e.g., 'tomorrow' -> future_days=1, 'in 3 days' -> future_days=3, 'today' -> future_days=0). "
-    "Set include_rain=true when the user asks about rain or precipitation."
+    "Set include_rain=true when the user asks about rain or precipitation.\n\n"
+    "DEFAULT OPTION: If the user's request is not related to weather, or if you cannot determine the location, "
+    "set 'default' to true. The tool will automatically generate an appropriate error message."
 )
 
 schema: dict[str, Any] = {
@@ -35,7 +37,7 @@ schema: dict[str, Any] = {
     "properties": {
         "location": {
             "type": "string",
-            "description": "Location in 'City' or 'City, Country' format.",
+            "description": "Location in 'City' or 'City, Country' format. Required unless 'default' is used.",
         },
         "future_days": {
             "type": "integer",
@@ -51,8 +53,15 @@ schema: dict[str, Any] = {
                 "Defaults to false if not specified."
             ),
         },
+        "default": {
+            "type": "boolean",
+            "description": (
+                "Set to true when the user's request is not related to weather or if you cannot determine the location. "
+                "The tool will automatically generate an appropriate error message."
+            ),
+        },
     },
-    "required": ["location"],
+    "required": [],
 }
 
 TOOLS_SCHEMA: list[dict[str, Any]] = [
@@ -69,6 +78,10 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
 
 def _validate_input(payload: dict[str, Any]) -> dict[str, Any]:
     """Validate input parameters."""
+    # If default is provided, location is not required
+    if payload.get("default") is True:
+        return {"ok": True, "data": {"location": None, "future_days": 0, "include_rain": False}}
+
     try:
         from pydantic import BaseModel, Field
 
@@ -101,7 +114,7 @@ def _validate_input(payload: dict[str, Any]) -> dict[str, Any]:
             future_days = 0
         include_rain = bool(payload.get("include_rain", False))
         if not location:
-            return {"ok": False, "error": "Missing required 'location'"}
+            return {"ok": False, "error": "Either 'location' or 'default' must be provided"}
         return {
             "ok": True,
             "data": {
@@ -118,13 +131,21 @@ def run(input_data: dict[str, Any]) -> dict[str, Any]:
 
     Args:
         input_data: Dictionary with keys:
-            - location: Location name (required)
+            - location: Location name (required unless default used)
             - future_days: Days in future for forecast (default: 0)
             - include_rain: Include precipitation data (default: False)
+            - default: Message when request is not weather-related or location unknown
 
     Returns:
         Dictionary with 'ok' and weather data or 'error'.
     """
+    # Check for default option first (user error - agent correctly used default)
+    if input_data.get("default") is True:
+        return {
+            "ok": True,  # Agent used tool correctly (default option)
+            "error": "This tool only handles weather queries and requires a location."
+        }
+
     validated = _validate_input(input_data)
     if not validated.get("ok"):
         return validated

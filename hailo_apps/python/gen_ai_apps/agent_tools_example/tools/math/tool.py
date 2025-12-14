@@ -36,7 +36,11 @@ description: str = (
     "Examples:\n"
     "- Simple: '5 + 3' or '10 / 2'\n"
     "- Complex: '2 - 3 * (2 + 3) / 2' or '(10 + 5) * 2 - 8 / 4'\n"
-    "- With negatives: '-5 + 3 * -2'"
+    "- With negatives: '-5 + 3 * -2'\n\n"
+    "DEFAULT OPTION: If the user requests an unknown or unsupported operation (e.g., trigonometric functions, "
+    "logarithms, or operations not supported by this tool), set 'default' to true. "
+    "Use this when you cannot translate the user's request into a valid mathematical expression. "
+    "The tool will automatically generate an appropriate error message."
 )
 
 # Minimal JSON-like schema to assist prompting/validation
@@ -48,11 +52,20 @@ schema: dict[str, Any] = {
             "description": (
                 "Mathematical expression to evaluate. "
                 "Examples: '5 + 3', '2 - 3 * (2 + 3) / 2', '(10 + 5) * 2 - 8 / 4'. "
-                "Supports: +, -, *, /, //, %, **, parentheses, and negative numbers."
+                "Supports: +, -, *, /, //, %, **, parentheses, and negative numbers. "
+                "Required unless 'default' is used."
+            ),
+        },
+        "default": {
+            "type": "boolean",
+            "description": (
+                "Set to true when the user requests an unknown or unsupported operation. "
+                "Only use this if you cannot translate the user's request into a valid expression. "
+                "The tool will automatically generate an appropriate error message."
             ),
         },
     },
-    "required": ["expression"],
+    "required": [],
 }
 
 TOOLS_SCHEMA: list[dict[str, Any]] = [
@@ -207,11 +220,15 @@ def _validate_input(payload: dict[str, Any]) -> dict[str, Any]:
     Validate input payload.
 
     Args:
-        payload: Dictionary with 'expression' key.
+        payload: Dictionary with 'expression' key (or 'default').
 
     Returns:
         Dictionary with 'ok' and 'data' (if successful) or 'error' (if failed).
     """
+    # If default is provided, expression is not required
+    if payload.get("default") is True:
+        return {"ok": True, "data": {"expression": None}}
+
     try:
         from pydantic import BaseModel, Field
 
@@ -229,7 +246,7 @@ def _validate_input(payload: dict[str, Any]) -> dict[str, Any]:
             if not expression:
                 return {
                     "ok": False,
-                    "error": "'expression' is required and must be a non-empty string",
+                    "error": "Either 'expression' or 'default' must be provided",
                 }
             return {"ok": True, "data": {"expression": expression}}
         except Exception as inner_exc:
@@ -241,12 +258,20 @@ def run(input_data: dict[str, Any]) -> dict[str, Any]:
     Execute the math expression evaluation.
 
     Args:
-        input_data: Dictionary with key:
-            - expression: Mathematical expression string to evaluate.
+        input_data: Dictionary with keys:
+            - expression: Mathematical expression string to evaluate (required if default not used).
+            - default: Message explaining supported operations (use when request is unsupported).
 
     Returns:
         Dictionary with 'ok' and 'result' (if successful) or 'error' (if failed).
     """
+    # Check for default option first (user error - agent correctly used default)
+    if input_data.get("default") is True:
+        return {
+            "ok": True,  # Agent used tool correctly (default option)
+            "error": f"I couldn't translate your question to the supported operations.",
+        }
+
     validated = _validate_input(input_data)
     if not validated.get("ok"):
         return validated

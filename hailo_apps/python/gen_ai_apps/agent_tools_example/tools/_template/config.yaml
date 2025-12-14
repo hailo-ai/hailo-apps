@@ -40,6 +40,9 @@ tool_instructions: |
   {"name": "template_tool", "arguments": {"example_param": "value"}}
   </tool_call>
 
+  DEFAULT OPTION: If the user's request is not supported by this tool or if you cannot understand
+  how to translate the request, set 'default' to true. The tool will automatically generate an appropriate error message.
+
 # ═══════════════════════════════════════════════════════════════
 # FEW-SHOT EXAMPLES - Added to context for priming
 # ═══════════════════════════════════════════════════════════════
@@ -49,11 +52,6 @@ few_shot_examples:
       name: "template_tool"
       arguments:
         example_param: "hello world"
-    tool_response: '{"ok": true, "result": "Processed: hello world"}'
-    final_response: "Done! Result: Processed: hello world"
-
-  - user: "Hi there"
-    final_response: "Hello! I can process text for you. What would you like me to process?"
 
 # ═══════════════════════════════════════════════════════════════
 # TEST CASES - For benchmarking (not added to context)
