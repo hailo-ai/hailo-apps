@@ -313,7 +313,7 @@ class StateManager:
 
             llm.load_context(context_data)
             self._current_state_name = state_name
-            logger.info("Loaded state: %s", state_name)
+            logger.debug("Loaded state: %s", state_name)
             return True
 
         except Exception as e:

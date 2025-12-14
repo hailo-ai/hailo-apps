@@ -193,7 +193,7 @@ class AudioPlayer:
                 latency=0.3  # 300ms buffer to prevent underruns
             )
             stream.start()
-            logger.info("Audio output stream created successfully (device_id=%s, active=%s)",
+            logger.debug("Audio output stream created successfully (device_id=%s, active=%s)",
                        self.device_id, stream.active)
             return stream
         except Exception as e:
@@ -218,7 +218,7 @@ class AudioPlayer:
                         self.stream = self._create_stream()
                         self._reinit_event.clear()
 
-                    logger.info("Audio stream initialized successfully (device_id=%s)", self.device_id)
+                    logger.debug("Audio stream initialized successfully (device_id=%s)", self.device_id)
 
                 except Exception as e:
                     logger.error("Failed to initialize audio stream (device_id=%s): %s", self.device_id, e)

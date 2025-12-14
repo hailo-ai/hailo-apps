@@ -280,7 +280,7 @@ class AgentApp:
             # Try to load saved state
             state_loaded = False
             if self.state_manager.load_state(state_name, self.llm):
-                logger.info("Loaded state: %s", state_name)
+                logger.debug("Loaded state: %s", state_name)
                 # Verify context is valid (has some tokens)
                 try:
                     context_size = self.llm.get_context_usage_size()
