@@ -21,11 +21,7 @@ from hailo_platform.genai import LLM
 
 from hailo_apps.python.core.gen_ai_utils.voice_processing.interaction import VoiceInteractionManager
 from hailo_apps.python.core.gen_ai_utils.voice_processing.speech_to_text import SpeechToTextProcessor
-from hailo_apps.python.core.gen_ai_utils.voice_processing.text_to_speech import (
-    TextToSpeechProcessor,
-    PiperModelNotFoundError,
-)
-from hailo_apps.python.core.gen_ai_utils.voice_processing.audio_diagnostics import AudioDiagnostics
+from hailo_apps.python.core.gen_ai_utils.voice_processing.text_to_speech import TextToSpeechProcessor
 from hailo_apps.python.core.gen_ai_utils.llm_utils import (
     agent_utils,
     context_manager,
@@ -119,18 +115,14 @@ class VoiceAgentApp:
             self.vdevice.release()
             raise
 
-        # TTS - detect output device first to ensure proper device selection
+        # TTS
         self.tts = None
         if not no_tts:
-            # Auto-detect output device (same logic as AudioPlayer uses)
-            _, output_device_id = AudioDiagnostics.auto_detect_devices()
-            if output_device_id is not None:
-                logger.info("Using output device %d for TTS", output_device_id)
-            else:
-                logger.warning("No output device detected, TTS will use system default")
-            # Initialize TTS - if model is missing, this will raise PiperModelNotFoundError
-            # which should cause the app to exit
-            self.tts = TextToSpeechProcessor(device_id=output_device_id)
+            try:
+                self.tts = TextToSpeechProcessor()
+            except Exception as e:
+                logger.warning("Failed to initialize TTS: %s", e)
+                print("Continuing without TTS support.")
 
         # Initialize Context
         self._init_context()
@@ -233,10 +225,6 @@ class VoiceAgentApp:
         prompt = [message_formatter.messages_user(user_text)]
         logger.debug("User message: %s", json.dumps(prompt, ensure_ascii=False))
 
-        # Add user message to context before generation
-        # Reason: llm.generate() may not automatically add prompt to context in all cases
-        context_manager.add_to_context(self.llm, prompt, logger)
-
         # Prepare for streaming response
         current_gen_id = None
         # Using a mutable container to track state inside inner function
@@ -268,14 +256,11 @@ class VoiceAgentApp:
 
         try:
             # Use generate() for streaming output with on-the-fly filtering and TTS callback
-            # User message already in context, pass empty list
             is_debug = logger.isEnabledFor(logging.DEBUG)
             raw_response = streaming.generate_and_stream_response(
                 llm=self.llm,
-                prompt=[],  # Empty - user message already added to context above
+                prompt=prompt,
                 temperature=config.TEMPERATURE,
-                seed=config.SEED,
-                max_tokens=config.MAX_GENERATED_TOKENS,
                 prefix="Assistant: ",
                 debug_mode=is_debug,
                 token_callback=tts_callback
@@ -359,7 +344,7 @@ def main():
         config.validate_config()
     except ValueError as e:
         logger.error("Configuration Error: %s", e)
-        sys.exit(1)
+        return
 
     # Resolve LLM HEF path (Qwen2.5-Coder-1.5B-Instruct) with auto-download
     llm_hef_path = resolve_hef_path(
@@ -369,7 +354,7 @@ def main():
     )
     if llm_hef_path is None:
         logger.error("Failed to resolve HEF path for LLM model. Exiting.")
-        sys.exit(1)
+        return
 
     # Resolve Whisper HEF path (Whisper-Base) with auto-download
     whisper_hef_path = resolve_hef_path(
@@ -379,7 +364,7 @@ def main():
     )
     if whisper_hef_path is None:
         logger.error("Failed to resolve HEF path for Whisper model. Exiting.")
-        sys.exit(1)
+        return
 
     logger.info("Using LLM HEF: %s", llm_hef_path)
     logger.info("Using Whisper HEF: %s", whisper_hef_path)
@@ -391,17 +376,17 @@ def main():
     except Exception as e:
         logger.error("Failed to discover tools: %s", e)
         logger.debug(traceback.format_exc())
-        sys.exit(1)
+        return
 
     if not all_tools:
         logger.error("No tools found.")
-        sys.exit(1)
+        return
 
     tool_thread, tool_result = tool_selection.start_tool_selection_thread(all_tools)
     selected_tool = tool_selection.get_tool_selection_result(tool_thread, tool_result)
 
     if not selected_tool:
-        sys.exit(0)
+        return
 
     tool_execution.initialize_tool_if_needed(selected_tool)
 
@@ -414,14 +399,9 @@ def main():
             debug=args.debug,
             no_tts=args.no_tts
         )
-    except PiperModelNotFoundError as e:
-        # Piper model not found - exit with error message
-        logger.error("TTS model not found. Use --no-tts to run without TTS, or install the Piper model.")
-        print(str(e))
-        sys.exit(1)
     except Exception:
         # Error already logged in __init__
-        sys.exit(1)
+        return
 
     interaction = VoiceInteractionManager(
         title="Voice-Enabled Tool Agent",

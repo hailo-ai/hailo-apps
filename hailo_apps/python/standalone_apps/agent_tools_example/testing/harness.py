@@ -6,7 +6,6 @@ Provides a programmatic interface for testing agents without UI.
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -124,9 +123,8 @@ class AgentTestHarness:
 
         # Import local modules
         import sys
-        from pathlib import Path as P
 
-        agent_dir = P(__file__).parent.parent
+        agent_dir = Path(__file__).parent.parent
         if str(agent_dir) not in sys.path:
             sys.path.insert(0, str(agent_dir))
 
@@ -204,18 +202,29 @@ class AgentTestHarness:
 
         start_time = time.perf_counter()
 
-        # Build prompt
+        # Build prompt using gen_ai_utils message_formatter
         prompt = [message_formatter.messages_user(text)]
 
-        # Generate response (no streaming in headless mode)
+        # Generate response using gen_ai_utils streaming function (same as main agent)
+        # Use headless mode: suppress output by redirecting print
+        import io
+        import sys
+        from contextlib import redirect_stdout
+
         try:
-            raw_response = ""
-            for token in self._llm.generate(
-                prompt=prompt,
-                temperature=config.TEMPERATURE,
-                max_generated_tokens=config.MAX_GENERATED_TOKENS,
-            ):
-                raw_response += token
+            # Suppress stdout for headless testing
+            f = io.StringIO()
+            with redirect_stdout(f):
+                raw_response = streaming.generate_and_stream_response(
+                    llm=self._llm,
+                    prompt=prompt,  # Use same approach as main agent
+                    temperature=config.TEMPERATURE,
+                    seed=config.SEED,
+                    max_tokens=config.MAX_GENERATED_TOKENS,
+                    prefix="",  # No prefix in headless mode
+                    debug_mode=False,  # No debug output in headless mode
+                    token_callback=None,  # No TTS callback in headless mode
+                )
         except Exception as e:
             logger.error("LLM generation failed: %s", e)
             return AgentResponse(
@@ -230,6 +239,13 @@ class AgentTestHarness:
         tool_call = tool_parsing.parse_function_call(raw_response)
 
         if tool_call is None:
+            # Log raw response for debugging if it looks like it might contain a tool call
+            if "<tool_call>" in raw_response or '{"name"' in raw_response:
+                logger.warning(
+                    "Tool call XML found in response but parsing failed. "
+                    "Raw response (first 500 chars): %s",
+                    raw_response[:500]
+                )
             return AgentResponse(
                 tool_called=False,
                 text=raw_response,
@@ -237,8 +253,18 @@ class AgentTestHarness:
                 latency_ms=latency_ms,
             )
 
+        # Log parsed tool call for debugging
+        logger.debug("Parsed tool call: name=%s, args=%s", tool_call.get("name"), tool_call.get("arguments"))
+
         # Execute tool
         result = tool_execution.execute_tool_call(tool_call, self._tools_lookup)
+
+        if not result.get("ok"):
+            logger.error("Tool execution failed: %s", result.get("error", "Unknown error"))
+
+        # Update context with tool result (like the main agent does)
+        from hailo_apps.python.core.gen_ai_utils.llm_utils import agent_utils
+        agent_utils.update_context_with_tool_result(self._llm, result, logger)
 
         return AgentResponse(
             tool_called=True,

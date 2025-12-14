@@ -31,7 +31,7 @@ import sys
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 
 # Hailo imports
 from hailo_platform import VDevice
@@ -503,11 +503,6 @@ class AgentApp:
         prompt = [message_formatter.messages_user(user_text)]
         logger.debug("User message: %s", json.dumps(prompt, ensure_ascii=False))
 
-        # Add user message to context before generation
-        # Reason: llm.generate() may not automatically add prompt to context in all cases
-        # This ensures the user message is in context before we generate
-        context_manager.add_to_context(self.llm, prompt, logger)
-
         # Setup TTS callback if needed
         tts_callback = None
         tts_state = {"sentence_buffer": "", "gen_id": None}
@@ -517,13 +512,14 @@ class AgentApp:
             tts_state["gen_id"] = self.tts.get_current_gen_id()
             tts_callback = self._create_tts_callback(tts_state)
 
-        # Generate response (user message already in context, pass empty list)
-        # Reason: When prompt is empty, llm.generate() continues from current context
+        # Generate response - pass prompt directly to generate_and_stream_response
+        # Reason: llm.generate() handles adding prompt to context internally
+        # The working voice_chat_agent.py passes prompt directly, not empty list
         try:
-            is_debug = logger.isEnabledFor(logging.DEBUG)
+            is_debug = self.debug or logger.isEnabledFor(logging.DEBUG)
             raw_response = streaming.generate_and_stream_response(
                 llm=self.llm,
-                prompt=[],  # Empty - user message already added to context above
+                prompt=prompt,  # Pass prompt directly - llm.generate() adds it to context
                 temperature=config.TEMPERATURE,
                 seed=config.SEED,
                 max_tokens=config.MAX_GENERATED_TOKENS,
@@ -546,6 +542,15 @@ class AgentApp:
         # Check for tool calls
         tool_call = tool_parsing.parse_function_call(raw_response)
         if tool_call is None:
+            # Check if response contains tool call XML but parsing failed
+            if "<tool_call>" in raw_response or '{"name"' in raw_response:
+                logger.warning(
+                    "Tool call XML detected in response but parsing failed! "
+                    "This indicates a parsing bug. Raw response (first 500 chars): %s",
+                    raw_response[:500]
+                )
+                if self.debug:
+                    logger.debug("Full raw response: %s", raw_response)
             logger.debug("Direct response (no tool)")
             return AgentResponse(
                 tool_called=False,
@@ -553,9 +558,25 @@ class AgentApp:
                 raw_response=raw_response,
             )
 
+        # Log tool call for debugging
+        logger.info("Tool call detected: %s with args: %s", tool_call.get("name"), tool_call.get("arguments"))
+        if self.debug:
+            logger.debug("Parsed tool call: %s", json.dumps(tool_call, indent=2))
+
         # Execute tool
-        result = tool_execution.execute_tool_call(tool_call, self.tools_lookup)
-        tool_execution.print_tool_result(result)
+        try:
+            result = tool_execution.execute_tool_call(tool_call, self.tools_lookup)
+            tool_execution.print_tool_result(result)
+
+            if not result.get("ok"):
+                logger.error("Tool execution failed: %s", result.get("error", "Unknown error"))
+
+            if self.debug:
+                logger.debug("Tool execution result: %s", json.dumps(result, indent=2))
+        except Exception as e:
+            logger.error("Tool execution raised exception: %s", e)
+            logger.debug("Traceback: %s", traceback.format_exc())
+            result = {"ok": False, "error": str(e)}
 
         # TTS for tool result
         if self.tts:
@@ -589,15 +610,24 @@ class AgentApp:
             if not self.tts:
                 return
 
+            if self.debug:
+                logger.debug("[TTS] Received chunk: %r", chunk[:50])
+
             state["sentence_buffer"] += chunk
             old_len = len(state["sentence_buffer"])
             state["sentence_buffer"] = self.tts.chunk_and_queue(
                 state["sentence_buffer"],
                 state["gen_id"],
-                state.get("first_chunk_sent", False) is False,
+                not state.get("first_chunk_sent", False),
             )
             if len(state["sentence_buffer"]) < old_len:
+                if self.debug:
+                    logger.debug("[TTS] Queued text, queue size: %d", self.tts.speech_queue.qsize())
+
+            if not state.get("first_chunk_sent", False) and not self.tts.speech_queue.empty():
                 state["first_chunk_sent"] = True
+                if self.debug:
+                    logger.debug("[TTS] First chunk queued for playback")
 
         return tts_callback
 
