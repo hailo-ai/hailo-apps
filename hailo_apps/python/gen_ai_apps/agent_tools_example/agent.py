@@ -122,6 +122,7 @@ class AgentApp:
         whisper_hef_path: Optional[Path] = None,
         debug: bool = False,
         no_cache: bool = False,
+        continue_mode: bool = False,
     ):
         """
         Initialize the agent application.
@@ -135,11 +136,13 @@ class AgentApp:
             whisper_hef_path: Path to Whisper HEF (voice mode only).
             debug: Enable debug mode.
             no_cache: If True, skip loading cached states and rebuild context.
+            continue_mode: If True, don't reload state each query (keep conversation history).
         """
         self.debug = debug
         self.voice_enabled = voice_enabled
         self.no_tts = no_tts
         self.no_cache = no_cache
+        self.continue_mode = continue_mode
         self.selected_tool = selected_tool
         self.selected_tool_name = selected_tool.get("name", "")
 
@@ -300,17 +303,6 @@ class AgentApp:
                     logger.warning("Could not verify context size: %s", e)
                     state_loaded = True  # Assume it's okay
 
-        if not state_loaded:
-            # Try legacy cache format
-            try:
-                if context_manager.load_context_from_cache(
-                    self.llm, self.selected_tool_name, self.cache_dir, logger
-                ):
-                    logger.info("Loaded legacy cache: %s", self.selected_tool_name)
-                    state_loaded = True
-            except Exception as e:
-                logger.debug("Legacy cache load failed: %s", e)
-
         # If state was loaded successfully, ensure few-shot examples are present
         # (states saved before few-shot examples feature won't have them)
         if state_loaded:
@@ -325,7 +317,7 @@ class AgentApp:
                 )
             return
 
-        # Fresh initialization
+        # Fresh initialization (when --no-cache is used or state doesn't exist)
         logger.info("Initializing fresh context")
         try:
             prompt = [message_formatter.messages_system(self.system_text)]
@@ -446,7 +438,7 @@ class AgentApp:
             return
 
         print(f"\nYou: {user_text}")
-        self.process_query(user_text, stream_to_tts=True)
+        self.process_query(user_text)
 
     def _on_processing_start(self) -> None:
         """Callback when processing starts - interrupt any ongoing TTS."""
@@ -463,16 +455,18 @@ class AgentApp:
             print("[Info] Context cleared.")
 
             # Reload from state
-            if self.state_manager.reload_state(self.llm):
-                logger.debug("Context restored from state")
-            elif context_manager.load_context_from_cache(
-                self.llm, self.selected_tool_name, self.cache_dir, logger
-            ):
-                logger.debug("Context restored from legacy cache")
-            else:
-                logger.warning("Could not restore context")
+            if not self.state_manager.reload_state(self.llm):
+                state_name = self.state_manager.current_state or "default"
+                error_msg = (
+                    f"Failed to reload state '{state_name}'. "
+                    f"Ensure the state exists in {self.state_manager.contexts_dir}"
+                )
+                logger.error(error_msg)
+                assert False, error_msg
+            logger.debug("Context restored from state")
         except Exception as e:
             print(f"[Error] Failed to clear context: {e}")
+            raise
 
     def _show_states(self) -> None:
         """Show available context states."""
@@ -490,40 +484,49 @@ class AgentApp:
     def process_query(
         self,
         user_text: str,
-        stream_to_tts: bool = False,
     ) -> AgentResponse:
         """
         Process a user query.
 
+        By default, reloads the tool context state before each query (fresh start).
+        Use --continue flag to maintain conversation history.
+
         Args:
             user_text: The user's query text.
-            stream_to_tts: Stream response to TTS (voice mode).
 
         Returns:
             AgentResponse with results.
         """
-        # Check context capacity
-        if context_manager.is_context_full(
-            self.llm, context_threshold=config.CONTEXT_THRESHOLD, logger_instance=logger
-        ):
-            logger.info("Context full, reloading state...")
-            self.state_manager.reload_state(self.llm)
+        # Reload state at start of each query (unless continue_mode is enabled)
+        if not self.continue_mode:
+            logger.debug("Reloading state for fresh context")
+            if not self.state_manager.reload_state(self.llm):
+                state_name = self.state_manager.current_state or "default"
+                error_msg = (
+                    f"Failed to reload state '{state_name}'. "
+                    f"Ensure the state exists in {self.state_manager.contexts_dir}"
+                )
+                logger.error(error_msg)
+                assert False, error_msg
+        else:
+            # In continue mode, check if context is full and reload if needed
+            if context_manager.is_context_full(
+                self.llm, context_threshold=config.CONTEXT_THRESHOLD, logger_instance=logger
+            ):
+                logger.info("Context full, reloading state...")
+                if not self.state_manager.reload_state(self.llm):
+                    state_name = self.state_manager.current_state or "default"
+                    error_msg = (
+                        f"Failed to reload state '{state_name}'. "
+                        f"Ensure the state exists in {self.state_manager.contexts_dir}"
+                    )
+                    logger.error(error_msg)
+                    assert False, error_msg
 
         prompt = [message_formatter.messages_user(user_text)]
         logger.debug("User message: %s", json.dumps(prompt, ensure_ascii=False))
 
-        # Setup TTS callback if needed
-        tts_callback = None
-        tts_state = {"sentence_buffer": "", "gen_id": None}
-
-        if stream_to_tts and self.tts:
-            self.tts.clear_interruption()
-            tts_state["gen_id"] = self.tts.get_current_gen_id()
-            tts_callback = self._create_tts_callback(tts_state)
-
-        # Generate response - pass prompt directly to generate_and_stream_response
-        # Reason: llm.generate() handles adding prompt to context internally
-        # The working voice_chat_agent.py passes prompt directly, not empty list
+        # Generate response (agent responses are not sent to TTS, only tool results are)
         try:
             is_debug = self.debug or logger.isEnabledFor(logging.DEBUG)
             raw_response = streaming.generate_and_stream_response(
@@ -534,7 +537,7 @@ class AgentApp:
                 max_tokens=config.MAX_GENERATED_TOKENS,
                 prefix="Assistant: ",
                 debug_mode=is_debug,
-                token_callback=tts_callback,
+                token_callback=None,  # Agent response not sent to TTS
             )
             logger.debug("Raw response length: %d, content: %s", len(raw_response), raw_response[:200])
             if len(raw_response) == 0:
@@ -544,11 +547,9 @@ class AgentApp:
             logger.debug("Traceback: %s", traceback.format_exc())
             return AgentResponse(text=f"Error: {e}", raw_response="")
 
-        # Flush remaining TTS buffer
-        if self.tts and tts_state["sentence_buffer"].strip():
-            self.tts.queue_text(tts_state["sentence_buffer"].strip(), tts_state["gen_id"])
-
         # Check for tool calls
+        # The parse_function_call handles both direct <tool_call> format and
+        # wrapped formats like [{'type': 'text', 'text': '<tool_call>...</tool_call>'}]
         tool_call = tool_parsing.parse_function_call(raw_response)
         if tool_call is None:
             # Check if response contains tool call XML but parsing failed
@@ -587,15 +588,19 @@ class AgentApp:
             logger.debug("Traceback: %s", traceback.format_exc())
             result = {"ok": False, "error": str(e)}
 
-        # TTS for tool result
+        # TTS for tool result (only tool results are sent to TTS)
         if self.tts:
             if result.get("ok"):
                 self.tts.queue_text(str(result.get("result", "")))
             else:
                 self.tts.queue_text("There was an error executing the tool.")
 
-        # Update context with tool result
-        agent_utils.update_context_with_tool_result(self.llm, result, logger)
+        # Update context with tool result only if continue_mode is enabled
+        # In fresh mode (default), we don't add responses to context
+        if self.continue_mode:
+            agent_utils.update_context_with_tool_result(self.llm, result, logger)
+        else:
+            logger.debug("Skipping context update (not in continue mode)")
 
         return AgentResponse(
             tool_called=True,
@@ -695,6 +700,12 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip loading cached context states and rebuild from scratch",
     )
+    parser.add_argument(
+        "--continue",
+        action="store_true",
+        dest="continue_mode",
+        help="Continue conversation (don't reload state each query, keep context history)",
+    )
 
     return parser
 
@@ -793,6 +804,7 @@ def main() -> None:
             whisper_hef_path=whisper_hef_path,
             debug=args.debug,
             no_cache=args.no_cache,
+            continue_mode=getattr(args, "continue_mode", False),
         )
         app.run()
     except Exception as e:
