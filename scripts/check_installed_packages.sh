@@ -52,7 +52,7 @@ compare_versions() {
 
 # Detect Hailo architecture using hailortcli, hardware detection, or version inference
 # Arguments: driver_version, hailort_version (optional, for fallback inference)
-# Returns: "hailo8", "hailo10", "hailo8l", or "unknown"
+# Returns: "hailo8", "hailo10h", "hailo8l", or "unknown"
 detect_hailo_arch() {
     local arch="unknown"
     local detection_method=""
@@ -78,8 +78,8 @@ detect_hailo_arch() {
                     echo "[OK]   Detected Hailo architecture: HAILO8 (via PCI device)"
                 fi
             elif echo "$pci_output" | grep -qiE "hailo-10|hailo10|hailo-15|hailo15"; then
-                arch="hailo10"
-                echo "[OK]   Detected Hailo architecture: HAILO10 (via PCI device)"
+                arch="hailo10h"
+                echo "[OK]   Detected Hailo architecture: HAILO10H (via PCI device)"
             else
                 # Try more detailed PCI info (-v flag) to get subsystem/model info
                 local pci_detailed
@@ -94,8 +94,8 @@ detect_hailo_arch() {
                         echo "[OK]   Detected Hailo architecture: HAILO8 (via PCI device detailed info)"
                     fi
                 elif echo "$pci_detailed" | grep -qiE "hailo-10|hailo10|hailo-15|hailo15"; then
-                    arch="hailo10"
-                    echo "[OK]   Detected Hailo architecture: HAILO10 (via PCI device detailed info)"
+                    arch="hailo10h"
+                    echo "[OK]   Detected Hailo architecture: HAILO10H (via PCI device detailed info)"
                 else
                     # PCI device found but can't determine architecture from name
                     echo "[INFO] Hailo PCI device detected: $pci_output"
@@ -122,8 +122,8 @@ detect_hailo_arch() {
                 echo "[OK]   Detected Hailo architecture: HAILO8 (via hailortcli)"
             # Check for Hailo10H or Hailo15H
             elif echo "$fw_output" | grep -qiE "HAILO10H|HAILO15H"; then
-                arch="hailo10"
-                echo "[OK]   Detected Hailo architecture: HAILO10 (via hailortcli)"
+                arch="hailo10h"
+                echo "[OK]   Detected Hailo architecture: HAILO10H (via hailortcli)"
             else
                 echo "[WARN] Could not determine Hailo architecture from hailortcli output"
                 # If hailortcli ran but returned no device info, it might mean no device is connected
@@ -161,10 +161,10 @@ detect_hailo_arch() {
                 arch="hailo8"
                 echo "[INFO] Inferred Hailo architecture: HAILO8 (from driver/hailort version 4.22.x/4.23.x)"
                 echo "[INFO] Note: This is inferred from package versions. Connect device to confirm via hailortcli."
-            # Check if versions indicate Hailo10 (>= 5.0.0)
+            # Check if versions indicate Hailo10H (>= 5.0.0)
             elif compare_versions "$driver_version" "5.0.0" && compare_versions "$hailort_version" "5.0.0"; then
-                arch="hailo10"
-                echo "[INFO] Inferred Hailo architecture: HAILO10 (from driver/hailort version >= 5.0.0)"
+                arch="hailo10h"
+                echo "[INFO] Inferred Hailo architecture: HAILO10H (from driver/hailort version >= 5.0.0)"
                 echo "[INFO] Note: This is inferred from package versions. Connect device to confirm via hailortcli."
             fi
         fi
@@ -213,7 +213,7 @@ validate_versions_for_arch() {
         echo "[INFO] Hailo packages not installed, skipping version validation for $arch"
         echo "[INFO] To validate versions, please install:"
         echo "[INFO]   - For Hailo8/Hailo8L: driver and hailort version 4.22.x or 4.23.x"
-        echo "[INFO]   - For Hailo10: driver and hailort version >= 5.0.0"
+        echo "[INFO]   - For Hailo10H: driver and hailort version >= 5.0.0"
         return 0
     fi
     
@@ -257,8 +257,8 @@ validate_versions_for_arch() {
             fi
         fi
         
-    elif [[ "$arch" == "hailo10" ]]; then
-        # For Hailo10: driver and hailort should be >= 5.0.0
+    elif [[ "$arch" == "hailo10h" ]]; then
+        # For Hailo10H: driver and hailort should be >= 5.0.0
         local min_version="5.0.0"
         local validations_done=0
         

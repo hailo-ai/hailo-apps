@@ -328,7 +328,7 @@ get_model_zoo_version() {
         # Default mapping if not loaded from config
         case "$arch" in
             hailo8|hailo8l) mz_version="v2.17.0" ;;
-            hailo10h|hailo10) mz_version="v5.1.1" ;;
+            hailo10h) mz_version="v5.1.1" ;;
             *) mz_version="" ;;
         esac
     else
@@ -362,7 +362,7 @@ validate_model_zoo_version() {
         hailo8|hailo8l)
             valid_versions="${VALID_MZ_H8_VERSIONS:-v2.17.0}"
             ;;
-        hailo10h|hailo10)
+        hailo10h)
             valid_versions="${VALID_MZ_H10_VERSIONS:-v5.1.1}"
             ;;
     esac
@@ -1020,16 +1020,16 @@ install_python_packages() {
             local flags=""
 
             if [[ -z "${HAILO_ARCH:-}" || "${HAILO_ARCH}" == "unknown" ]]; then
-                log_error "HAILO_ARCH is required for Python package installation (hailo8 or hailo10)."
+                log_error "HAILO_ARCH is required for Python package installation (hailo8 or hailo10h)."
                 record_step_result "FAILED" "Missing HAILO_ARCH for Python install"
                 return 1
             fi
 
             case "${HAILO_ARCH}" in
                 hailo8|hailo8l) flags="${flags} --arch=hailo8" ;;
-                hailo10|hailo10h) flags="${flags} --arch=hailo10" ;;
+                hailo10h) flags="${flags} --arch=hailo10h" ;;
                 *)
-                    log_error "Unsupported HAILO_ARCH value: ${HAILO_ARCH}. Expected hailo8/hailo8l/hailo10/hailo10h."
+                    log_error "Unsupported HAILO_ARCH value: ${HAILO_ARCH}. Expected hailo8/hailo8l/hailo10h."
                     record_step_result "FAILED" "Unsupported HAILO_ARCH"
                     return 1
                     ;;

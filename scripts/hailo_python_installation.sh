@@ -25,7 +25,7 @@ HAILORT_VERSION=""
 TAPPAS_CORE_VERSION=""
 
 # Behavior flags
-HW_ARCHITECTURE=""          # hailo8 | hailo10 (affects defaults if versions not passed)
+HW_ARCHITECTURE=""          # hailo8 | hailo10h (affects defaults if versions not passed)
 DOWNLOAD_DIR="/usr/local/hailo/resources/packages"
 DOWNLOAD_ONLY=false
 DRY_RUN=false
@@ -45,7 +45,7 @@ usage() {
 Usage: $(basename "$0") [OPTIONS]
 
 Options:
-  --arch=(hailo8|hailo10)        Choose hardware preset for default versions
+  --arch=(hailo8|hailo10h)       Choose hardware preset for default versions
   --hailort-version=VER          Force a specific HailoRT wheel version (overrides preset)
   --tappas-core-version=VER      Force a specific TAPPAS core wheel version (overrides preset)
   --base-url=URL                 Override base URL (default: ${BASE_URL})
@@ -133,8 +133,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --arch=*)
       HW_ARCHITECTURE="${1#*=}"
-      if [[ "$HW_ARCHITECTURE" != "hailo8" && "$HW_ARCHITECTURE" != "hailo10" ]]; then
-          echo "Invalid architecture specified. Use 'hailo8' or 'hailo10'."
+      if [[ "$HW_ARCHITECTURE" != "hailo8" && "$HW_ARCHITECTURE" != "hailo10h" ]]; then
+          echo "Invalid architecture specified. Use 'hailo8' or 'hailo10h'."
           exit 1
       fi
       shift
@@ -142,8 +142,8 @@ while [[ $# -gt 0 ]]; do
     --hw-arch=*)
       # Backward compatibility (deprecated)
       HW_ARCHITECTURE="${1#*=}"
-      if [[ "$HW_ARCHITECTURE" != "hailo8" && "$HW_ARCHITECTURE" != "hailo10" ]]; then
-          echo "Invalid architecture specified. Use 'hailo8' or 'hailo10'."
+      if [[ "$HW_ARCHITECTURE" != "hailo8" && "$HW_ARCHITECTURE" != "hailo10h" ]]; then
+          echo "Invalid architecture specified. Use 'hailo8' or 'hailo10h'."
           exit 1
       fi
       shift
@@ -196,7 +196,7 @@ done
 
 # Require architecture flag
 if [[ -z "$HW_ARCHITECTURE" ]]; then
-  echo "Error: --arch is required (hailo8|hailo10)."
+  echo "Error: --arch is required (hailo8|hailo10h)."
   exit 1
 fi
 
@@ -204,17 +204,17 @@ fi
 # Prefer: user flag override; otherwise choose by architecture.
 if [[ -z ${HAILORT_VERSION+x} || -z "$HAILORT_VERSION" ]]; then
   case "$HW_ARCHITECTURE" in
-    hailo8)  HAILORT_VERSION="$HAILORT_VERSION_H8" ;;   # e.g., 4.23.0
-    hailo10) HAILORT_VERSION="5.1.1" ;;                 # latest for H10/H10H
-    *)       HAILORT_VERSION="$HAILORT_VERSION_H8" ;;
+    hailo8)   HAILORT_VERSION="$HAILORT_VERSION_H8" ;;   # e.g., 4.23.0
+    hailo10h) HAILORT_VERSION="5.1.1" ;;                 # latest for H10H
+    *)        HAILORT_VERSION="$HAILORT_VERSION_H8" ;;
   esac
 fi
 
 if [[ -z ${TAPPAS_CORE_VERSION+x} || -z "$TAPPAS_CORE_VERSION" ]]; then
   case "$HW_ARCHITECTURE" in
-    hailo8)  TAPPAS_CORE_VERSION="$TAPPAS_CORE_VERSION_H8" ;;
-    hailo10) TAPPAS_CORE_VERSION="$TAPPAS_CORE_VERSION_H10" ;;
-    *)       TAPPAS_CORE_VERSION="$TAPPAS_CORE_VERSION_H8" ;;
+    hailo8)   TAPPAS_CORE_VERSION="$TAPPAS_CORE_VERSION_H8" ;;
+    hailo10h) TAPPAS_CORE_VERSION="$TAPPAS_CORE_VERSION_H10" ;;
+    *)        TAPPAS_CORE_VERSION="$TAPPAS_CORE_VERSION_H8" ;;
   esac
 fi
 
@@ -254,9 +254,9 @@ HW_FOLDER_NAME=""
 # Determine hardware name based on architecture
 if [[ "$HW_ARCHITECTURE" == "hailo8" ]]; then
   HW_FOLDER_NAME="Hailo8"
-  HW_FOLDER_SECONDARY="Hailo10"
+  HW_FOLDER_SECONDARY="Hailo10H"
 else
-  HW_FOLDER_NAME="Hailo10"
+  HW_FOLDER_NAME="Hailo10H"
   HW_FOLDER_SECONDARY="Hailo8"
 fi
 
@@ -408,9 +408,9 @@ HW_FOLDER_NAME=""
 # Determine hardware name based on architecture
 if [[ "$HW_ARCHITECTURE" == "hailo8" ]]; then
   HW_FOLDER_NAME="Hailo8"
-  HW_FOLDER_SECONDARY="Hailo10"
+  HW_FOLDER_SECONDARY="Hailo10H"
 else
-  HW_FOLDER_NAME="Hailo10"
+  HW_FOLDER_NAME="Hailo10H"
   HW_FOLDER_SECONDARY="Hailo8"
 fi
 

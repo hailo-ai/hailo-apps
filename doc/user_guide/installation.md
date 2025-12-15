@@ -235,7 +235,7 @@ sudo ./scripts/hailo_installer.sh [options]
 
 | Option                      | Description                                                                       |                                     |
 | --------------------------- | --------------------------------------------------------------------------------- | ----------------------------------- |
-| `--hw-arch=`           | hailo10,hailo8                                                                          | Target hardware platform. Required. |
+| `--hw-arch=`           | hailo10h,hailo8                                                                         | Target hardware platform. Required. |
 | `--venv-name=NAME`          | Name of the Python virtual environment (default: `hailo_venv`).                   |                                     |
 | `--download-only`           | Only download the packages without installing them.                               |                                     |
 | `--output-dir=DIR`          | Change where packages are saved (default: `/usr/local/hailo/resources/packages`). |                                     |
@@ -253,13 +253,13 @@ sudo ./scripts/hailo_installer.sh --hw-arch=hailo8
 #### Download Only (No Installation)
 
 ```bash
-./scripts/hailo_installer.sh --hw-arch=hailo10 --download-only
+./scripts/hailo_installer.sh --hw-arch=hailo10h --download-only
 ```
 
 Packages will be saved under:
 
 ```
-/usr/local/hailo/resources/packages/<hailo8|hailo10>/
+/usr/local/hailo/resources/packages/<hailo8|hailo10h>/
 ```
 
 ---

@@ -39,7 +39,7 @@ TAPPAS_CORE_VERSION=""
 
 
 # Defaults (can be overridden by flags)
-HW_ARCHITECTURE=""               # hailo8 | hailo10
+HW_ARCHITECTURE=""               # hailo8 | hailo10h
 VENV_NAME="venv_hailo_apps"
 DOWNLOAD_ONLY="false"
 OUTPUT_DIR_BASE="/usr/local/hailo/resources/packages"
@@ -54,7 +54,7 @@ Options:
   --hailort-version=VER           Override HailoRT version
   --tappas-core-version=VER       Override TAPPAS Core version
   --venv-name=NAME                Virtualenv name (install mode only) [default: $VENV_NAME]
-  --hw-arch=hailo8|hailo10        Target hardware (affects version defaults & folder) [default: $HW_ARCHITECTURE]
+  --hw-arch=hailo8|hailo10h       Target hardware (affects version defaults & folder) [default: $HW_ARCHITECTURE]
   --download-only                 Only download packages, do NOT install
   --output-dir=DIR                Base output directory for downloads [default: $OUTPUT_DIR_BASE]
   --py-tag=TAG                    Wheel tag (e.g. cp311-cp311). Useful with --download-only
@@ -78,14 +78,14 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --hw-arch=*)
             HW_ARCHITECTURE="${1#*=}"
-            if [[ "$HW_ARCHITECTURE" != "hailo8" && "$HW_ARCHITECTURE" != "hailo10" ]]; then
-                echo "Invalid hardware architecture specified. Use 'hailo8' or 'hailo10'."
+            if [[ "$HW_ARCHITECTURE" != "hailo8" && "$HW_ARCHITECTURE" != "hailo10h" ]]; then
+                echo "Invalid hardware architecture specified. Use 'hailo8' or 'hailo10h'."
                 exit 1
             fi
             if [[ "$HW_ARCHITECTURE" == "hailo8" ]]; then
                 HAILORT_VERSION="$HAILORT_VERSION_H8"
                 TAPPAS_CORE_VERSION="$TAPPAS_CORE_VERSION_H8"
-            elif [[ "$HW_ARCHITECTURE" == "hailo10" ]]; then
+            elif [[ "$HW_ARCHITECTURE" == "hailo10h" ]]; then
                 HAILORT_VERSION="$HAILORT_VERSION_H10"
                 TAPPAS_CORE_VERSION="$TAPPAS_CORE_VERSION_H10"
             fi
@@ -120,7 +120,7 @@ HW_NAME=""
 if [[ "$HW_ARCHITECTURE" == "hailo8" ]]; then
   HW_NAME="Hailo8"
 else
-  HW_NAME="Hailo10"
+  HW_NAME="Hailo10H"
 fi
 BASE_URL="${BASE_URL}/${HW_NAME}"
 
