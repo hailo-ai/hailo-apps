@@ -181,12 +181,6 @@ few_shot_examples:
       arguments:
         floor: 4
 
-  - user: "I want to go to nutrom"
-    tool_call:
-      name: "elevator"
-      arguments:
-        floor: 4
-
   - user: "Take me to the top floor"
     tool_call:
       name: "elevator"
@@ -211,12 +205,6 @@ few_shot_examples:
       arguments:
         floor: 0
 
-  - user: "Take me to floor 3"
-    tool_call:
-      name: "elevator"
-      arguments:
-        floor: 3
-
   # Relative movement examples
   - user: "Go up 2 floors"
     tool_call:
@@ -230,38 +218,8 @@ few_shot_examples:
       arguments:
         relative_floor: -1
 
-  - user: "Go up one floor"
-    tool_call:
-      name: "elevator"
-      arguments:
-        relative_floor: 1
-
-  - user: "Move down 3 floors"
-    tool_call:
-      name: "elevator"
-      arguments:
-        relative_floor: -3
-
-  - user: "Take me up 2 levels"
-    tool_call:
-      name: "elevator"
-      arguments:
-        relative_floor: 2
-
-  - user: "Go down one level"
-    tool_call:
-      name: "elevator"
-      arguments:
-        relative_floor: -1
-
   # Default option examples - invalid floor numbers
   - user: "Take me to the 7th floor"
-    tool_call:
-      name: "elevator"
-      arguments:
-        default: true
-
-  - user: "Take me to floor -1"
     tool_call:
       name: "elevator"
       arguments:
@@ -275,24 +233,6 @@ few_shot_examples:
         default: true
 
   - user: "I want to go somewhere fun"
-    tool_call:
-      name: "elevator"
-      arguments:
-        default: true
-
-  - user: "Take me to the candy shop"
-    tool_call:
-      name: "elevator"
-      arguments:
-        default: true
-
-  - user: "Where is the exit?"
-    tool_call:
-      name: "elevator"
-      arguments:
-        default: true
-
-  - user: "Go to the room with the golden ticket"
     tool_call:
       name: "elevator"
       arguments:

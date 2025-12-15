@@ -189,7 +189,7 @@ class AudioDiagnostics:
     @staticmethod
     def test_speaker(device_id: int, duration: float = 1.0, audio_data: Optional[np.ndarray] = None) -> Tuple[bool, str]:
         """
-        Test a speaker device by playing a generated tone or provided audio.
+        Test a speaker device by playing a generated tone or provided audio using AudioPlayer.
 
         Args:
             device_id (int): Device ID to test.
@@ -199,23 +199,46 @@ class AudioDiagnostics:
         Returns:
             Tuple[bool, str]: (Success, Message)
         """
+        player = None
         try:
             logger.debug(f"Testing speaker device {device_id}...")
 
+            # Prepare audio
             if audio_data is not None:
                 to_play = audio_data
             else:
-                # Generate 440Hz sine wave
+                # Generate 440Hz sine wave at TARGET_SR (16kHz)
                 t = np.linspace(0, duration, int(duration * TARGET_SR), False)
                 to_play = 0.5 * np.sin(2 * np.pi * 440 * t)
 
-            sd.play(to_play, samplerate=TARGET_SR, device=device_id, blocking=True)
+            # Ensure float32
+            if to_play.dtype != np.float32:
+                to_play = to_play.astype(np.float32)
+
+            # Local import to avoid circular dependency
+            from .audio_player import AudioPlayer
+
+            # Initialize player
+            player = AudioPlayer(device_id=device_id)
+
+            # Play audio
+            # AudioPlayer handles resampling and channel expansion internally
+            player.play(to_play)
+
+            # Wait for playback to complete (AudioPlayer is async)
+            # Calculate duration based on input length and rate
+            play_duration = len(to_play) / TARGET_SR
+            time.sleep(play_duration + 0.5) # Add buffer
+
             return True, "Audio playback successful"
 
         except Exception as e:
             msg = f"Playback failed: {str(e)}"
             logger.error(msg)
             return False, msg
+        finally:
+            if player:
+                player.close()
 
     @staticmethod
     def score_device(device: AudioDeviceInfo, is_input: bool) -> int:

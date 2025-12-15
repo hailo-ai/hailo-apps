@@ -19,7 +19,7 @@ check_voice_dependencies()
 import numpy as np
 import sounddevice as sd
 
-from hailo_apps.python.core.common.defines import TARGET_SR
+from hailo_apps.python.core.common.defines import TARGET_PLAYBACK_SR, TARGET_SR
 from .audio_diagnostics import AudioDiagnostics
 
 # Setup logger
@@ -34,6 +34,37 @@ class AudioPlayer:
     Handles audio playback using sounddevice OutputStream.
     Uses a persistent stream and queue to ensure gapless playback of chunks.
     """
+
+    def _resample_numpy(self, data: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
+        """
+        Resample audio data using linear interpolation.
+
+        Args:
+            data (np.ndarray): Audio data usually float32.
+            orig_sr (int): Original sample rate.
+            target_sr (int): Target sample rate.
+
+        Returns:
+            np.ndarray: Resampled data.
+        """
+        if orig_sr == target_sr:
+            return data
+
+        duration = len(data) / orig_sr
+        target_len = int(duration * target_sr)
+
+        x_old = np.linspace(0, duration, len(data))
+        x_new = np.linspace(0, duration, target_len)
+
+        # Handle multi-channel resampling if input is already multi-channel (unlikely for TTS but possible)
+        if data.ndim == 2 and data.shape[1] > 1:
+            resampled = np.zeros((target_len, data.shape[1]), dtype=data.dtype)
+            for ch in range(data.shape[1]):
+                resampled[:, ch] = np.interp(x_new, x_old, data[:, ch])
+            return resampled
+        else:
+            return np.interp(x_new, x_old, data.flatten()).astype(data.dtype)
+
 
     def __init__(self, device_id: Optional[int] = None):
         """
@@ -76,16 +107,20 @@ class AudioPlayer:
             audio_data (Union[str, np.ndarray]): Path to WAV file or numpy array.
             block (bool): Ignored in this streaming implementation. Kept for API compatibility.
         """
+        input_sr = TARGET_SR
+        data = None
+
         if isinstance(audio_data, str):
             try:
                 data, fs = self._read_wav(audio_data)
-                if fs != TARGET_SR:
-                    logger.warning("WAV sample rate %d does not match target %d.", fs, TARGET_SR)
+                input_sr = fs
             except Exception as e:
                 logger.error("Failed to read WAV file: %s", e)
                 return
         elif isinstance(audio_data, np.ndarray):
             data = audio_data
+            # For raw numpy arrays, we assume TARGET_SR (16kHz) as per app convention
+            input_sr = TARGET_SR
         else:
             logger.error("Unsupported audio data type: %s", type(audio_data))
             return
@@ -94,9 +129,22 @@ class AudioPlayer:
         if data.dtype != np.float32:
             data = data.astype(np.float32)
 
+        # Resample to stream rate (TARGET_PLAYBACK_SR)
+        # We enforce TARGET_PLAYBACK_SR for the stream to ensure compatibility with devices
+        # that might play 16kHz content at 3x speed if they don't support 16kHz natively.
+        target_sr = TARGET_PLAYBACK_SR
+
+        if input_sr != target_sr:
+            try:
+                data = self._resample_numpy(data, input_sr, target_sr)
+            except Exception as e:
+                logger.error("Resampling failed: %s", e)
+                return
+
         # Enqueue for playback
         logger.debug("Queuing audio data for playback: %d samples", len(data))
         self.queue.put(data)
+
 
     def stop(self):
         """
@@ -172,10 +220,36 @@ class AudioPlayer:
     def _create_stream(self):
         """Create a new output stream."""
         try:
+            # Query device info to get channel count
+            device_info = sd.query_devices(self.device_id)
+            channels = device_info.get('max_output_channels', 1)
+            # Ensure at least 1, and default to 1 if something goes wrong
+            if channels < 1:
+                channels = 1
+
+            # If device claims > 2 channels (like 7.1), maybe stick to 2?
+            # For now, let's match hardware to avoid rate issues, but caps at 2 might be safer?
+            # Actually, filling all channels is usually the safest for "raw" hw devices.
+
+            logger.debug("Creating output stream for device %s with %d channels", self.device_id, channels)
+
+            # Use TARGET_PLAYBACK_SR (standard) or device default if higher
+            # 16kHz on 48kHz hardware causes 3x speedup if not resampled/negotiated.
+            # We explicitly ask for TARGET_PLAYBACK_SR to match modern hardware.
+            stream_sr = TARGET_PLAYBACK_SR
+
+            # Check if device supports it? sounddevice/portaudio usually handles conversion
+            # if we request a specific rate.
+            # But the issue we saw is that raw ALSA `hw:` device might NOT do conversion.
+            # So we must feed it what it wants (likely 48k).
+
+            logger.debug("Creating output stream for device %s with %d channels at %d Hz",
+                        self.device_id, channels, stream_sr)
+
             stream = sd.OutputStream(
-                samplerate=TARGET_SR,
+                samplerate=stream_sr,
                 device=self.device_id,
-                channels=1,
+                channels=channels,
                 dtype='float32',
                 blocksize=WRITE_CHUNK_SIZE,
                 latency=0.3  # 300ms buffer to prevent underruns
@@ -238,6 +312,18 @@ class AudioPlayer:
 
                             if self.stream and self.stream.active:
                                 try:
+                                    # Handle channel expansion if needed
+                                    # If our data is mono (1D or shape (N,1)) but stream is stereo (N, 2+),
+                                    # we need to duplicate the data to fill all channels.
+                                    should_expand = self.stream.channels > 1 and (chunk.ndim == 1 or chunk.shape[1] == 1)
+
+                                    if should_expand:
+                                        # Reshape to (N, 1) if 1D
+                                        if chunk.ndim == 1:
+                                            chunk = chunk.reshape(-1, 1)
+                                        # Tile to (N, channels)
+                                        chunk = np.tile(chunk, (1, self.stream.channels))
+
                                     self.stream.write(chunk)
                                 except Exception as write_error:
                                     logger.error("Error writing to audio stream: %s", write_error)

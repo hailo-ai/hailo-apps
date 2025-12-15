@@ -271,6 +271,7 @@ WHISPER_MODEL_NAME_H10 = "Whisper-Base"
 
 # Whisper defaults
 TARGET_SR = 16000  # Target sample rate for audio recording (in Hz)
+TARGET_PLAYBACK_SR = 48000  # Target sample rate for playback (standard for hardware compatibility)
 CHUNK_SIZE = 1024  # Number of frames per buffer
 
 # Piper TTS defaults
