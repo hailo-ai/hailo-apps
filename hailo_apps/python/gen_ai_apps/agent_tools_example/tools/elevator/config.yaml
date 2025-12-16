@@ -17,92 +17,29 @@ capabilities:
   - "Support natural language floor descriptions"
   - "Move relative to current floor (up/down N floors)"
 
+# This section is used for display purposes only
 floors:
   0:
     name: "Staff & Utilities (Basement)"
-    description: "The infrastructural and unseen level containing the boiler room, Oompa Loompa staff quarters, and other utilities necessary for maintenance and operation."
-    keywords:
-      - "maintenance"
-      - "boiler room"
-      - "staff quarters"
-      - "utilities"
-      - "basement"
-      - "underground"
-      - "oompa loompas"
-      - "oompa loompa"
-      - "lowest floor"
+    description: "Boiler Room and the staff quarters."
   1:
     name: "The Chocolate Room"
-    description: "The vast, edible garden floor. Features the Chocolate River and Waterfall. The starting point of the tour, famous for the elimination of Augustus Gloop, who fell into the river and was sucked up the pipe toward the Fudge Room."
-    keywords:
-      - "chocolate river"
-      - "waterfall"
-      - "edible grass"
-      - "augustus gloop"
-      - "fudge room"
-      - "first floor"
-      - "ground floor"
-      - "chocolate room"
+    description: "Factory entrance, featuring the Chocolate River and Waterfall."
   2:
     name: "The Inventing Room"
-    description: "A laboratory filled with machines and bubbling pots where experimental sweets are created. This floor features the Everlasting Gobstopper and the disastrous Three-Course Dinner Chewing Gum. Violet Beauregarde was eliminated here by swelling up into a blueberry."
-    keywords:
-      - "inventing"
-      - "everlasting gobstopper"
-      - "gobstopper"
-      - "three-course gum"
-      - "violet"
-      - "blueberry"
-      - "blue berry"
-      - "swelling"
-      - "chewing gum"
-      - "innovation"
-      - "inventing room"
-      - "laboratory"
-      - "lab"
-      - "second floor"
+    description: "The factory laboratory where all new experimental candies are cooked up."
   3:
     name: "The Fizzy Lifting Drinks Room"
-    description: "The room housing the Fizzy Lifting Drinks, famous for the scene where Charlie and Grandpa Joe risk being chopped up by the ceiling fan after defying gravity and floating up. Ideal for requests about non-standard beverages or floating."
-    keywords:
-      - "floating"
-      - "fizzy lifting drinks"
-      - "burping"
-      - "ceiling fan"
-      - "soda"
-      - "beverages"
-      - "float"
-      - "fly"
+    description: "Home to the carbonated beverage that causes drinkers to float uncontrollably."
   4:
     name: "The Nut Room"
-    description: "Dedicated to quality control where hundreds of trained Squirrels shell walnuts to find 'good' and 'bad' nuts. Veruca Salt was eliminated here, judged a 'bad nut' by the squirrels and sent down the Rubbish Chute."
-    keywords:
-      - "squirrels"
-      - "squirrel"
-      - "veruca salt"
-      - "bad egg"
-      - "rubbish chute"
-      - "nuts"
-      - "quality control"
-      - "i want it now"
-      - "nutrom"
-      - "walnuts"
+    description: "Trained squirrels sort \"good\" nuts from \"bad\" nuts for quality control."
   5:
-    name: "The Television-Chocolate Room"
-    description: "A sterile, white room containing the powerful Wonkavision camera/teleporter. It develops a way to send chocolate bars through television waves. Mike Teavee was eliminated here after shrinking himself down to a tiny size."
-    keywords:
-      - "tv"
-      - "television"
-      - "wonkavision"
-      - "teleporter"
-      - "shrinking"
-      - "top floor"
-      - "highest floor"
-      - "television room"
-      - "tv room"
+    name: "The Television Room"
+    description: "Where chocolate is shrunk and transmitted instantly via TV signals."
 
 output_format:
-  tool_call: "XML-wrapped JSON: <tool_call>{...}</tool_call>"
+  tool_call: "XML-wrapped JSON:  <tool_call>{...}</tool_call>"
   direct_response: "Confirm destination"
   after_tool: "Announce arrival at floor"
 
@@ -113,63 +50,51 @@ tool_instructions: |
   FLOOR DIRECTORY - Complete floor information:
 
   Floor 0: Staff & Utilities (Basement)
-    Description: The infrastructural and unseen level containing the boiler room, Oompa Loompa staff quarters, and other utilities necessary for maintenance and operation.
+    Description: Boiler Room and the staff quarters.
 
   Floor 1: The Chocolate Room
-    Description: The vast, edible garden floor. Features the Chocolate River and Waterfall. The starting point of the tour, famous for the elimination of Augustus Gloop, who fell into the river and was sucked up the pipe toward the Fudge Room.
+    Description: Factory entrance, featuring the Chocolate River and Waterfall. This is the FIRST FLOOR (Ground Floor).
 
   Floor 2: The Inventing Room
-    Description: A laboratory filled with machines and bubbling pots where experimental sweets are created. This floor features the Everlasting Gobstopper and the disastrous Three-Course Dinner Chewing Gum. Violet Beauregarde was eliminated here by swelling up into a blueberry.
+    Description: The factory laboratory where all new experimental candies are cooked up.
 
   Floor 3: The Fizzy Lifting Drinks Room
-    Description: The room housing the Fizzy Lifting Drinks, famous for the scene where Charlie and Grandpa Joe risk being chopped up by the ceiling fan after defying gravity and floating up. Ideal for requests about non-standard beverages or floating.
+    Description: Home to the carbonated beverage that causes drinkers to float uncontrollably. Best for requests about drinks, thirst, soda, flying, or floating.
 
   Floor 4: The Nut Room
-    Description: Dedicated to quality control where hundreds of trained Squirrels shell walnuts to find 'good' and 'bad' nuts. Veruca Salt was eliminated here, judged a 'bad nut' by the squirrels and sent down the Rubbish Chute.
+    Description: Trained squirrels sort good nuts from bad nuts for quality control. Sounds like, Natrum, natron.
 
-  Floor 5: The Television-Chocolate Room
-    Description: A sterile, white room containing the powerful Wonkavision camera/teleporter. It develops a way to send chocolate bars through television waves. Mike Teavee was eliminated here after shrinking himself down to a tiny size.
+  Floor 5: The Television Room
+    Description: Where chocolate is shrunk and transmitted instantly via TV signals. This is the UPPER/HIGHEST FLOOR.
 
   YOUR TASK: Interpret the user's request and call this tool with the integer floor number or relative movement.
-  Match room names, character names, or location descriptions to the correct floor.
+  Match room names, or location descriptions to the correct floor.
   Use the floor directory above to find the correct floor number.
 
   Match user requests to floors using:
   - Floor names (exact or partial matches)
-  - Floor descriptions (match user's description to floor descriptions above)
-  - Character names mentioned in descriptions
-  - Room descriptions
+  - Floor and room descriptions (match user's description to floor descriptions above)
   - Natural language descriptions (e.g., "top floor" → Floor 5, "basement" → Floor 0)
+  - IMPORTANT: "First floor" is Floor 1 (Chocolate Room), NOT Floor 0.
 
   RELATIVE MOVEMENTS: When the user requests to move up or down a certain number of floors, use the 'relative_floor' parameter:
-  - "go up 2 floors" → relative_floor: 2
+  - "two floors up" → relative_floor: 2
   - "move down 1 floor" → relative_floor: -1
   - "go up one floor" → relative_floor: 1
   - "move down 3 floors" → relative_floor: -3
   - Positive integers = move up, negative integers = move down
-  - The tool will automatically calculate the target floor based on the current position
-  - If the relative movement would result in an invalid floor, the tool will return an error
 
-  DEFAULT OPTION: If the user requests a floor number outside the available range (0-5), or if you cannot determine which floor
-  the user wants (ambiguous request), set 'default' to true.
-  Use this when you cannot confidently map the user's request to a valid floor number.
-  The tool will automatically generate an appropriate error message.
+  DEFAULT OPTION: If the user requests a floor number outside the available range (0-5), or if you cannot determine which floor the user wants, set 'default' to true.
 
 few_shot_examples:
   # Valid floor requests using keywords
-  - user: "Take me to the chocolate room"
-    tool_call:
-      name: "elevator"
-      arguments:
-        floor: 1
-
-  - user: "Go to where Violet turned into a blueberry"
+  - user: "Take me to the inventing room"
     tool_call:
       name: "elevator"
       arguments:
         floor: 2
 
-  - user: "I want to float"
+  - user: "I want to fly"
     tool_call:
       name: "elevator"
       arguments:
@@ -180,30 +105,6 @@ few_shot_examples:
       name: "elevator"
       arguments:
         floor: 4
-
-  - user: "Take me to the top floor"
-    tool_call:
-      name: "elevator"
-      arguments:
-        floor: 5
-
-  - user: "Go to the television room"
-    tool_call:
-      name: "elevator"
-      arguments:
-        floor: 5
-
-  - user: "Take me to the basement"
-    tool_call:
-      name: "elevator"
-      arguments:
-        floor: 0
-
-  - user: "Go to floor 0"
-    tool_call:
-      name: "elevator"
-      arguments:
-        floor: 0
 
   # Relative movement examples
   - user: "Go up 2 floors"
@@ -226,17 +127,30 @@ few_shot_examples:
         default: true
 
   # Default option examples - ambiguous or unclear requests
-  - user: "Take me to the turn floor"
-    tool_call:
-      name: "elevator"
-      arguments:
-        default: true
-
   - user: "I want to go somewhere fun"
     tool_call:
       name: "elevator"
       arguments:
         default: true
+
+  - user: "Boiler room please"
+    tool_call:
+      name: "elevator"
+      arguments:
+        floor: 0
+
+  - user: "I want to see the laboratory"
+    tool_call:
+      name: "elevator"
+      arguments:
+        floor: 2
+
+  # Relative movement examples with misspelled floor
+  - user: "Take me three flows up"
+    tool_call:
+      name: "elevator"
+      arguments:
+        relative_floor: 3
 
 test_cases:
   - id: "elevator_001"

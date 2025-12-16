@@ -166,12 +166,6 @@ class AudioPlayer:
                 except Exception:
                     pass
 
-        # Global stop
-        try:
-            sd.stop()
-        except Exception:
-            pass
-
         # Signal reinit
         self._reinit_event.set()
 
@@ -220,8 +214,26 @@ class AudioPlayer:
     def _create_stream(self):
         """Create a new output stream."""
         try:
-            # Query device info to get channel count
-            device_info = sd.query_devices(self.device_id)
+            # query_devices can fail if the device ID is no longer valid (e.g. disconnected)
+            try:
+                device_info = sd.query_devices(self.device_id)
+            except Exception as e:
+                logger.warning("Failed to query device %s: %s. Attempting to rediscover preferred device.", self.device_id, e)
+
+                # Try to re-detect preferred device (it might have a new ID)
+                try:
+                    _, new_device_id = AudioDiagnostics.get_preferred_devices()
+                    if new_device_id is not None:
+                        self.device_id = new_device_id
+                        logger.info("Rediscovered preferred device: %s", self.device_id)
+                        device_info = sd.query_devices(self.device_id)
+                    else:
+                        raise ValueError("No preferred device found")
+                except Exception as discovery_error:
+                    logger.warning("Could not rediscover preferred device: %s. Falling back to system default.", discovery_error)
+                    self.device_id = None
+                    device_info = sd.query_devices(kind='output')
+
             channels = device_info.get('max_output_channels', 1)
             # Ensure at least 1, and default to 1 if something goes wrong
             if channels < 1:
@@ -326,6 +338,10 @@ class AudioPlayer:
 
                                     self.stream.write(chunk)
                                 except Exception as write_error:
+                                    # If we are stopping, this error is expected (abort called on stream)
+                                    if self._stop_event.is_set() or self._reinit_event.is_set():
+                                        break
+
                                     logger.error("Error writing to audio stream: %s", write_error)
                                     raise
                             else:

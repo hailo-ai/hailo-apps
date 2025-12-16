@@ -618,8 +618,12 @@ class AgentApp:
                     # Success: speak the result
                     self.tts.queue_text(str(result.get("result", "")))
             else:
-                # Agent error: use standard message (don't expose internal errors)
-                self.tts.queue_text("There was an error executing the tool. Please try rephrasing your request.")
+                # Agent error: use specific error message if available
+                error_msg = str(result.get("error", ""))
+                if error_msg:
+                    self.tts.queue_text(error_msg)
+                else:
+                    self.tts.queue_text("There was an error executing the tool. Please try rephrasing your request.")
 
         return AgentResponse(
             tool_called=True,

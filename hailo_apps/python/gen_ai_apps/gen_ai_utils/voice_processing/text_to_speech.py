@@ -288,8 +288,8 @@ class TextToSpeechProcessor:
         self._running = False
         if self.speech_thread.is_alive():
             self.speech_thread.join(timeout=1.0)
-        self.interrupt()
-        self.audio_player.stop()
+
+        self.audio_player.close()
 
     def _speech_worker(self):
         """

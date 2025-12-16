@@ -106,10 +106,10 @@ class AudioRecorder:
                 logger.debug(f"Recording started at fallback rate {TARGET_SR} Hz")
             except Exception as fallback_error:
                 logger.error(f"Failed to start recording stream: {fallback_error}")
-                self.is_recording = False
-                raise RuntimeError(
-                    f"Could not start recording on device {self.device_id}. "
-                    "Check if microphone is connected and not in use."
+            self.is_recording = False
+            raise RuntimeError(
+                f"Could not start recording on device {self.device_id}. "
+                "Check if microphone is connected and not in use."
                 ) from fallback_error
 
     def stop(self) -> np.ndarray:

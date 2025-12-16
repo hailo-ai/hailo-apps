@@ -193,13 +193,17 @@ def run(input_dict: dict[str, Any]) -> dict[str, Any]:
         target_floor = current_floor + relative_floors
 
         if not FLOORS or target_floor not in FLOORS:
-            floor_range = f"{min(FLOORS.keys()) if FLOORS else 0}-{max(FLOORS.keys()) if FLOORS else 5}"
+            floor_nums = sorted(FLOORS.keys()) if FLOORS else [0, 5]
+            min_floor = min(floor_nums)
+            max_floor = max(floor_nums)
             direction = "up" if relative_floors > 0 else "down"
+            limit_floor = max_floor if relative_floors > 0 else min_floor
+
             return {
-                "ok": False,
-                "error": (
+                "ok": True,
+                "result": (
                     f"Cannot move {abs(relative_floors)} floor(s) {direction} from Floor {current_floor}. "
-                    f"Target floor {target_floor} is outside the available range ({floor_range})."
+                    f"The {direction}most floor is Floor {limit_floor}. You remain at Floor {current_floor}."
                 ),
             }
 

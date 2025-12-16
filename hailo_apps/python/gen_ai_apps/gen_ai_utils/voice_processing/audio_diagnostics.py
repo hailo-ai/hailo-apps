@@ -220,12 +220,12 @@ class AudioDiagnostics:
                     num_samples = int(duration * TARGET_SR)
                     recording = sd.rec(
                         num_samples,
-                        samplerate=TARGET_SR,
-                        channels=1,
-                        device=device_id,
-                        dtype='float32',
-                        blocking=True
-                    )
+                samplerate=TARGET_SR,
+                channels=1,
+                device=device_id,
+                dtype='float32',
+                blocking=True
+            )
                     actual_sr = TARGET_SR
                     logger.debug(f"Recorded at fallback sample rate: {TARGET_SR} Hz")
                 except Exception as fallback_error:
