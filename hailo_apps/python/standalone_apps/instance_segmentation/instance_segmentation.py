@@ -22,9 +22,9 @@ try:
         resolve_net_arg,
         resolve_arch,
         resolve_input_arg,
-        list_networks,
         list_inputs,
     )
+    from hailo_apps.python.core.common.core import handle_list_models_flag
     from hailo_apps.python.core.common.parser import get_standalone_parser
     from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
 except ImportError:
@@ -41,9 +41,9 @@ except ImportError:
         resolve_net_arg,
         resolve_arch,
         resolve_input_arg,
-        list_networks,
         list_inputs,
     )
+    from common.core import handle_list_models_flag
     from common.parser import get_standalone_parser
     from common.hailo_logger import get_logger, init_logging, level_from_args
 
@@ -73,17 +73,9 @@ def parse_args():
         ),
     )
 
+    handle_list_models_flag(parser, APP_NAME)
+
     args = parser.parse_args()
-
-    # Handle --list-models and exit
-    if args.list_models:
-        list_networks(APP_NAME)
-        sys.exit(0)
-
-    # Handle --list-nets and exit (alias for --list-models)
-    if args.list_nets:
-        list_networks(APP_NAME)
-        sys.exit(0)
 
     # Handle --list-inputs and exit
     if args.list_inputs:

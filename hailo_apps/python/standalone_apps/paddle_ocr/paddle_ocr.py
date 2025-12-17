@@ -23,6 +23,7 @@ from common.toolbox import (
     list_networks,
     list_inputs,
 )
+from common.core import handle_list_models_flag
 from common.parser import get_standalone_parser
 
 APP_NAME = Path(__file__).stem
@@ -99,17 +100,9 @@ def parse_args():
         help="Enable text correction after OCR (e.g., for spelling or formatting).",
     )
 
+    handle_list_models_flag(parser, APP_NAME)
+
     args = parser.parse_args()
-
-    # Handle --list-models and exit
-    if args.list_models:
-        list_networks(APP_NAME)
-        sys.exit(0)
-
-    # Handle --list-nets and exit (alias for --list-models)
-    if args.list_nets:
-        list_networks(APP_NAME)
-        sys.exit(0)
 
     # Handle --list-inputs and exit
     if args.list_inputs:

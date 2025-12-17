@@ -16,14 +16,14 @@ from lane_detection_utils import (UFLDProcessing,
 # Add the parent directory to the system path to access utils module
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from common.hailo_inference import HailoInfer
-from common.toolbox import (
-    resolve_net_arg,
-    resolve_arch,
-    resolve_input_arg,
-    list_networks,
-    list_inputs,
-)
-from common.parser import get_standalone_parser
+    from common.toolbox import (
+        resolve_net_arg,
+        resolve_arch,
+        resolve_input_arg,
+        list_inputs,
+    )
+    from common.core import handle_list_models_flag
+    from common.parser import get_standalone_parser
 
 APP_NAME = Path(__file__).stem
 logger = get_logger(__name__)
@@ -39,18 +39,10 @@ def parser_init():
     parser = get_standalone_parser()
     parser.description = "UFLD_v2 lane detection inference."
 
+    handle_list_models_flag(parser, APP_NAME)
+
     args = parser.parse_args()
     init_logging(level=level_from_args(args))
-
-    # Handle --list-models and exit
-    if args.list_models:
-        list_networks(APP_NAME)
-        sys.exit(0)
-
-    # Handle --list-nets and exit (alias for --list-models)
-    if args.list_nets:
-        list_networks(APP_NAME)
-        sys.exit(0)
 
     # Handle --list-inputs and exit
     if args.list_inputs:

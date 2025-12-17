@@ -20,10 +20,10 @@ from common.toolbox import (
     resolve_arch,
     resolve_input_arg,
     resolve_output_resolution_arg,
-    list_networks,
     list_inputs,
     oriented_object_detection_preprocess,
 )
+from common.core import handle_list_models_flag
 from common.parser import get_standalone_parser
 from oriented_object_detection_post_process import inference_result_handler
 
@@ -62,17 +62,9 @@ def parse_args():
         ),
     )
 
+    handle_list_models_flag(parser, APP_NAME)
+
     args = parser.parse_args()
-
-    # Handle --list-models and exit
-    if args.list_models:
-        list_networks(APP_NAME)
-        sys.exit(0)
-
-    # Handle --list-nets and exit (alias for --list-models)
-    if args.list_nets:
-        list_networks(APP_NAME)
-        sys.exit(0)
 
     # Handle --list-inputs and exit
     if args.list_inputs:
