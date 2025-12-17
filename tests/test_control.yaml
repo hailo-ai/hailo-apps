@@ -64,6 +64,34 @@ logging:
         default: "./logs/reid_multisource/default"
         extra: "./logs/reid_multisource/extra"
         all: "./logs/reid_multisource/all"
+      object_detection_standalone:
+        default: "./logs/standalone/object_detection/default"
+        extra: "./logs/standalone/object_detection/extra"
+        all: "./logs/standalone/object_detection/all"
+      instance_segmentation_standalone:
+        default: "./logs/standalone/instance_segmentation/default"
+        extra: "./logs/standalone/instance_segmentation/extra"
+        all: "./logs/standalone/instance_segmentation/all"
+      pose_estimation_standalone:
+        default: "./logs/standalone/pose_estimation/default"
+        extra: "./logs/standalone/pose_estimation/extra"
+        all: "./logs/standalone/pose_estimation/all"
+      lane_detection_standalone:
+        default: "./logs/standalone/lane_detection/default"
+        extra: "./logs/standalone/lane_detection/extra"
+        all: "./logs/standalone/lane_detection/all"
+      super_resolution_standalone:
+        default: "./logs/standalone/super_resolution/default"
+        extra: "./logs/standalone/super_resolution/extra"
+        all: "./logs/standalone/super_resolution/all"
+      oriented_object_detection_standalone:
+        default: "./logs/standalone/oriented_object_detection/default"
+        extra: "./logs/standalone/oriented_object_detection/extra"
+        all: "./logs/standalone/oriented_object_detection/all"
+      paddle_ocr_standalone:
+        default: "./logs/standalone/paddle_ocr/default"
+        extra: "./logs/standalone/paddle_ocr/extra"
+        all: "./logs/standalone/paddle_ocr/all"
 
 # ============================================================================
 # Test combinations configuration
@@ -142,6 +170,38 @@ custom_tests:
       test_suite_mode: "None"  # None | default | extra | all
       model_selection: "None"  # default | extra | all
       description: "Super Resolution Pipeline"
+
+standalone_tests:
+  enabled: true  # Enable standalone app tests
+  apps:
+    object_detection_standalone:
+      test_suite_mode: "default"  # None | default | extra | all
+      model_selection: "default"  # default | extra | all
+      description: "Standalone object detection"
+    instance_segmentation_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone instance segmentation"
+    pose_estimation_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone pose estimation"
+    lane_detection_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone lane detection"
+    super_resolution_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone super resolution"
+    oriented_object_detection_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone oriented object detection"
+    paddle_ocr_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone Paddle OCR (smoke + show-fps only)"
     
 # Special tests configuration
 special_tests:
@@ -176,4 +236,3 @@ run_methods:
     enabled: false
     priority: 3
     module_name: "test_execution.runner"
-

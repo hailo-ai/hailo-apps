@@ -160,6 +160,89 @@ apps:
     extra_test_suites:
       - "multisource_multiple"
 
+  object_detection_standalone:
+    name: "Object Detection Standalone"
+    description: "Standalone object detection app"
+    module: "hailo_apps.python.standalone_apps.object_detection.object_detection"
+    script: "hailo_apps/python/standalone_apps/object_detection/object_detection.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  instance_segmentation_standalone:
+    name: "Instance Segmentation Standalone"
+    description: "Standalone instance segmentation app"
+    module: "hailo_apps.python.standalone_apps.instance_segmentation.instance_segmentation"
+    script: "hailo_apps/python/standalone_apps/instance_segmentation/instance_segmentation.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  pose_estimation_standalone:
+    name: "Pose Estimation Standalone"
+    description: "Standalone pose estimation app"
+    module: "hailo_apps.python.standalone_apps.pose_estimation.pose_estimation"
+    script: "hailo_apps/python/standalone_apps/pose_estimation/pose_estimation.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  lane_detection_standalone:
+    name: "Lane Detection Standalone"
+    description: "Standalone lane detection app"
+    module: "hailo_apps.python.standalone_apps.lane_detection.lane_detection"
+    script: "hailo_apps/python/standalone_apps/lane_detection/lane_detection.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  super_resolution_standalone:
+    name: "Super Resolution Standalone"
+    description: "Standalone super resolution app"
+    module: "hailo_apps.python.standalone_apps.super_resolution.super_resolution"
+    script: "hailo_apps/python/standalone_apps/super_resolution/super_resolution.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  oriented_object_detection_standalone:
+    name: "Oriented Object Detection Standalone"
+    description: "Standalone oriented object detection app"
+    module: "hailo_apps.python.standalone_apps.oriented_object_detection.oriented_object_detection"
+    script: "hailo_apps/python/standalone_apps/oriented_object_detection/oriented_object_detection.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  paddle_ocr_standalone:
+    name: "Paddle OCR Standalone"
+    description: "Standalone Paddle OCR app (multi-model)"
+    module: "hailo_apps.python.standalone_apps.paddle_ocr.paddle_ocr"
+    script: "hailo_apps/python/standalone_apps/paddle_ocr/paddle_ocr.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+    extra_test_suites: []
+
 # Test suites with flag combinations (aligned with FLAG_COMBINATIONS.md)
 test_suites:
   # Basic combinations (from FLAG_COMBINATIONS.md)
@@ -188,6 +271,10 @@ test_suites:
       - "rpi"
       - "--show-fps"
     description: "Basic: Raspberry Pi camera input with FPS"
+
+  basic_image_smoke:
+    flags: []
+    description: "Standalone: image-based smoke test with defaults (no extra flags)"
   
   # With HEF path combinations
   with_hef_path:
@@ -627,4 +714,3 @@ test_run_combinations:
     test_suite_mode: "extra"  # None | default | extra | all
     model_selection: "extra"  # default | extra | all
     description: "Run all apps with default and extra test suites and extra models"
-

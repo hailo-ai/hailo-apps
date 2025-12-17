@@ -170,6 +170,9 @@ pytest tests/test_installation.py -v
 # Run pipeline tests
 pytest tests/test_runner.py -v
 
+# Run standalone app smoke tests
+pytest tests/test_standalone_runner.py -v
+
 # Run tests with specific markers
 pytest -m sanity -v
 pytest -m installation -v

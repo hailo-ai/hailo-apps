@@ -44,6 +44,10 @@ from pathlib import Path
 from typing import Any, Optional
 
 
+# Standalone app naming convention
+STANDALONE_SUFFIX = "_standalone"
+
+
 # =============================================================================
 # Exceptions
 # =============================================================================
@@ -667,6 +671,8 @@ def get_inputs_for_app(app_name: str, is_standalone: bool = False) -> dict:
     Returns:
         Dictionary with 'videos' and optionally 'images' lists for the app
     """
+    # Standalone apps use the base app tag names (without _standalone suffix)
+    app_name = base_app_name(app_name) if is_standalone or is_standalone_app_name(app_name) else app_name
     result = {
         "videos": get_videos_for_app(app_name),
     }
@@ -704,6 +710,47 @@ def get_apps_with_inputs() -> set[str]:
         Set of app names that have at least one tagged resource
     """
     return get_all_tags()
+
+
+# =============================================================================
+# Standalone helpers
+# =============================================================================
+
+def is_standalone_app_name(app_name: str) -> bool:
+    """Return True if the app name uses the _standalone suffix."""
+    return app_name.endswith(STANDALONE_SUFFIX)
+
+
+def base_app_name(app_name: str) -> str:
+    """Strip the _standalone suffix if present."""
+    return app_name[: -len(STANDALONE_SUFFIX)] if is_standalone_app_name(app_name) else app_name
+
+
+def get_defined_standalone_apps() -> list[str]:
+    """List app definitions that are marked as standalone (_standalone suffix)."""
+    return [name for name in get_defined_apps() if is_standalone_app_name(name)]
+
+
+def get_standalone_app_definition(app_name: str) -> Optional[AppDefinition]:
+    """Get standalone app definition (expects _standalone suffix)."""
+    return get_app_definition(app_name)
+
+
+def get_standalone_test_suites_for_app(app_name: str, mode: str = "default") -> list[str]:
+    """Get test suites for a standalone app."""
+    return get_test_suites_for_app(app_name, mode)
+
+
+def get_standalone_model_names(app_name: str, arch: str, tier: str = "default") -> list[str]:
+    """Get model names for a standalone app, mapped to its base app resources."""
+    base = base_app_name(app_name)
+    return get_model_names(base, arch, tier)
+
+
+def get_standalone_default_model_name(app_name: str, arch: str) -> Optional[str]:
+    """Get default model name for a standalone app."""
+    base = base_app_name(app_name)
+    return get_default_model_name(base, arch)
 
 
 # =============================================================================
@@ -942,6 +989,19 @@ def get_enabled_test_combinations() -> list[str]:
     return [name for name, cfg in test_combinations.items() if cfg.get("enabled", False)]
 
 
+def get_custom_standalone_tests() -> dict[str, dict]:
+    """Get standalone test configuration for standalone apps.
+    
+    Returns:
+        Dictionary mapping standalone app names (_standalone suffix) to their config.
+    """
+    config = get_test_control_config()
+    standalone_tests = config.get("standalone_tests", {})
+    if not standalone_tests.get("enabled", False):
+        return {}
+    return standalone_tests.get("apps", {})
+
+
 # =============================================================================
 # Cache Management
 # =============================================================================
@@ -1084,7 +1144,7 @@ def _dry_run():
     _print_header("Cross-Validation")
     try:
         resource_apps = set(get_available_apps())
-        definition_apps = set(get_defined_apps())
+        definition_apps = {app for app in get_defined_apps() if not is_standalone_app_name(app)}
 
         in_resources_not_definition = resource_apps - definition_apps
         in_definition_not_resources = definition_apps - resource_apps
@@ -1543,4 +1603,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-
