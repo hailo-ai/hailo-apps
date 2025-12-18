@@ -6,13 +6,15 @@ This directory contains Generative AI applications and utilities for the Hailo A
 
 The GenAI applications package includes:
 
-- **Full Applications**: Production-ready interactive applications with complete user interfaces
-- **Example Applications**: Simple demonstration scripts for common GenAI tasks
+- **Full Applications**: Fully functioning interactive applications
+- **Simple Examples**: Basic demonstration scripts for common GenAI tasks
 - **Shared Utilities**: Reusable components for building custom GenAI applications
+
+**Note:** These applications require the Hailo10 device. Due to the size of models and additional requirements, it is not installed by default. See [installation instructions](#installation).
 
 ## Applications
 
-### 🤖 Agent Tools Example (`agent_tools_example/`)
+### 🤖 [Agent Tools Example](agent_tools_example/README.md)
 
 An interactive CLI chat agent that uses Hailo LLM models with function calling capabilities. The agent automatically discovers tools and allows the LLM to call them during conversations.
 
@@ -29,7 +31,7 @@ An interactive CLI chat agent that uses Hailo LLM models with function calling c
 - [SPEC.md](agent_tools_example/doc/SPEC.md) - Technical specification
 - [TESTING.md](agent_tools_example/testing/TESTING.md) - Testing framework documentation
 
-### 👁️ VLM Chat (`vlm_chat/`)
+### 👁️ [VLM Chat](vlm_chat/README.md)
 
 An interactive computer vision application using Hailo's Vision Language Model (VLM) for real-time image analysis and question answering.
 
@@ -41,7 +43,7 @@ An interactive computer vision application using Hailo's Vision Language Model (
 
 **Documentation:** See [vlm_chat/README.md](vlm_chat/README.md) for usage instructions and configuration options.
 
-### 🎤 Voice Assistant (`voice_assistant/`)
+### 🎤 [Voice Assistant](voice_assistant/README.md)
 
 An interactive voice-controlled AI assistant using Hailo's Speech-to-Text and Large Language Model for real-time audio processing and conversational AI.
 
@@ -56,16 +58,57 @@ An interactive voice-controlled AI assistant using Hailo's Speech-to-Text and La
 
 ### 📚 Simple Examples
 
-Basic example applications demonstrating the use of Hailo's GenAI platform for different AI tasks. These are minimal, single-file examples perfect for learning and quick prototyping:
+Basic example applications demonstrating the use of Hailo's GenAI platform for different AI tasks:
 
-- **Simple LLM Chat** (`simple_llm_chat/`) - Minimal text-based conversational AI example demonstrating basic LLM interaction
-- **Simple VLM Chat** (`simple_vlm_chat/`) - Minimal image analysis example demonstrating VLM image understanding
-- **Simple Whisper Chat** (`simple_whisper_chat/`) - Minimal audio transcription example demonstrating Whisper speech-to-text
-- **Hailo Ollama** (`hailo_ollama/`) - Complete setup guide for Hailo-Ollama with Open WebUI integration (documentation only)
+#### 💬 [Simple LLM Chat](simple_llm_chat/README.md)
 
-**Documentation:** See individual README files in each directory for usage instructions, installation requirements, and prerequisites.
+A simple example demonstrating text-based conversation with Hailo's Large Language Model (LLM).
 
-**Note:** Simple examples require GenAI dependencies to be installed. See [Installation](#installation) section below.
+**Features:**
+- Simple text prompt processing
+- Configurable temperature and token limits
+- System message for assistant behavior definition
+- Auto-downloads model on first run
+
+**Documentation:** See [simple_llm_chat/README.md](simple_llm_chat/README.md) for usage instructions.
+
+#### 👁️ [Simple VLM Chat](simple_vlm_chat/README.md)
+
+A simple example demonstrating image analysis and description using Hailo's Vision Language Model (VLM).
+
+**Features:**
+- Image loading and preprocessing
+- Visual question answering
+- Image description generation
+- Uses example image from doc/images/ directory
+- Auto-downloads model on first run
+
+**Documentation:** See [simple_vlm_chat/README.md](simple_vlm_chat/README.md) for usage instructions.
+
+#### 🎤 [Simple Whisper Chat](simple_whisper_chat/README.md)
+
+A simple example demonstrating audio transcription using Hailo's Whisper speech-to-text model.
+
+**Features:**
+- Audio file loading and processing
+- Speech-to-text transcription
+- Segment-based output
+- Default audio file included
+- Auto-downloads model on first run
+
+**Documentation:** See [simple_whisper_chat/README.md](simple_whisper_chat/README.md) for usage instructions.
+
+### 🔌 [Hailo Ollama](hailo_ollama/README.md)
+
+Integration guide for using Hailo-Ollama with Open WebUI for an interactive AI chat interface.
+
+**Features:**
+- Ollama-compatible REST API
+- Integration with Open WebUI
+- Model management and deployment
+- Web-based chat interface
+
+**Documentation:** See [hailo_ollama/README.md](hailo_ollama/README.md) for installation and setup instructions.
 
 ## Shared Utilities (`gen_ai_utils/`)
 
@@ -96,13 +139,13 @@ Components for building voice-enabled applications:
 
 ### Prerequisites
 
-- **Hardware**: Hailo AI accelerator device (H10 or compatible)
+- **Hardware**: Hailo AI GenAI accelerator device (H10 or compatible)
 - **Python**: Python 3.10 or higher
 - **Hailo Platform SDK**: Must be installed and configured
 
 ### Step 1: Install GenAI Dependencies
 
-**Required for all GenAI applications and examples.** The GenAI applications require additional Python packages that are not installed by default. Install them using:
+The GenAI applications require additional Python packages that are not installed by default. Install them using:
 
 ```bash
 # From the repository root directory
@@ -110,24 +153,20 @@ pip install -e ".[gen-ai]"
 ```
 
 This will install:
-- `piper-tts` - For text-to-speech synthesis (required for voice features)
+- `piper-tts` - For text-to-speech synthesis
 - `sounddevice==0.5.1` - For audio input/output (microphone recording and playback)
-- Additional dependencies for GenAI examples (OpenCV, NumPy, etc.)
 
 If you encounter audio issues, you may need to install system dependencies:
 ```bash
-# On Ubuntu/Debian
-sudo apt-get install portaudio19-dev
-
-# On Raspberry Pi
 sudo apt-get install portaudio19-dev
 ```
 
-### Step 2: Install Piper TTS Model (Optional)
+### Step 2: Voice support (Optional)
 
-If you plan to use voice features (text-to-speech), install the Piper TTS model.
+If you plan to use voice features (text-to-speech, speech-to-text), you'll need to install the Piper TTS model.
+We also provide tools to configure and validate your audio devices.
 
-**See [Voice Processing Module Documentation](gen_ai_utils/voice_processing/README.md) for installation instructions.**
+See [Voice Processing Module Documentation](gen_ai_utils/voice_processing/README.md) for installation instructions.
 
 ### Step 3: Model Download
 
@@ -176,7 +215,6 @@ python -m hailo_apps.python.gen_ai_apps.voice_assistant.voice_assistant
 # Simple Examples
 python -m hailo_apps.python.gen_ai_apps.simple_llm_chat.simple_llm_chat
 python -m hailo_apps.python.gen_ai_apps.simple_vlm_chat.simple_vlm_chat
-python -m hailo_apps.python.gen_ai_apps.simple_whisper_chat.simple_whisper_chat
 python -m hailo_apps.python.gen_ai_apps.simple_whisper_chat.simple_whisper_chat --audio /path/to/audio.wav
 ```
 
@@ -223,9 +261,9 @@ gen_ai_apps/
 ├── vlm_chat/                # Vision Language Model application
 ├── voice_assistant/         # Voice assistant application
 ├── simple_llm_chat/         # Simple LLM chat example
-├── simple_vlm_chat/          # Simple VLM chat example
+├── simple_vlm_chat/         # Simple VLM chat example
 ├── simple_whisper_chat/     # Simple Whisper chat example
-├── hailo_ollama/            # Hailo-Ollama with Open WebUI guide
+├── hailo_ollama/            # Hailo Ollama integration guide
 └── gen_ai_utils/            # Shared utilities
     ├── llm_utils/           # LLM interaction utilities
     └── voice_processing/    # Voice processing components
@@ -233,20 +271,16 @@ gen_ai_apps/
 
 Applications use the shared utilities from `gen_ai_utils/` to avoid code duplication and ensure consistency.
 
-**Full Applications vs Simple Examples:**
-- **Full Applications** (`agent_tools_example/`, `vlm_chat/`, `voice_assistant/`) - Production-ready with complete user interfaces, error handling, and advanced features
-- **Simple Examples** (`simple_*`) - Minimal, single-file demonstrations focused on core functionality for learning and quick prototyping
-
 ## Troubleshooting
 
 ### Missing Dependencies
 
-If you see import errors for `piper-tts`, `sounddevice`, `opencv-python`, `numpy`, or other GenAI-related packages:
+If you see import errors for `piper-tts` or `sounddevice`:
 ```bash
 pip install -e ".[gen-ai]"
 ```
 
-This installs all dependencies needed for GenAI applications and examples. **This step is required before running any GenAI application or example.**
+This installs all dependencies needed for GenAI voice features.
 
 ### Model Not Found
 
@@ -269,10 +303,10 @@ GenAI applications require **Hailo-10H hardware**. They are not available on Hai
 - [Agent Tools Example README](agent_tools_example/README.md) - Complete guide for the agent application
 - [Voice Processing README](gen_ai_utils/voice_processing/README.md) - Voice processing module documentation
 - [GenAI Utils README](gen_ai_utils/README.md) - Shared utilities documentation
-- [Simple LLM Chat README](simple_llm_chat/README.md) - Simple LLM chat example
-- [Simple VLM Chat README](simple_vlm_chat/README.md) - Simple VLM chat example
-- [Simple Whisper Chat README](simple_whisper_chat/README.md) - Simple Whisper chat example
-- [Hailo Ollama README](hailo_ollama/README.md) - Hailo-Ollama with Open WebUI guide
+- [Simple LLM Chat README](simple_llm_chat/README.md) - Simple LLM chat example guide
+- [Simple VLM Chat README](simple_vlm_chat/README.md) - Simple VLM chat example guide
+- [Simple Whisper Chat README](simple_whisper_chat/README.md) - Simple Whisper chat example guide
+- [Hailo Ollama README](hailo_ollama/README.md) - Hailo Ollama integration guide
 
 ## License
 
