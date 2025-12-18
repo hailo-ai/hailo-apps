@@ -98,8 +98,10 @@ class GStreamerClipApp(GStreamerApp):
             app_name=CLIP_PIPELINE,
             arch=self.arch,
         )
-        self.hef_path_detection = models[0].path
-        self.hef_path_clip = models[1].path
+
+        # order as in hailo_apps/config/resources_config.yaml
+        self.hef_path_clip = models[0].path
+        self.hef_path_detection = models[1].path
 
         self.post_process_so_detection = get_resource_path(pipeline_name=None, resource_type=RESOURCES_SO_DIR_NAME, model=DETECTION_POSTPROCESS_SO_FILENAME)
         self.post_process_so_clip = get_resource_path(pipeline_name=None, resource_type=RESOURCES_SO_DIR_NAME, model=CLIP_POSTPROCESS_SO_FILENAME)
