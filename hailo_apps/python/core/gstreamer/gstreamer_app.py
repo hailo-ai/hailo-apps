@@ -382,7 +382,7 @@ class GStreamerApp:
         return Gst.FlowReturn.OK
 
     def on_fps_measurement(self, sink, fps, droprate, avgfps):
-        hailo_logger.debug(f"FPS measurement: {fps:.2f}, drop={droprate:.2f}, avg={avgfps:.2f}")
+        hailo_logger.info(f"FPS measurement: {fps:.2f}, drop={droprate:.2f}, avg={avgfps:.2f}")
         return True
 
     def _watchdog_monitor(self):
