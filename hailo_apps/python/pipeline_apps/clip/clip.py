@@ -22,7 +22,7 @@ def check_clip_dependencies():
     Exits the program with installation instructions if any dependencies are missing.
     """
     missing_deps = []
-    for dep_name in ["openai-clip", "torch", "torchvision"]:
+    for dep_name in ["clip", "torch", "torchvision"]:
         try:
             __import__(dep_name)
         except ImportError:

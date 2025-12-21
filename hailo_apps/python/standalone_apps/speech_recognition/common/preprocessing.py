@@ -25,7 +25,7 @@ def preprocess(audio, is_nhwc=False, chunk_length = 10, chunk_offset=0, max_dura
     - overlap: Overlap between chunks. This is useful for continuous audio processing. Add some overlap (e.g. 0.2) when processing an audio longer than 10 seonds.
     """
     # Limit the audio duration
-    sample_rate = common.audio_utils.SAMPLE_RATE
+    sample_rate = audio_utils.SAMPLE_RATE
     max_samples = max_duration * sample_rate
     offset = int(chunk_offset * sample_rate)
 
@@ -44,10 +44,10 @@ def preprocess(audio, is_nhwc=False, chunk_length = 10, chunk_offset=0, max_dura
         chunk = audio[start:end]
 
         # Ensure the chunk is 10s long (Whisper requires this)
-        chunk = common.audio_utils.pad_or_trim(chunk, int(segment_duration * sample_rate))
+        chunk = audio_utils.pad_or_trim(chunk, int(segment_duration * sample_rate))
 
         # Convert to Mel spectrogram
-        mel = common.audio_utils.log_mel_spectrogram(chunk).to("cpu")
+        mel = audio_utils.log_mel_spectrogram(chunk).to("cpu")
         # Run the encoder
 
         mel = np.expand_dims(mel, axis=0)  # Add new axis to match shape (1, 80, 1, 1000)
@@ -93,7 +93,7 @@ def improve_input_audio(audio, vad=True, low_audio_gain = True):
 
     start_time = 0
     if vad:
-        start_time = detect_first_speech(audio, common.audio_utils.SAMPLE_RATE, threshold=0.2, frame_duration=0.2)
+        start_time = detect_first_speech(audio, audio_utils.SAMPLE_RATE, threshold=0.2, frame_duration=0.2)
         if start_time is not None:
             logging.info(f"Speech detected at {start_time:.2f} seconds.")
         else:

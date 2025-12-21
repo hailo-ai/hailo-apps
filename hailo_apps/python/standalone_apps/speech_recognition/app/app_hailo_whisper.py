@@ -3,6 +3,41 @@
 import time
 import os
 import sys
+
+
+def check_whisper_dependencies():
+    """
+    Check if all required Whisper dependencies are installed.
+    
+    Exits the program with installation instructions if any dependencies are missing.
+    """
+    missing_deps = []
+    for dep_name in ["transformers", "sounddevice", "torch", "streamlit"]:
+        try:
+            __import__(dep_name)
+        except ImportError:
+            missing_deps.append(dep_name)
+
+    if missing_deps:
+        print("\n" + "="*70)
+        print("❌ MISSING REQUIRED DEPENDENCIES")
+        print("="*70)
+        print("\nThe following dependencies are required but not installed:")
+        for dep in missing_deps:
+            print(f"  • {dep}")
+        print("\n" + "-"*70)
+        print("INSTALLATION INSTRUCTIONS:")
+        print("-"*70)
+        print("\nTo install all dependencies (recommended):")
+        print("  1. Navigate to the repository root directory")
+        print("  2. Run: pip install -e \".[speech-rec]\"")
+        print("\n" + "="*70)
+        sys.exit(1)
+
+
+# Check dependencies before importing modules that depend on them
+check_whisper_dependencies()
+
 try:
     from hailo_apps.python.standalone_apps.speech_recognition.app.hailo_whisper_pipeline import (
         HailoWhisperPipeline,
@@ -32,7 +67,6 @@ except ImportError:
     from app.whisper_hef_registry import HEF_REGISTRY
 from hailo_apps.python.core.common.parser import get_standalone_parser
 from hailo_apps.python.core.common.toolbox import resolve_arch
-
 
 
 def get_args():

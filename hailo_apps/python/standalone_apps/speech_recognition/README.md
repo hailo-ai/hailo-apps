@@ -17,6 +17,8 @@ Ensure your system matches the following requirements before proceeding:
   ```
 - **Python 3.10 or 3.11** installed.
 
+
+
 ## Installation - Inference only
 
 Follow these steps to set up the environment and install dependencies for inference:
@@ -55,7 +57,47 @@ Follow these steps to set up the environment and install dependencies for infere
 - The application allows the user to acquire and process an audio sample up to 5 seconds long. The duration can be modified in the application code.
 - The current pipeline supports **English language only**.
 
-## Usage from CLI
+## Usage
+
+### Standalone Usage (within hailo-apps-infra repository)
+
+Before running, install the required dependencies:
+
+```bash
+pip install -e ".[speech-rec]"
+```
+
+This will install:
+- `transformers==4.50.1`
+- `sounddevice==0.5.1`
+- `torch==2.6.0`
+- `streamlit`
+
+Direct usage within the repository:
+
+```bash
+cd ~/hailo-apps-infra/hailo_apps/python/standalone_apps/speech_recognition/app
+python3 app_hailo_whisper.py
+```
+
+To see all possible arguments:
+```bash
+cd ~/hailo-apps-infra/hailo_apps/python/standalone_apps/speech_recognition/app
+python3 app_hailo_whisper.py --help
+```
+
+The app uses Hailo-8 models as default. If you have an Hailo-8L device, run the following command instead:
+```bash
+python3 app_hailo_whisper.py --hw-arch hailo8l
+```
+
+If you want to select a specific Whisper model, use the *--variant* argument:
+```bash
+python3 app_hailo_whisper.py --variant base
+python3 app_hailo_whisper.py --variant tiny
+```
+
+### Usage from CLI (legacy installation)
 1. Activate the virtual environment from the repository root folder:
 
    ```sh
