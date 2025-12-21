@@ -64,6 +64,13 @@ speech-rec = [
     "streamlit",
 ]
 
+# CLIP dependencies - install with: pip install -e ".[clip]"
+clip = [
+    "openai-clip",
+    "torch",
+    "torchvision"
+]
+
 [project.scripts]
 get-usb-camera =            "hailo_apps.python.core.common.camera_utils:main"
 hailo-post-install =        "hailo_apps.installation.post_install:main"
