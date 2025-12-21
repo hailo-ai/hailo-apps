@@ -81,6 +81,18 @@ videos:
     tag:
       - depth
       - depth_estimation_mono
+  - name: lpr_video0.mp4
+    source: s3
+    tag:
+      - license_plate_recognition
+  - name: lpr_video1.mp4
+    source: s3
+    tag:
+      - license_plate_recognition
+  - name: lpr_video2.mp4
+    source: s3
+    tag:
+      - license_plate_recognition
 
 # Shared images for all apps
 # Tags use app names only (no _p/_s suffixes)
@@ -158,6 +170,14 @@ json:
     source: s3
     tag:
       - detection
+  - name: yolov5m_vehicles.json
+    source: s3
+    tag:
+      - license_plate_recognition
+  - name: yolov8n_relu6_global_lp_det--640x640_quant_hailort_hailo8_1.json
+    source: s3
+    tag:
+      - license_plate_recognition
 
 
 classifier:

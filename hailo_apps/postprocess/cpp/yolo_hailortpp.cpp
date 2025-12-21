@@ -18,6 +18,8 @@ static const std::string DEFAULT_YOLOV5M_VEHICLES_OUTPUT_LAYER = "yolov5m_vehicl
 static const std::string DEFAULT_YOLOV8S_OUTPUT_LAYER = "yolov8s/yolov8_nms_postprocess";
 static const std::string DEFAULT_YOLOV8M_OUTPUT_LAYER = "yolov8m/yolov8_nms_postprocess";
 static const std::string DEFAULT_YOLOV8N_OUTPUT_LAYER = "hailo_yolov8n_480_640/yolov8_nms_postprocess";
+static const std::string DEFAULT_YOLOV8N_RELU6_LICENSE_PLATE_OUTPUT_LAYER =
+    "yolov8n_relu6_global_lp_det_v8/yolov8_nms_postprocess";
 
 #if __GNUC__ > 8
 #include <filesystem>
@@ -109,6 +111,10 @@ static std::map<uint8_t, std::string> yolo_vehicles_labels = {
     {1, "car"}
 };
 
+static std::map<uint8_t, std::string> yolo_license_plate_labels = {
+    {1, "license_plate"}  // NMS decode uses class_id + 1, so class 0 maps to key 1
+};
+
 static std::map<uint8_t, std::string> yolo_personface_labels = {
         {0, "unlabeled"},
         {1, "person"},
@@ -190,6 +196,39 @@ void yolov5m_vehicles_nv12(HailoROIPtr roi)
     auto post = HailoNMSDecode(roi->get_tensor("yolov5m_vehicles_nv12/yolov5_nms_postprocess"), yolo_vehicles_labels);
     auto detections = post.decode<float32_t, common::hailo_bbox_float32_t>();
     hailo_common::add_detections(roi, detections);
+}
+
+void yolov8n_relu6_license_plate(HailoROIPtr roi)
+{
+    if (!roi->has_tensors())
+    {
+        return;
+    }
+
+    // Prefer the known output layer name (legacy behavior).
+    try
+    {
+        auto tensor = roi->get_tensor(DEFAULT_YOLOV8N_RELU6_LICENSE_PLATE_OUTPUT_LAYER);
+        auto post = HailoNMSDecode(tensor, yolo_license_plate_labels);
+        auto detections = post.decode<float32_t, common::hailo_bbox_float32_t>();
+        hailo_common::add_detections(roi, detections);
+        return;
+    }
+    catch (...)
+    {
+    }
+
+    // Fallback: search any NMS tensor (more robust to name changes).
+    for (auto tensor : roi->get_tensors())
+    {
+        if (std::regex_search(tensor->name(), std::regex("nms_postprocess")))
+        {
+            auto post = HailoNMSDecode(tensor, yolo_license_plate_labels);
+            auto detections = post.decode<float32_t, common::hailo_bbox_float32_t>();
+            hailo_common::add_detections(roi, detections);
+            return;
+        }
+    }
 }
 
 void yolov5s_nv12(HailoROIPtr roi)

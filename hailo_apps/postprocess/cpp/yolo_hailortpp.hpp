@@ -38,4 +38,5 @@ void yolov8n_personface(HailoROIPtr roi);
 void yolov5_no_persons(HailoROIPtr roi);
 void yolov5m_vehicles(HailoROIPtr roi);
 void yolov5m_vehicles_nv12(HailoROIPtr roi);
+void yolov8n_relu6_license_plate(HailoROIPtr roi);
 __END_DECLS
