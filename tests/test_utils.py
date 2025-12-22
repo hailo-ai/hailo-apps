@@ -226,8 +226,9 @@ def run_pipeline_test(
         success = "error" not in err_str and "traceback" not in err_str
         
         # Check for FPS output when --show-fps is enabled
+        # The actual log format is "FPS measurement: X.XX" (case-sensitive check on lowercase output)
         if "--show-fps" in args or "-f" in args:
-            if "fps:" not in combined_output:
+            if "fps measurement:" not in combined_output:
                 logger.warning(f"FPS flag enabled but FPS output not found in logs: {log_file}")
                 # Don't fail the test, just warn - FPS might not appear immediately
         

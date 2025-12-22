@@ -40,16 +40,17 @@ apps:
   
   face_recognition:
     name: "Face Recognition Pipeline"
-    description: "Face Recognition Pipeline"
+    description: "Face Recognition Pipeline (multi-model: scrfd + arcface)"
     module: "hailo_apps.python.pipeline_apps.face_recognition.face_recognition"
     script: "hailo_apps/python/pipeline_apps/face_recognition/face_recognition.py"
     cli: "hailo-face-recon"
+    # Multi-model app: test framework auto-detects and passes all HEF paths
     default_test_suites:
       - "basic_show_fps"
       - "basic_input_video"
-      - "basic_input_usb"
       - "input_video_with_hef"
     extra_test_suites:
+      - "basic_input_usb"
       - "face_mode_train"
       - "input_video_mode_train"
       - "pipeline_disable_sync"
@@ -118,30 +119,32 @@ apps:
   
   paddle_ocr:
     name: "Paddle OCR Pipeline"
-    description: "Paddle OCR Pipeline"
+    description: "Paddle OCR Pipeline (multi-model: ocr_det + ocr)"
     module: "hailo_apps.python.pipeline_apps.paddle_ocr.paddle_ocr"
     script: "hailo_apps/python/pipeline_apps/paddle_ocr/paddle_ocr.py"
     cli: "hailo-ocr"
+    # Multi-model app: test framework auto-detects and passes all HEF paths
     default_test_suites:
       - "basic_show_fps"
       - "basic_input_video"
-      - "basic_input_usb"
       - "input_video_with_hef"
     extra_test_suites:
+      - "basic_input_usb"
       - "pipeline_disable_sync"
   
   clip:
     name: "CLIP Pipeline"
-    description: "CLIP Pipeline"
+    description: "CLIP Pipeline (multi-model: clip_encoder + detector)"
     module: "hailo_apps.python.pipeline_apps.clip.clip"
     script: "hailo_apps/python/pipeline_apps/clip/clip.py"
     cli: "hailo-clip"
+    # Multi-model app: test framework auto-detects and passes all HEF paths
     default_test_suites:
       - "basic_show_fps"
       - "basic_input_video"
-      - "basic_input_usb"
       - "clip_detector_none"
     extra_test_suites:
+      - "basic_input_usb"
       - "clip_detector_person"
       - "clip_detector_face"
   
@@ -150,14 +153,16 @@ apps:
   
   reid_multisource:
     name: "REID Multisource Pipeline"
-    description: "REID Multisource Pipeline"
+    description: "REID Multisource Pipeline (multi-model: scrfd + arcface)"
     module: "hailo_apps.python.pipeline_apps.reid_multisource.reid_multisource"
     script: "hailo_apps/python/pipeline_apps/reid_multisource/reid_multisource.py"
     cli: "hailo-reid"
+    # Multi-model app: test framework auto-detects and passes all HEF paths
+    # Note: multisource tests require video device (e.g., /dev/video0)
     default_test_suites:
       - "basic_show_fps"
-      - "multisource_single"
     extra_test_suites:
+      - "multisource_single"
       - "multisource_multiple"
 
   object_detection_standalone:

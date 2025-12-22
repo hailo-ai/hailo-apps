@@ -11,7 +11,7 @@ This module:
 import logging
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence, Union
 
 import pytest
 
@@ -101,11 +101,28 @@ def get_models_for_app_and_arch(
     return config_manager.get_model_names(app_name, architecture, tier=model_selection)
 
 
+def is_multi_model_app(app_name: str, architecture: str) -> bool:
+    """Check if an app requires multiple models (e.g., face_recognition, paddle_ocr, reid).
+
+    Multi-model apps have more than one default model in resources_config.yaml.
+    These apps need all models passed together, not iterated separately.
+
+    Args:
+        app_name: Application name
+        architecture: Architecture
+
+    Returns:
+        True if app requires multiple models
+    """
+    default_models = config_manager.get_model_names(app_name, architecture, tier="default")
+    return len(default_models) > 1
+
+
 def resolve_test_suite_flags(
     suite_name: str,
     app_name: str,
     architecture: str,
-    model: str,
+    model: Union[str, Sequence[str]],
 ) -> List[str]:
     """Resolve test suite flags with placeholders replaced.
 
@@ -113,7 +130,7 @@ def resolve_test_suite_flags(
         suite_name: Test suite name
         app_name: Application name
         architecture: Architecture
-        model: Model name
+        model: Model name or list of model names for multi-model apps
 
     Returns:
         List of resolved flags
@@ -126,7 +143,10 @@ def resolve_test_suite_flags(
 
     # Resolve placeholders
     resources_root = RESOURCES_ROOT_PATH_DEFAULT
-    hef_path = build_hef_path(model, architecture, resources_root)
+
+    # Handle single or multiple models
+    models = [model] if isinstance(model, str) else list(model)
+    hef_paths = [build_hef_path(m, architecture, resources_root) for m in models]
 
     # Get video path
     video_name = "example.mp4"  # default
@@ -138,15 +158,35 @@ def resolve_test_suite_flags(
     if json_files:
         labels_json_path = os.path.join(resources_root, "json", json_files[0])
 
-    # Replace placeholders
+    # Replace placeholders - use first HEF path for ${HEF_PATH} placeholder
     resolved_flags = []
     for flag in flags:
-        resolved = flag.replace("${HEF_PATH}", hef_path)
+        resolved = flag.replace("${HEF_PATH}", hef_paths[0] if hef_paths else "")
         resolved = resolved.replace("${VIDEO_PATH}", video_path)
         if labels_json_path:
             resolved = resolved.replace("${LABELS_JSON_PATH}", labels_json_path)
         resolved = resolved.replace("${RESOURCES_ROOT}", resources_root)
         resolved_flags.append(resolved)
+
+    # For multi-model apps: normalize HEF flags
+    # Remove any --hef-path entries and re-add one per HEF file
+    if len(hef_paths) > 1:
+        filtered_flags = []
+        skip_next = False
+        for token in resolved_flags:
+            if skip_next:
+                skip_next = False
+                continue
+            if token == "--hef-path":
+                skip_next = True
+                continue
+            filtered_flags.append(token)
+
+        # Add all HEF paths
+        for hef in hef_paths:
+            filtered_flags.extend(["--hef-path", hef])
+
+        return filtered_flags
 
     return resolved_flags
 
@@ -326,7 +366,25 @@ def _generate_cases_for_app(
             )
             continue
 
-        for model in models:
+        # Check if this is a multi-model app (requires multiple HEFs together)
+        # Multi-model apps (e.g., face_recognition, paddle_ocr, reid_multisource)
+        # need all their default models passed together, not iterated separately
+        multi_model = is_multi_model_app(app_name, architecture)
+
+        # For multi-model apps, treat all models as a single group
+        # For single-model apps, iterate each model separately
+        model_list: List[Union[str, Sequence[str]]] = []
+        if multi_model:
+            # Pass all models together as a tuple/list
+            model_list.append(tuple(models))
+            logger.info(
+                f"Multi-model app {app_name}: using models together: {models}"
+            )
+        else:
+            # Iterate each model separately
+            model_list.extend(models)
+
+        for model in model_list:
             for run_method in run_methods:
                 for test_suite in test_suites:
                     flags = resolve_test_suite_flags(
@@ -359,7 +417,7 @@ def get_log_file_path_new(
     app_name: str,
     test_suite_mode: str,
     architecture: Optional[str] = None,
-    model: Optional[str] = None,
+    model: Optional[Union[str, Sequence[str]]] = None,
     run_method: Optional[str] = None,
     test_suite: Optional[str] = None,
 ) -> str:
@@ -383,7 +441,9 @@ def get_log_file_path_new(
     if architecture:
         parts.append(architecture)
     if model:
-        parts.append(model)
+        # Handle multi-model case: use first model name for log file
+        model_name = model if isinstance(model, str) else model[0]
+        parts.append(model_name)
     if run_method:
         parts.append(run_method)
     if test_suite and test_suite != "basic_show_fps":
@@ -420,10 +480,17 @@ _test_cases = generate_test_cases(_hailo_arch, _host_arch)
 # ============================================================================
 
 
+def _get_test_id(tc: Dict) -> str:
+    """Generate test ID, handling multi-model cases."""
+    model = tc['model']
+    model_str = model if isinstance(model, str) else "_".join(model)
+    return f"{tc['app']}_{tc['architecture']}_{model_str}_{tc['run_method']}_{tc['test_suite']}"
+
+
 @pytest.mark.parametrize(
     "test_case",
     _test_cases,
-    ids=lambda tc: f"{tc['app']}_{tc['architecture']}_{tc['model']}_{tc['run_method']}_{tc['test_suite']}",
+    ids=_get_test_id,
 )
 def test_pipeline(test_case: Dict):
     """Test a pipeline with specific configuration."""

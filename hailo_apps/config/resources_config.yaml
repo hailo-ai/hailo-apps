@@ -651,18 +651,26 @@ oriented_object_detection:
           source: s3
 
 reid_multisource:
+  # Multi-model app: requires face detection + face recognition models
+  # The pipeline expects: models[0] = detection (scrfd), models[1] = recognition (arcface)
   models:
     hailo8:
       default:
-        - name: repvgg_a0_person_reid_512
+        - name: scrfd_10g
+          source: mz
+        - name: arcface_mobilefacenet
           source: mz
     hailo8l:
       default:
-        - name: repvgg_a0_person_reid_512
+        - name: scrfd_2.5g
+          source: mz
+        - name: arcface_mobilefacenet
           source: mz
     hailo10h:
       default:
-        - name: repvgg_a0_person_reid_512
+        - name: scrfd_10g
+          source: mz
+        - name: arcface_mobilefacenet
           source: mz
 
 ########################################################

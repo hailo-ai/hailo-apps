@@ -45,11 +45,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger("test_standalone_runner")
 
-# Standalone apps that require multiple HEFs
-MULTI_MODEL_APPS = {"paddle_ocr_standalone"}
+# Suites allowed per app override for multi-model apps
+# These apps don't support input_video_with_hef since it only passes one HEF
+MULTI_MODEL_ALLOWED_SUITES = {"basic_image_smoke", "basic_show_fps"}
 
-# Suites allowed per app override
-PADDLE_OCR_ALLOWED_SUITES = {"basic_image_smoke", "basic_show_fps"}
+
+def is_multi_model_app(app_name: str, architecture: str) -> bool:
+    """Check if an app requires multiple models.
+
+    Multi-model apps have more than one default model in resources_config.yaml.
+    These apps need all models passed together, not iterated separately.
+
+    Args:
+        app_name: Application name (can be standalone or base app name)
+        architecture: Architecture
+
+    Returns:
+        True if app requires multiple models
+    """
+    base_name = config_manager.base_app_name(app_name)
+    default_models = config_manager.get_model_names(base_name, architecture, tier="default")
+    return len(default_models) > 1
 
 
 # ============================================================================
@@ -235,10 +251,14 @@ def _get_output_dir(app_name: str, test_suite: str, architecture: str, model: Un
     return str(base)
 
 
-def _is_allowed_suite(app_name: str, suite_name: str) -> bool:
-    """Enforce per-app allowed suites (e.g., paddle OCR limitations)."""
-    if app_name in MULTI_MODEL_APPS:
-        return suite_name in PADDLE_OCR_ALLOWED_SUITES
+def _is_allowed_suite(app_name: str, suite_name: str, architecture: str) -> bool:
+    """Enforce per-app allowed suites.
+
+    Multi-model apps don't support suites that pass a single HEF path
+    (like input_video_with_hef), so they're limited to smoke tests.
+    """
+    if is_multi_model_app(app_name, architecture):
+        return suite_name in MULTI_MODEL_ALLOWED_SUITES
     return True
 
 
@@ -280,12 +300,6 @@ def generate_test_cases(
 
         test_suite_mode = cfg.get("test_suite_mode", "default")
         model_selection = cfg.get("model_selection", "default")
-        suites = config_manager.get_standalone_test_suites_for_app(app_name, test_suite_mode)
-        suites = [s for s in suites if _is_allowed_suite(app_name, s)]
-
-        if not suites:
-            logger.info("No suites for %s with mode %s", app_name, test_suite_mode)
-            continue
 
         for architecture in architectures:
             models = config_manager.get_standalone_model_names(app_name, architecture, tier=model_selection)
@@ -293,13 +307,27 @@ def generate_test_cases(
                 logger.info("No models for %s on %s", app_name, architecture)
                 continue
 
+            # Filter suites based on architecture (multi-model detection needs arch)
+            suites = config_manager.get_standalone_test_suites_for_app(app_name, test_suite_mode)
+            suites = [s for s in suites if _is_allowed_suite(app_name, s, architecture)]
+
+            if not suites:
+                logger.info("No suites for %s with mode %s on %s", app_name, test_suite_mode, architecture)
+                continue
+
             app_base = config_manager.base_app_name(app_name)
             video_path, image_path = _select_inputs(app_base)
 
             # For multi-model apps, treat the entire list as one test bundle
+            # Use dynamic detection instead of hardcoded set
+            multi_model = is_multi_model_app(app_name, architecture)
             model_list: List[Union[str, Sequence[str]]] = []
-            if app_name in MULTI_MODEL_APPS:
-                model_list.append(models)
+            if multi_model:
+                model_list.append(tuple(models))
+                logger.info(
+                    "Multi-model standalone app %s: using models together: %s",
+                    app_name, models
+                )
             else:
                 model_list.extend(models)
 
