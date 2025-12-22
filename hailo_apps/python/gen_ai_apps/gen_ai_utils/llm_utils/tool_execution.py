@@ -58,7 +58,6 @@ def execute_tool_call(
 
     selected = tools_lookup.get(tool_name)
     if not selected:
-        # Reason: Provide available tools to help user correct the request
         available = ", ".join(sorted(tools_lookup.keys()))
         error_msg = f"Unknown tool '{tool_name}'. Available: {available}"
         logger.error("%s", error_msg)
@@ -73,9 +72,7 @@ def execute_tool_call(
     try:
         result = runner(args)  # type: ignore[misc]
 
-        # Validate result format
         if not isinstance(result, dict):
-            # Reason: Ensure tool follows contract even if implementation is buggy
             error_msg = f"Tool '{tool_name}' returned invalid format: expected dict, got {type(result).__name__}"
             logger.error("%s", error_msg)
             return {"ok": False, "error": error_msg}
@@ -83,7 +80,6 @@ def execute_tool_call(
         logger.debug("Result: %s", json.dumps(result, ensure_ascii=False))
         return result
     except Exception as exc:
-        # Reason: Capture full traceback in debug mode for developers
         logger.error("%s: %s", tool_name, exc)
         logger.debug("Traceback: %s", traceback.format_exc())
 

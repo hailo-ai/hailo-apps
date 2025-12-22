@@ -37,7 +37,7 @@ class TelegramHandler:
 
         # Send notification if it has never been sent or if more than 1 hour has passed
         if last_sent_time is None or current_time - last_sent_time > timedelta(hours=1):
-            self.ids_msg_sent[global_id] = current_time  # Update the last sent time
+            self.ids_msg_sent[global_id] = current_time
             return True
         return False
 

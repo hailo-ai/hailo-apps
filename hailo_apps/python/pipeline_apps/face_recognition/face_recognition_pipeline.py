@@ -161,7 +161,6 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
         # Create a queue to hold the tasks
         self.task_queue = queue.Queue()
 
-        # Define the worker function
         def worker():
             while True:  # while pipeline playing
                 task = self.task_queue.get()
@@ -247,24 +246,24 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
                     shutil.copy2(source_path, destination_path)
 
         print(f"Training on images from {self.train_images_dir}")
-        for person_name in os.listdir(self.train_images_dir):  # Iterate over subfolders in the training directory
+        for person_name in os.listdir(self.train_images_dir):
             person_folder = os.path.join(self.train_images_dir, person_name)
-            if self.db_handler.get_record_by_label(label=person_name):  # Ensure the person exists in the database, or create a new record
+            if self.db_handler.get_record_by_label(label=person_name):
                 continue
-            if not os.path.isdir(person_folder):  # Skip if not a directory
+            if not os.path.isdir(person_folder):
                 continue
             print(f"Processing person: {person_name}")
-            for image_file in os.listdir(person_folder):  # Iterate over images in the person's folder
+            for image_file in os.listdir(person_folder):
                 print(f"Processing image: {image_file}")
-                self.current_file = os.path.join(person_folder, image_file)  # Set the current file for pipeline processing, used internally in get_pipeline_string
-                self.create_pipeline()  # Initialize the pipeline with the updated file path
-                self.connect_train_vector_db_callback()  # Connect the callback after pipeline initialization
-                try:  # Set the pipeline to PLAYING to process the image
+                self.current_file = os.path.join(person_folder, image_file)
+                self.create_pipeline()
+                self.connect_train_vector_db_callback()
+                try:
                     self.pipeline.set_state(Gst.State.PLAYING)
-                    time.sleep(2)  # Wait for processing to complete
+                    time.sleep(2)
                 except Exception as e:
                     print(f"Error processing image {image_file}: {e}")
-                finally:  # Stop and clean up the pipeline
+                finally:
                     if self.pipeline:
                         self.pipeline.set_state(Gst.State.NULL)
         print("Training completed")
@@ -282,7 +281,7 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
             identity_pad.add_probe(Gst.PadProbeType.BUFFER, self.train_vector_db_callback, self.user_data)  # trigger - when the pad gets buffer
 
     def save_image_file(self, frame, image_path):
-        image = Image.fromarray(frame)  # Convert the frame to an image
+        image = Image.fromarray(frame)
         image.save(image_path, format="JPEG", quality=85)  # Save as a compressed JPEG with quality 85
     
     def crop_frame(self, frame, bbox, width, height):
@@ -411,7 +410,7 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
             cropped_frame = self.crop_frame(frame, detection.get_bbox(), width, height)
             embedding_vector = np.array(embedding[0].get_data())
             image_path = os.path.join(self.samples_dir, f"{uuid.uuid4()}.jpeg")
-            self.add_task('save_image', frame=cropped_frame, image_path=image_path)  # Add the frame to the queue for processing
+            self.add_task('save_image', frame=cropped_frame, image_path=image_path)
             name = os.path.basename(os.path.dirname(self.current_file))
             if self.is_name_processed(name):
                 self.db_handler.insert_new_sample(record=self.db_handler.get_record_by_id(self.get_processed_names_by_name(name)), embedding=embedding_vector, sample=image_path, timestamp=int(time.time())) 

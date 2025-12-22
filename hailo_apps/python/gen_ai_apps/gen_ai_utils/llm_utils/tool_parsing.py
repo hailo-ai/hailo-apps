@@ -31,8 +31,7 @@ def validate_and_fix_call(call: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         logger.debug("Tool call missing 'arguments' field")
         return None
 
-    # Fix nested JSON in arguments
-    # Reason: Some models stringify the arguments object
+    # Fix stringified JSON arguments
     if isinstance(call.get("arguments"), str):
             try:
                 # Try to parse stringified JSON arguments
@@ -121,8 +120,7 @@ def parse_function_call(response: str) -> Optional[Dict[str, Any]]:
         end = response.find("</tool_call>", start)
 
         if end == -1:
-            # No closing tag, use robust brace matching
-            # Reason: Streaming response might be truncated or model forgot closing tag
+            # No closing tag - streaming may be truncated, use brace matching
             json_str = response[start:].strip()
 
             # Find the complete JSON object by matching braces

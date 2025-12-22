@@ -19,7 +19,6 @@ from hailo_apps.python.core.common.defines import (
 )
 from hailo_apps.python.core.common.hef_utils import get_hef_labels_json
 
-# Logger
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.gstreamer.gstreamer_app import (
     GStreamerApp,
@@ -60,7 +59,6 @@ class GStreamerDetectionApp(GStreamerApp):
         
         hailo_logger.info("Initializing GStreamer Detection App...")
 
-        # Call the parent class constructor
         super().__init__(parser, user_data)
 
         hailo_logger.debug(

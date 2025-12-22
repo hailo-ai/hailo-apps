@@ -25,7 +25,6 @@ from hailo_apps.python.core.common.defines import (
     REPO_ROOT,
 )
 
-# Logger
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.gstreamer.gstreamer_app import (
     GStreamerApp,
@@ -64,7 +63,6 @@ class GStreamerPaddleOCRApp(GStreamerApp):
 
         hailo_logger.info("Initializing GStreamer OCR App...")
 
-        # Call the parent class constructor
         super().__init__(parser, user_data)
 
         hailo_logger.debug(

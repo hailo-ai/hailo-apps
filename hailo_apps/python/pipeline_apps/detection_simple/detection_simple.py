@@ -13,7 +13,6 @@ from hailo_apps.python.pipeline_apps.detection_simple.detection_simple_pipeline 
     GStreamerDetectionSimpleApp,
 )
 
-# Logger
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.gstreamer.gstreamer_app import app_callback_class
 
@@ -32,15 +31,14 @@ class user_app_callback_class(app_callback_class):
 def app_callback(element, buffer, user_data):
     # Note: Frame counting is handled automatically by the framework wrapper
     frame_idx = user_data.get_count()
-    hailo_logger.debug("Processing frame %s", frame_idx)  # Log the frame index being processed
+    hailo_logger.debug("Processing frame %s", frame_idx)
     string_to_print = f"Frame count: {user_data.get_count()}\n"
-    # buffer is passed directly
-    if buffer is None:  # Check if the buffer is valid
+    if buffer is None:
         hailo_logger.warning("Received None buffer at frame=%s", user_data.get_count())
         return
     for detection in hailo.get_roi_from_buffer(buffer).get_objects_typed(
         hailo.HAILO_DETECTION
-    ):  # Get the detections from the buffer & Parse the detections
+    ):
         string_to_print += (
             f"Detection: {detection.get_label()} Confidence: {detection.get_confidence():.2f}\n"
         )

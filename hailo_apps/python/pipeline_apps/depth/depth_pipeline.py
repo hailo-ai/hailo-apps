@@ -23,8 +23,6 @@ from hailo_apps.python.core.common.defines import (
     RESOURCES_SO_DIR_NAME,
 )
 
-# Logger
-# Logging (shared, one logger per run)
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.gstreamer.gstreamer_app import (
     GStreamerApp,
@@ -56,7 +54,7 @@ class GStreamerDepthApp(GStreamerApp):
 
         hailo_logger.info("Initializing GStreamer Depth App...")
 
-        super().__init__(parser, user_data)  # Call the parent class constructor
+        super().__init__(parser, user_data)
 
         hailo_logger.debug(
             "Parent GStreamerApp initialized, options parsed: arch=%s, input=%s, fps=%s, sync=%s, show_fps=%s",
@@ -71,7 +69,7 @@ class GStreamerDepthApp(GStreamerApp):
         # Use self.arch which is set by parent
 
         self.app_callback = app_callback
-        setproctitle.setproctitle(DEPTH_APP_TITLE)  # Set the process title
+        setproctitle.setproctitle(DEPTH_APP_TITLE)
         hailo_logger.debug("Process title set to %s", DEPTH_APP_TITLE)
 
         # Resolve HEF path with smart lookup and auto-download

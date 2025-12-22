@@ -44,7 +44,7 @@ class TextEmbeddingEntry:
     def to_dict(self):
         return {
             "text": self.text,
-            "embedding": self.embedding.tolist(),  # Convert numpy array to list
+            "embedding": self.embedding.tolist(),
             "negative": self.negative,
             "ensemble": self.ensemble
         }

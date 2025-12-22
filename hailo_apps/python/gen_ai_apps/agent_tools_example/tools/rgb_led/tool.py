@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-# Import from local interface module
 from .interface import (
     create_led_controller,
 )

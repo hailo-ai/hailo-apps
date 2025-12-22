@@ -31,8 +31,8 @@ class GStreamerMultisourceApp(GStreamerApp):
         # Handle --list-models flag - uses detection models
         handle_list_models_flag(parser, DETECTION_PIPELINE)
         
-        super().__init__(parser, user_data)  # Call the parent class constructor
-        setproctitle.setproctitle(MULTI_SOURCE_APP_TITLE)  # Set the process title
+        super().__init__(parser, user_data)
+        setproctitle.setproctitle(MULTI_SOURCE_APP_TITLE)
 
         # Resolve HEF path with smart lookup and auto-download (uses detection models)
         self.hef_path = resolve_hef_path(

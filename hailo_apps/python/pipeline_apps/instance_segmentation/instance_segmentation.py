@@ -9,7 +9,7 @@ import cv2
 
 # Local application-specific imports
 import hailo
-import numpy as np  # Added because mask data uses np.array
+import numpy as np
 from gi.repository import Gst
 
 from hailo_apps.python.pipeline_apps.instance_segmentation.instance_segmentation_pipeline import (
@@ -20,7 +20,6 @@ from hailo_apps.python.core.common.buffer_utils import (
     get_numpy_from_buffer,
 )
 
-# Logger
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.gstreamer.gstreamer_app import app_callback_class
 
@@ -59,7 +58,6 @@ def app_callback(element, buffer, user_data):
     # Note: Frame counting is handled automatically by the framework wrapper
     hailo_logger.debug("Callback triggered. Current frame count=%d", user_data.get_count())
 
-    # buffer is passed directly
     if buffer is None:
         hailo_logger.warning("Received None buffer in callback.")
         return

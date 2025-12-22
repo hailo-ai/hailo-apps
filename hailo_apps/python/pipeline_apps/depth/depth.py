@@ -12,7 +12,6 @@ from gi.repository import Gst
 
 from hailo_apps.python.pipeline_apps.depth.depth_pipeline import GStreamerDepthApp
 
-# Logger
 from hailo_apps.python.core.common.hailo_logger import (
     get_logger,
 )
@@ -28,9 +27,7 @@ class user_app_callback_class(app_callback_class):
         super().__init__()
 
     def calculate_average_depth(self, depth_mat):
-        depth_values = np.array(
-            depth_mat
-        ).flatten()  # Flatten the array and filter out outlier pixels
+        depth_values = np.array(depth_mat).flatten()
         try:
             m_depth_values = depth_values[
                 depth_values <= np.percentile(depth_values, 95)
@@ -39,7 +36,7 @@ class user_app_callback_class(app_callback_class):
             hailo_logger.exception("Percentile computation failed; treating as empty depth set.")
             m_depth_values = np.array([])
         if len(m_depth_values) > 0:
-            average_depth = np.mean(m_depth_values)  # Calculate the average depth of the pixels
+            average_depth = np.mean(m_depth_values)
         else:
             average_depth = 0  # Default value if no valid pixels are found
         return average_depth
@@ -49,8 +46,7 @@ class user_app_callback_class(app_callback_class):
 def app_callback(element, buffer, user_data):
     # Note: Frame counting is handled automatically by the framework wrapper
     string_to_print = f"Frame count: {user_data.get_count()}\n"
-    # buffer is passed directly
-    if buffer is None:  # Check if the buffer is valid
+    if buffer is None:
         hailo_logger.warning("Received None buffer at frame=%s", user_data.get_count())
         return
 

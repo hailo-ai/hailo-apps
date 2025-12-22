@@ -19,9 +19,9 @@ hailo_logger = get_logger(__name__)
 # endregion imports
 
 # region Constants
-TELEGRAM_ENABLED = False  # Enable Telegram notifications
-TELEGRAM_TOKEN = ''  # Telegram bot token
-TELEGRAM_CHAT_ID = ''  # Telegram chat ID
+TELEGRAM_ENABLED = False
+TELEGRAM_TOKEN = ''
+TELEGRAM_CHAT_ID = ''
 # endregion
 
 
@@ -41,7 +41,6 @@ class user_callbacks_class(app_callback_class):
         if self.telegram_enabled and self.telegram_token and self.telegram_chat_id:
             self.telegram_handler = TelegramHandler(self.telegram_token, self.telegram_chat_id)
 
-    # region Core application functions that are part of the main program logic and are called directly during pipeline execution, but are not GStreamer callback handlers themselves
     def send_notification(self, name, global_id, confidence, frame):
         """
         Check if Telegram is enabled and send a notification via the TelegramHandler.
@@ -87,7 +86,7 @@ def app_callback(element, buffer, user_data):
 def main():
     hailo_logger.info("Starting Face Recognition App.")
     user_data = user_callbacks_class()
-    pipeline = GStreamerFaceRecognitionApp(app_callback, user_data)  # appsink_callback argument provided anyway although in non UI interface where eventually not used - since here we don't have access to requested UI/CLI mode
+    pipeline = GStreamerFaceRecognitionApp(app_callback, user_data)
     if pipeline.options_menu.mode == 'delete':
         pipeline.db_handler.clear_table()
         exit(0)

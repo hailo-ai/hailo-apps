@@ -99,14 +99,14 @@ def visualize_embeddings(db_handler):
         print(
             "You can edit the following fields in the app:\n1. Name - In case name is 'Uknown'\n2. Confidence threshold\nChanges will be saved back to the database when you close the app."
         )
-        session.wait()  # Wait for the user to finish
+        session.wait()
     except Exception as e:
         print(f"Error launching FiftyOne: {e}")
     except KeyboardInterrupt:
         print("\nSaving changes & closing session.")
     finally:  # Ctrl + c
         save_fiftyone_changes_to_lancedb(dataset, db_handler)  # Save changes back to LanceDB
-        shutil.rmtree(dummy_dir, ignore_errors=True)  # Remove the dummy directory
+        shutil.rmtree(dummy_dir, ignore_errors=True)
     return dataset
 
 

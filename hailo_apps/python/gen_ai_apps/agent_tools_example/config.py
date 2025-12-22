@@ -6,7 +6,6 @@ Users can modify these values to customize LLM behavior, context management, and
 
 from hailo_apps.python.core.common.hailo_logger import get_logger
 
-# Logger - use standard hailo_logger
 LOGGER = get_logger(__name__)
 
 # LLM Generation Parameters

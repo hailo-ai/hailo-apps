@@ -37,7 +37,6 @@ class GStreamerTilingApp(GStreamerApp):
         # Handle --list-models flag before full initialization
         handle_list_models_flag(parser, TILING_PIPELINE)
 
-        # Call the parent class constructor
         super().__init__(parser, user_data)
 
         # Initialize tiling configuration

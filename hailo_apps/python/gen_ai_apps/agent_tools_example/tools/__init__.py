@@ -36,7 +36,6 @@ def discover_tool_packages(tools_dir: Optional[Path] = None) -> List[ModuleType]
 
     logger.debug("Scanning tools directory: %s", tools_dir)
 
-    # Iterate over subdirectories (not files)
     for item in sorted(tools_dir.iterdir()):
         # Skip non-directories, hidden dirs, and special dirs
         if not item.is_dir():

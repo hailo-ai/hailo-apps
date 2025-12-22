@@ -13,7 +13,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-# Import config from parent package
 try:
     from hailo_apps.python.gen_ai_apps.agent_tools_example import config
 except ImportError:

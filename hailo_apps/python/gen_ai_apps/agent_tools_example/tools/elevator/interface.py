@@ -11,7 +11,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-# Import config from parent package
 try:
     from hailo_apps.python.gen_ai_apps.agent_tools_example import config
 except ImportError:
@@ -138,7 +137,7 @@ class SimulatedElevator(ElevatorInterface):
         self.FLOORS = floors_data if floors_data is not None else FLOORS
 
         self.port = port
-        self._current_floor = 1  # Start at Floor 1 (Chocolate Room)
+        self._current_floor = 1
 
         try:
             # Suppress Werkzeug logging BEFORE creating Flask app

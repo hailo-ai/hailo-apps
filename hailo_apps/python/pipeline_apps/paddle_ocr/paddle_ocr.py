@@ -17,7 +17,6 @@ from hailo_apps.python.core.common.buffer_utils import (
     get_numpy_from_buffer,
 )
 
-# Logger
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.gstreamer.gstreamer_app import app_callback_class
 
@@ -28,11 +27,10 @@ hailo_logger = get_logger(__name__)
 # -----------------------------------------------------------------------------------------------
 # User-defined class to be used in the callback function
 # -----------------------------------------------------------------------------------------------
-# Inheritance from the app_callback_class
 class user_app_callback_class(app_callback_class):
     def __init__(self):
         super().__init__()
-        self.ocr_results = []  # Store OCR results
+        self.ocr_results = []
 
     def get_ocr_results(self):
         return self.ocr_results
@@ -53,10 +51,8 @@ class user_app_callback_class(app_callback_class):
 # -----------------------------------------------------------------------------------------------
 
 
-# This is the callback function that will be called when data is available from the pipeline
 def app_callback(element, buffer, user_data):
     # Note: Frame counting is handled automatically by the framework wrapper
-    # buffer is passed directly
     if buffer is None:
         hailo_logger.warning("Received None buffer.")
         return
@@ -144,7 +140,7 @@ def app_callback(element, buffer, user_data):
 
                 # Draw text result (ensure text position is within frame)
                 text_label = f"{text} ({confidence:.2f})"
-                text_y = max(15, y1 - 10)  # Ensure text is visible above box
+                text_y = max(15, y1 - 10)
                 cv2.putText(
                     frame,
                     text_label,

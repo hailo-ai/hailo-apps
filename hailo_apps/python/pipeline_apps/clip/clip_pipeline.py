@@ -223,7 +223,7 @@ class GStreamerClipApp(GStreamerApp):
         if len(top_level_matrix) == 0:
             detections = roi.get_objects_typed(hailo.HAILO_DETECTION)
         else:
-            detections = [roi]  # Use the ROI as the detection
+            detections = [roi]
         embeddings_np = None
         used_detection = []
         track_id_focus = text_image_matcher.track_id_focus  # Used to focus on a specific track_id
@@ -232,7 +232,7 @@ class GStreamerClipApp(GStreamerApp):
             results = detection.get_objects_typed(hailo.HAILO_MATRIX)
             if len(results) == 0:
                 continue
-            detection_embeddings = np.array(results[0].get_data())  # Convert the matrix to a NumPy array
+            detection_embeddings = np.array(results[0].get_data())
             used_detection.append(detection)  # used_detection corresponds to embeddings_np
             if embeddings_np is None:
                 embeddings_np = detection_embeddings[np.newaxis, :]

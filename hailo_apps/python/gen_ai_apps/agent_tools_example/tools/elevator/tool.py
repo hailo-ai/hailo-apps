@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-# Import from local interface module
 from .interface import (
     create_elevator_controller,
     FLOORS,
@@ -67,7 +66,7 @@ def initialize_tool() -> None:
     if not _initialized:
         try:
             _elevator_controller = create_elevator_controller()
-            _elevator_controller.move_to_floor(1)  # Start at Floor 1 (Chocolate Room)
+            _elevator_controller.move_to_floor(1)
             _initialized = True
 
             simulator_url = f"http://127.0.0.1:{config.ELEVATOR_SIMULATOR_PORT}"

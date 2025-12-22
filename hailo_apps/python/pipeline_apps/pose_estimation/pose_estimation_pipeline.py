@@ -16,7 +16,6 @@ from hailo_apps.python.core.common.defines import (
     RESOURCES_SO_DIR_NAME,
 )
 
-# Logger
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.gstreamer.gstreamer_app import (
     GStreamerApp,

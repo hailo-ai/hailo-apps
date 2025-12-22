@@ -88,12 +88,12 @@ class GStreamerREIDMultisourceApp(GStreamerApp):
         # Handle --list-models flag before full initialization
         handle_list_models_flag(parser, REID_MULTISOURCE_PIPELINE)
 
-        super().__init__(parser, user_data)  # Call the parent class constructor
+        super().__init__(parser, user_data)
 
         # Architecture is already handled by GStreamerApp parent class
         # Use self.arch which is set by parent
 
-        setproctitle.setproctitle(REID_MULTISOURCE_APP_TITLE)  # Set the process title
+        setproctitle.setproctitle(REID_MULTISOURCE_APP_TITLE)
 
         # Resolve HEF paths for multi-model app (face detection + face recognition)
         # Uses --hef-path arguments if provided, otherwise uses defaults

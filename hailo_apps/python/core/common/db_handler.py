@@ -19,7 +19,6 @@ from hailo_apps.python.core.common.defines import (
 # endregion
 
 
-# Define the LanceModel schema for the records table
 class Record(LanceModel):
     # mandatory fields
     global_id: str  # unique id
@@ -165,10 +164,10 @@ class DatabaseHandler:
         sample_to_delete = next(sample for sample in samples if sample["id"] == sample_id)
         self.delete_record_sample(sample_to_delete)
         new_samples = [sample for sample in samples if sample["id"] != sample_id]
-        if not new_samples:  # If there are no more samples, remove the record from the database
+        if not new_samples:
             self.tbl_records.delete(where=f"global_id = '{global_id}'")
             return True
-        else:  # Update the record's record with the new list of samples and the recalculated average embedding
+        else:
             self.tbl_records.update(
                 where=f"global_id = '{global_id}'",
                 values={
@@ -399,9 +398,9 @@ class DatabaseHandler:
             Dict[str, Any]: The record record.
         """
         results = self.tbl_records.search().where(f"label = '{label}'").to_list()
-        if not results:  # Check if the list is empty
+        if not results:
             return None  # Return None if no records are found
-        return results[0]  # Return the first record if it exists
+        return results[0]
 
     def get_records_num_samples(self, global_id: str) -> int:
         """Gets the number of samples associated with a record.
@@ -473,21 +472,18 @@ class DatabaseHandler:
             std_dev = np.std(reduced_embeddings, axis=0)
             semi_major_axis, semi_minor_axis = std_dev[0], std_dev[1]
 
-            # Calculate the area of the confidence circle (ellipse)
             area = np.pi * semi_major_axis * semi_minor_axis
             areas.append(area)
 
         # Normalize areas for threshold calibration
         areas = np.array(areas)
-        if len(areas) > 0 and np.max(areas) != np.min(areas):  # Avoid division by zero
+        if len(areas) > 0 and np.max(areas) != np.min(areas):
             norm_areas = (areas - np.min(areas)) / (np.max(areas) - np.min(areas))
         else:
             norm_areas = np.zeros_like(areas)
 
         for i, record in enumerate(records):
-            # Calculate the new threshold based on normalized area
-            # Ensure the threshold is between 0.1 and 0.9
-            new_threshold = 0.1 + (0.9 - 0.1) * (1 - norm_areas[i])  # Scale to [0.1, 0.9]
+            new_threshold = 0.1 + (0.9 - 0.1) * (1 - norm_areas[i])
             self.update_record_classificaiton_confidence_threshold(
                 record["global_id"], new_threshold
             )

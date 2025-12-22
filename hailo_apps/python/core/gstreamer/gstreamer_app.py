@@ -220,7 +220,7 @@ def _internal_callback_wrapper(element, buffer, user_data, user_callback, disabl
 
     # Debug mode: Calculate timing statistics
     if debug_mode:
-        elapsed = (time.perf_counter() - start_time) * 1000  # Convert to milliseconds
+        elapsed = (time.perf_counter() - start_time) * 1000
         user_data.callback_times.append(elapsed)
 
         # Update max time
