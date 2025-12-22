@@ -115,37 +115,37 @@ custom_tests:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "Object Detection Pipeline"
-    
+
     simple_detection:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "Simple Detection Pipeline"
-    
+
     face_recognition:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "Face Recognition Pipeline"
-    
+
     instance_segmentation:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "Instance Segmentation Pipeline"
-    
+
     pose_estimation:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "Pose Estimation Pipeline"
-    
+
     depth:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "Depth Estimation Pipeline"
-    
+
     tiling:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "Tiling Pipeline"
-    
+
     paddle_ocr:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
@@ -155,17 +155,17 @@ custom_tests:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "REID Multisource Pipeline"
-    
+
     clip:
-      test_suite_mode: "None"  # None | default | extra | all
-      model_selection: "None"  # default | extra | all
+      test_suite_mode: "default"  # None | default | extra | all
+      model_selection: "default"  # default | extra | all
       description: "CLIP Pipeline"
-    
+
     lane_detection:
       test_suite_mode: "None"  # None | default | extra | all
       model_selection: "None"  # default | extra | all
       description: "Lane Detection Pipeline"
-    
+
     super_resolution:
       test_suite_mode: "None"  # None | default | extra | all
       model_selection: "None"  # default | extra | all
@@ -202,21 +202,21 @@ standalone_tests:
       test_suite_mode: "default"
       model_selection: "default"
       description: "Standalone Paddle OCR (smoke + show-fps only)"
-    
+
 # Special tests configuration
 special_tests:
   h8l_on_h8:
     enabled: true
     description: "Run H8L architecture on H8 hardware"
-  
+
   sanity_checks:
     enabled: true
     description: "Basic sanity checks before test execution"
-  
+
   human_verification:
     enabled: false
     description: "Tests requiring human verification and validation"
-  
+
   golden_tests:
     enabled: false
     description: "Golden reference tests for baseline validation"
@@ -226,12 +226,12 @@ run_methods:
   pythonpath:
     enabled: true  # Always true (primary method)
     priority: 1
-  
+
   cli:
     enabled: false
     priority: 2
     command_template: "python -m test_runner"
-  
+
   module:
     enabled: false
     priority: 3
