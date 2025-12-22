@@ -7,16 +7,14 @@ from typing import Tuple
 from hailo_apps.python.core.common.defines import (
     TILING_VIDEO_EXAMPLE_NAME,
     TILING_POSTPROCESS_SO_FILENAME,
-    TILING_MODEL_NAME,
     TILING_POSTPROCESS_FUNCTION,
+    TILING_PIPELINE,
     RESOURCES_SO_DIR_NAME,
-    RESOURCES_MODELS_DIR_NAME,
     RESOURCES_VIDEOS_DIR_NAME,
     RESOURCES_ROOT_PATH_DEFAULT,
-    BASIC_PIPELINES_VIDEO_EXAMPLE_NAME,
     USB_CAMERA,
 )
-from hailo_apps.python.core.common.core import get_resource_path
+from hailo_apps.python.core.common.core import get_resource_path, resolve_hef_path
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.common.camera_utils import get_usb_video_devices
 from hailo_apps.python.core.common.hef_utils import get_hef_input_size
@@ -109,23 +107,23 @@ class TilingConfiguration:
 
     def _configure_model(self) -> None:
         """Configure model path and auto-detect model type."""
-        # Set HEF path
-        if self.options_menu.hef_path is not None:
-            self.hef_path = self.options_menu.hef_path
-            hailo_logger.info(f"Using user-specified HEF: {self.hef_path}")
-        else:
-            self.hef_path = get_resource_path(
-                pipeline_name=None,
-                resource_type=RESOURCES_MODELS_DIR_NAME,
-                arch=self.arch,
-                model=TILING_MODEL_NAME
-            )
-            hailo_logger.info(f"Using default HEF: {self.hef_path}")
+        # Resolve HEF path with smart lookup and auto-download
+        resolved_path = resolve_hef_path(
+            hef_path=self.options_menu.hef_path,
+            app_name=TILING_PIPELINE,
+            arch=self.arch
+        )
 
         # Validate HEF path exists
-        if self.hef_path is None or not Path(self.hef_path).exists():
-            hailo_logger.error(f"HEF path is invalid or missing: {self.hef_path}")
-            raise ValueError(f"HEF file not found: {self.hef_path}")
+        if resolved_path is None or not resolved_path.exists():
+            hailo_logger.error(f"HEF path is invalid or missing: {resolved_path}")
+            raise ValueError(f"HEF file not found: {resolved_path}")
+
+        self.hef_path = str(resolved_path)
+        if self.options_menu.hef_path is not None:
+            hailo_logger.info(f"Using user-specified HEF: {self.hef_path}")
+        else:
+            hailo_logger.info(f"Using default HEF: {self.hef_path}")
 
         # Auto-detect model configuration from HEF filename
         self.model_type, self.model_input_width, self.model_input_height, self.post_function = detect_model_config_from_hef(self.hef_path)
