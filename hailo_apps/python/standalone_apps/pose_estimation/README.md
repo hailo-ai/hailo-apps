@@ -28,37 +28,27 @@ This example only supports pose estimation networks that allow HailoRT-Postproce
 - yolov8m_pose
 - yolov8s_pose
 
-Direct usage within the repository:
------
-```bash
-cd ~/hailo_apps/python/standalone_apps/pose_estimation
-python pose_estimation.py
-```
+## Installation and Usage
 
-To see all possible arguments:
-```bash
-cd ~/hailo_apps/python/standalone_apps/pose_estimation
-python pose_estimation.py --help
-```
+Run this app in one of two ways:
+1. Standalone installation in a clean virtual environment (no TAPPAS required) — see [Option 1](#option-1-standalone-installation)
+2. From an installed `hailo-apps` repository — see [Option 2](#option-2-inside-an-installed-hailo-apps-repository)
 
-Standalone Usage
------
+## Option 1: Standalone Installation
 
-Usage
------
+To avoid compatibility issues, it's recommended to use a clean virtual environment.
 
 0. Install PyHailoRT
     - Download the HailoRT whl from the Hailo website - make sure to select the correct Python version. 
     - Install whl:
-        ```shell script
-        pip install hailort-X.X.X-cpXX-cpXX-linux_x86_64.whl
-        ```
+    ```shell script
+    pip install hailort-X.X.X-cpXX-cpXX-linux_x86_64.whl
+    ```
 
 1. Clone the repository:
     ```shell script
-    git clone <https://github.com/hailo-ai/Hailo-Application-Code-Examples.git>
-        
-    cd Hailo-Application-Code-Examples/runtime/hailo-8/python/pose_estimation
+    git clone https://github.com/hailo-ai/hailo-apps.git
+    cd hailo-apps/python/standalone_apps/pose_estimation
     ```
 
 2. Install dependencies:
@@ -66,10 +56,24 @@ Usage
     pip install -r requirements.txt
     ```
 
-3. Run the script:
-    ```shell script
-    ./pose_estimation.py -n <model_path> -i <input_path>
-    ```
+## Option 2: Inside an Installed hailo-apps Repository
+If you installed the full repository:
+```shell script
+git clone https://github.com/hailo-ai/hailo-apps.git
+cd hailo-apps
+sudo ./install.sh
+source setup_env.sh
+```
+Then the app is already ready for usage:
+```shell script
+cd hailo-apps/python/standalone_apps/pose_estimation
+```
+
+## Run
+After completing either installation option, run from the application folder:
+```shell script
+./pose_estimation.py -n <model_path> -i <input_path>
+```
 
 Arguments
 ---------

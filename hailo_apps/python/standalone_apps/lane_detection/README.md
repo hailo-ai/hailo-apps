@@ -23,24 +23,15 @@ Supported Models
 ----------------
 - ufld_v2_tu
 
-Direct usage within the repository:
------
-```bash
-cd ~/hailo_apps/python/standalone_apps/lane_detection
-python lane_detection.py
-```
+## Installation and Usage
 
-To see all possible arguments:
-```bash
-cd ~/hailo_apps/python/standalone_apps/lane_detection
-python lane_detection.py --help
-```
+Run this app in one of two ways:
+1. Standalone installation in a clean virtual environment (no TAPPAS required) — see [Option 1](#option-1-standalone-installation)
+2. From an installed `hailo-apps` repository — see [Option 2](#option-2-inside-an-installed-hailo-apps-repository)
 
-Standalone Usage
------
+## Option 1: Standalone Installation
 
-Usage
------
+To avoid compatibility issues, it's recommended to use a clean virtual environment.
 
 0. Install PyHailoRT
     - Download the HailoRT whl from the Hailo website - make sure to select the correct Python version. 
@@ -51,19 +42,33 @@ Usage
 
 1. Clone the repository:
     ```shell script
-    git clone <https://github.com/hailo-ai/Hailo-Application-Code-Examples.git>
-        
-    cd Hailo-Application-Code-Examples/runtime/hailo-8/python/lane_detection
+    git clone https://github.com/hailo-ai/hailo-apps.git
+    cd hailo-apps/python/standalone_apps/lane_detection
     ```
 
 2. Install dependencies:
     ```shell script
     pip install -r requirements.txt
     ```
-3. Run the script:
-    ```shell script
-    ./lane_detection -n <model_path> -i <input_video_path> -o <output_path>
-    ```
+
+## Option 2: Inside an Installed hailo-apps Repository
+If you installed the full repository:
+```bash
+git clone https://github.com/hailo-ai/hailo-apps.git
+cd hailo-apps
+sudo ./install.sh
+source setup_env.sh
+```
+Then the app is already ready for usage:
+```bash
+cd hailo-apps/python/standalone_apps/lane_detection
+```
+
+## Run
+After completing either installation option, run from the application folder:
+```shell script
+./lane_detection.py -n <model_path> -i <input_video_path> -o <output_path>
+```
 
 Arguments
 ---------
@@ -76,7 +81,7 @@ Arguments
   - A **predefined input name** from `inputs.json` (e.g., `bus`, `street`).
     - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
   - Use `--list-inputs` to display all available predefined inputs.
-- ``-o, --output``: Path to save the output video with annotated lanes.
+- `-o, --output`: Path to save the output video with annotated lanes.
 - `--list-nets` Print all supported networks for this application (from `networks.json`) and exit.
 - `--list-inputs`: Print the available predefined input resources (videos) defined in `inputs.json` for this application, then exit.
 
@@ -97,7 +102,7 @@ Example
 ./lane_detection.py --list-inputs
 ```
 
-**inference**
+**Inference**
 ```shell script
 ./lane_detection.py -n ./ufld_v2_tu.hef -i input_video.mp4
 ```
