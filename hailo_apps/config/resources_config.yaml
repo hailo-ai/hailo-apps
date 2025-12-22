@@ -93,6 +93,10 @@ videos:
     source: s3
     tag:
       - license_plate_recognition
+  - name: lpr.mp4
+    source: s3
+    tag:
+      - license_plate_recognition
 
 # Shared images for all apps
 # Tags use app names only (no _p/_s suffixes)
@@ -171,6 +175,10 @@ json:
     tag:
       - detection
   - name: yolov5m_vehicles.json
+    source: s3
+    tag:
+      - license_plate_recognition
+  - name: vehicles.json
     source: s3
     tag:
       - license_plate_recognition
@@ -605,6 +613,27 @@ tiling:
           source: mz
         - name: ssd_mobilenet_v1_visdrone
           source: s3
+
+license_plate_recognition:
+  models:
+    hailo8:
+      default:
+        - name: yolov5m_vehicles
+          source: s3
+        - name: yolov8n_relu6_global_lp_det--640x640_quant_hailort_hailo8_1
+          source: s3
+        - name: ocr
+          source: s3
+    hailo8l:
+      default:
+        - name: yolov5m_vehicles
+          source: s3
+        - name: yolov8n_relu6_global_lp_det--640x640_quant_hailort_multidevice_1
+          source: s3
+        - name: ocr
+          source: s3
+    hailo10h:
+      default: None
 
 paddle_ocr:
   models:
