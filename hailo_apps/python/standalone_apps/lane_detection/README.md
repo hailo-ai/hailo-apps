@@ -1,5 +1,7 @@
-Lane Detection - *Beta Release*
+Lane Detection
 ===============================
+
+> ⚠️ **Beta:** This application is currently in beta. Features and APIs may change.
 
 This example demonstrates lane detection using a **Hailo8** or **Hailo10H** device.  
 It receives an input video and annotates it with the lane detection coordinates.

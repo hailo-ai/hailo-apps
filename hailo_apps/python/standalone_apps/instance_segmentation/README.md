@@ -215,8 +215,8 @@ Additional Notes
     - HailoRT v5.1.1 (for Hailo-10H)
 - Images are only supported in the following formats: .jpg, .jpeg, .png or .bmp
 - Number of input images should be divisible by `batch_size`
-- Using the yolov-seg model for inference, this example performs instance segmentation, draw detection boxes and add a label to each class. When using the FastSAM model, it only performs the instance segmenation.
-- As the example, as mentioned above, made to work with COCO trained yolo-seg models, when using a customly trained yolo-seg model, please notice that some values may need to be changed in the relevant functions AND that the classes under CLASS_NAMES_COCO in hailo_model_zoo/core/datasets/datasets_info.py file in the Hailo Model Zoo are to be changed according to the relevant classes of the custom model.
+- Using the yolov-seg model for inference, this example performs instance segmentation, draws detection boxes and adds a label to each class. When using the FastSAM model, it only performs the instance segmentation.
+- As this example is designed to work with COCO-trained yolo-seg models, when using a custom trained yolo-seg model, please note that some values may need to be changed in the relevant functions AND that the classes under CLASS_NAMES_COCO in hailo_model_zoo/core/datasets/datasets_info.py file in the Hailo Model Zoo are to be changed according to the relevant classes of the custom model.
 - The list of supported detection models is defined in `networks.json`.
 - For any issues, open a post on the [Hailo Community](https://community.hailo.ai)
 

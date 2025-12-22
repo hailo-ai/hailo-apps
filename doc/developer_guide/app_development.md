@@ -23,7 +23,7 @@ The framework provides many specialized GStreamer elements.
 <summary><strong>Click to see the list of Core Tappas Elements</strong></summary>
 
 *   **AI/ML Processing Elements**
-    *   **[HailoNet](https://github.com/hailo-ai/tappas/blob/master/docs/elements/hailo_net.rst)**: Runs neural network inference on input video frames using a Hailo device.(This element is relased as part of HailoRT)
+    *   **[HailoNet](https://github.com/hailo-ai/tappas/blob/master/docs/elements/hailo_net.rst)**: Runs neural network inference on input video frames using a Hailo device.(This element is released as part of HailoRT)
     *   **[HailoFilter](https://github.com/hailo-ai/tappas/blob/master/docs/elements/hailo_filter.rst)**: Applies
     C++ post-processing functions to the raw output from `HailoNet`, converting it into structured data like
     detection objects.
@@ -279,7 +279,7 @@ It is highly recommended to use the helper functions to build your pipeline, but
 
 ```mermaid
 flowchart LR
-    A[Source] --> B[Video convertion] --> C[hailonet] --> D[hailofilter] --> E[hailooverlay] --> F[Display]
+    A[Source] --> B[Video conversion] --> C[hailonet] --> D[hailofilter] --> E[hailooverlay] --> F[Display]
 ```
 A high level code example for building this pipeline using the helper functions:
 ```python
@@ -433,7 +433,7 @@ pipeline_string = (
 ### Retraining your own models
 See [Retraining your own models](retraining_example.md) for more information.
 
-### Bring you own models
+### Bring Your Own Models
 Compiling your own models is out of the scope of this repository.
 See our [hailo_model_zoo](https://github.com/hailo-ai/hailo_model_zoo) for additional supported models.
 For adding your own models, see our Data Flow Compiler (DFC) documentation in [Hailo Developer Zone (Requires registration)](https://developer.hailo.ai/docs/hailo-data-flow-compiler) for more information.

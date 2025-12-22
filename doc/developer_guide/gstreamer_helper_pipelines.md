@@ -62,7 +62,7 @@ Determines the source type based on the input source string.
 - Starts with `rtsp://` → "rtsp"
 - Otherwise → "file"
 
-### get_camera_resulotion
+### get_camera_resolution
 
 Returns a standard camera resolution based on the video resolution required.
 

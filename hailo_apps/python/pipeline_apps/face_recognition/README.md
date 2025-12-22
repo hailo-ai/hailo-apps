@@ -1,6 +1,6 @@
-# Face Recognition System: Beta Version
+# Face Recognition System
 
-#### Please note that this is a beta version release; some features may be unstable.
+> ⚠️ **Beta:** This application is currently in beta. Features and APIs may change.
 
 ## Quick Start:
 
@@ -74,7 +74,7 @@ The application is part of the `hailo-apps` package - please follow those genera
 git clone https://github.com/hailo-ai/hailo-apps.git
 # cd to the directory
 ./install.sh --all  # install all
-source setup_env.sh  # activate python virtual enviornment
+source setup_env.sh  # activate python virtual environment
 export DISPLAY=:0  # required only if working on remote Pi with external display
 # cd to app directory
 python face_recognition.py --mode train  # first populate the DB from existing images

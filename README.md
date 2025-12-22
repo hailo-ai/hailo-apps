@@ -87,6 +87,37 @@ python vlm_chat.py
 | **[User Guide](./doc/user_guide/README.md)** | Installation, running apps, configuration, repository structure |
 | **[Developer Guide](./doc/developer_guide/README.md)** | Build custom apps, write post-processing, model retraining |
 
+## Choosing the Right App Type
+
+This repository provides three types of applications, each suited for different development scenarios:
+
+| App Type | Best For | Examples |
+|----------|----------|----------|
+| **Pipeline Apps** | Production-ready video processing with cameras, RTSP streams, and real-time inference | Object detection, pose estimation, instance segmentation, face recognition |
+| **Standalone Apps** | Supports video and camera input, but specialized for image processing, model validation, and rapid prototyping | Lane detection, super resolution, OCR, oriented object detection |
+| **GenAI Apps** | Hailo-10H generative AI applications | Voice assistants, VLM chat, voice-to-action agents, Whisper speech recognition |
+
+### 📹 Pipeline Apps (`hailo_apps/python/pipeline_apps/`)
+Use pipeline apps when you need **real-time video processing** with:
+- Raspberry Pi Camera, USB cameras, or video files
+- RTSP streams for IP cameras
+- Multi-camera and multi-source processing
+- GStreamer-based efficient pipelines
+
+### 🖼️ Standalone Apps (`hailo_apps/python/standalone_apps/`)
+Use standalone apps when you need to:
+- Test and validate individual models with images
+- Prototype and experiment quickly
+- Process single images or batches
+- Debug and benchmark model performance
+
+### 🤖 GenAI Apps (`hailo_apps/python/gen_ai_apps/`)
+Use GenAI apps for **Hailo-10H** generative AI features:
+- Voice assistants with speech recognition
+- Vision-Language Models (VLM) chat
+- Voice-to-action AI agents
+- Whisper-based speech recognition
+
 ## Key Features
 
 **🎯 Input Flexibility**

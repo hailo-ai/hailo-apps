@@ -1,5 +1,7 @@
 # Paddle OCR Application
 
+> ⚠️ **Beta:** This application is currently in beta. Features and APIs may change.
+
 #### Run the OCR example:
 ```bash
 hailo-ocr

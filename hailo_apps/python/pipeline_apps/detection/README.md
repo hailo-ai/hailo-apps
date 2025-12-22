@@ -50,7 +50,7 @@ python detection.py --input usb
 
 #### App logic
 
-The application will detect and classify various objects based on the well known ["COCO list"](https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml). The "bussines logic" happen in Python's `app_callback` function, and currently the example implementation there is to filter for only detected "Persons":
+The application will detect and classify various objects based on the well known ["COCO list"](https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml). The "business logic" happens in Python's `app_callback` function, and currently the example implementation there is to filter for only detected "Persons":
 ```bash
 if label == "person":
     ...

@@ -1,5 +1,8 @@
-Oriented Object Detection - *Beta Release*
+Oriented Object Detection
 =========================================
+
+> ⚠️ **Beta:** This application is currently in beta. Features and APIs may change.
+
 This example demonstrates a YoloV11 OBB based oriented object detection model using a Hailo-8, Hailo-8L, or Hailo-10H device.
 It receives a HEF and images/video/camera as input, and returns the image\video with annotations of detected objects and bounding boxes.
 Oriented object detection extends traditional bounding box detection by adding rotation angle, making it ideal for:
