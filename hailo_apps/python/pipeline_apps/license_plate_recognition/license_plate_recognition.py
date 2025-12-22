@@ -4,6 +4,7 @@ import sys
 import threading
 import queue
 from pathlib import Path
+from datetime import datetime
 
 # Third-party imports
 import gi
@@ -34,6 +35,7 @@ class user_app_callback_class(app_callback_class):
     def __init__(self):
         super().__init__()
         self.output_file = "ocr_results.txt"
+        self.save_ocr_results = True  # Enable/disable OCR result saving
         self.save_vehicle_crops = False
         self.save_lp_crops = False
         self.crops_dir = "lpr_crops"
@@ -42,11 +44,20 @@ class user_app_callback_class(app_callback_class):
         # Per-track state
         self.found_lp_tracks: set[int] = set()
         self.vehicle_tracks: dict[int, dict] = {}
+        self.ocr_results: dict[int, list] = {}  # track_id -> list of (plate_text, confidence, frame_num, timestamp)
+        self._start_time = datetime.now()
 
         # Async saver (avoid blocking the GStreamer thread)
         self._save_queue = queue.Queue(maxsize=256)
         self._save_thread = threading.Thread(target=self._save_worker, daemon=True)
         self._save_thread.start()
+        
+        # Initialize OCR results file with header
+        if self.save_ocr_results:
+            with open(self.output_file, "w", encoding="utf-8") as f:
+                f.write(f"# LPR OCR Results - Started at {self._start_time.isoformat()}\n")
+                f.write("# Format: Frame | Timestamp | Track_ID | Plate_Text | Confidence\n")
+                f.write("-" * 80 + "\n")
 
     def _save_worker(self):
         while True:
@@ -70,13 +81,25 @@ class user_app_callback_class(app_callback_class):
             # Drop if the system can't keep up
             pass
 
-    def write_ocr_text(self, text: str, confidence: float | None = None) -> None:
+    def write_ocr_text(self, text: str, confidence: float | None = None, track_id: int | None = None) -> None:
+        if not self.save_ocr_results:
+            return
+            
+        frame_num = self.get_count()
+        elapsed = (datetime.now() - self._start_time).total_seconds()
+        timestamp = f"{elapsed:.2f}s"
+        track_str = str(track_id) if track_id is not None else "N/A"
+        conf_str = f"{confidence:.2f}" if confidence is not None else "N/A"
+        
+        # Store in memory for potential later use
+        if track_id is not None:
+            if track_id not in self.ocr_results:
+                self.ocr_results[track_id] = []
+            self.ocr_results[track_id].append((text, confidence, frame_num, elapsed))
+        
+        # Write to file
         with open(self.output_file, "a", encoding="utf-8") as f:
-            prefix = f"Frame {self.get_count()}: "
-            if confidence is None:
-                f.write(f"{prefix}{text}\n")
-            else:
-                f.write(f"{prefix}{text} (Confidence: {confidence:.2f})\n")
+            f.write(f"Frame {frame_num:6d} | {timestamp:>8s} | Track {track_str:>4s} | {text:<20s} | Conf: {conf_str}\n")
 
     @staticmethod
     def _crop_from_bbox(frame, bbox, width: int, height: int, pad_frac: float = 0.0):
@@ -94,14 +117,31 @@ class user_app_callback_class(app_callback_class):
 
 
 def _iter_classifications(roi):
+    """Iterate through all classifications in the ROI hierarchy.
+    
+    The LPR hierarchy is:
+      ROI → Vehicle Detection → License Plate Detection → Classification (OCR result)
+    
+    This function yields (parent_detection, classification) tuples at all levels.
+    """
     if roi is None:
         return
 
+    # Top-level detections (vehicles)
     detections = roi.get_objects_typed(hailo.HAILO_DETECTION)
     for det in detections:
+        # Classifications directly on vehicle detection
         for cls in det.get_objects_typed(hailo.HAILO_CLASSIFICATION):
             yield det, cls
+        
+        # Nested detections (license plates inside vehicles)
+        nested_detections = det.get_objects_typed(hailo.HAILO_DETECTION)
+        for nested_det in nested_detections:
+            # Classifications on nested detection (OCR results on license plates)
+            for cls in nested_det.get_objects_typed(hailo.HAILO_CLASSIFICATION):
+                yield nested_det, cls
 
+    # Classifications directly on ROI
     for cls in roi.get_objects_typed(hailo.HAILO_CLASSIFICATION):
         yield None, cls
 
@@ -277,22 +317,98 @@ def app_callback(element, buffer, user_data):
                     except Exception:
                         pass
 
-    for _, cls in _iter_classifications(roi):
+    # Process OCR results - iterate through all classifications to find text_region (OCR results)
+    # Filter thresholds
+    MIN_OCR_CONFIDENCE = 0.3  # Minimum confidence to accept OCR result
+    MIN_PLATE_LENGTH = 4      # Minimum characters for a valid plate
+    MAX_PLATE_LENGTH = 12     # Maximum characters for a valid plate
+    
+    for det, cls in _iter_classifications(roi):
+        cls_type = cls.get_classification_type() if hasattr(cls, 'get_classification_type') else ""
         label = cls.get_label()
         if not label:
             continue
+        
+        # Only process OCR results (text_region classification type)
+        if cls_type != "text_region":
+            continue
+            
         confidence = cls.get_confidence()
-        print(f"OCR Result: '{label}' (Confidence: {confidence:.2f})")
+        
+        # Filter by confidence threshold
+        if confidence < MIN_OCR_CONFIDENCE:
+            continue
+        
+        # Filter by plate length (too short or too long is likely garbage)
+        if len(label) < MIN_PLATE_LENGTH or len(label) > MAX_PLATE_LENGTH:
+            continue
+        
+        # Try to get track_id from the parent detection
+        track_id = None
+        if det is not None:
+            uid = det.get_objects_typed(hailo.HAILO_UNIQUE_ID)
+            if uid:
+                track_id = uid[0].get_id()
+        
+        # Print to console
+        track_str = f"Track {track_id}" if track_id is not None else "No Track"
+        print(f"[LPR] OCR Result: '{label}' (Confidence: {confidence:.2f}, {track_str})")
+        
+        # Save to file
         try:
-            user_data.write_ocr_text(label, confidence)
+            user_data.write_ocr_text(label, confidence, track_id)
         except Exception as e:
             hailo_logger.debug(f"Failed writing OCR text: {e}")
 
     return
 
 
+def print_ocr_summary(user_data):
+    """Print a summary of all OCR results at the end of the run."""
+    if not hasattr(user_data, 'ocr_results') or not user_data.ocr_results:
+        print("\n" + "=" * 60)
+        print("LPR Summary: No license plates detected")
+        print("=" * 60)
+        return
+    
+    print("\n" + "=" * 60)
+    print("LPR Summary - Detected License Plates")
+    print("=" * 60)
+    
+    total_detections = 0
+    unique_plates = set()
+    
+    for track_id, results in user_data.ocr_results.items():
+        if results:
+            # Get the most confident result for this track
+            best_result = max(results, key=lambda x: x[1] if x[1] else 0)
+            plate_text, confidence, frame_num, elapsed = best_result
+            unique_plates.add(plate_text)
+            total_detections += len(results)
+            print(f"  Track {track_id:4d}: {plate_text:<15s} (Best conf: {confidence:.2f}, First seen: frame {frame_num})")
+    
+    print("-" * 60)
+    print(f"Total unique tracks with LP: {len(user_data.ocr_results)}")
+    print(f"Total unique plate texts:    {len(unique_plates)}")
+    print(f"Total OCR detections:        {total_detections}")
+    print(f"Results saved to:            {user_data.output_file}")
+    print("=" * 60)
+    
+    # Also append summary to the output file
+    if user_data.save_ocr_results:
+        with open(user_data.output_file, "a", encoding="utf-8") as f:
+            f.write("\n" + "-" * 80 + "\n")
+            f.write(f"# Summary - {datetime.now().isoformat()}\n")
+            f.write(f"# Unique tracks with LP: {len(user_data.ocr_results)}\n")
+            f.write(f"# Unique plate texts: {len(unique_plates)}\n")
+            f.write(f"# Total OCR detections: {total_detections}\n")
+            if unique_plates:
+                f.write(f"# Unique plates: {', '.join(sorted(unique_plates))}\n")
+
+
 def main():
     hailo_logger.info("Starting Hailo LPR App...")
+    user_data = None
     try:
         user_data = user_app_callback_class()
         app = GStreamerLPRApp(app_callback, user_data)
@@ -304,6 +420,10 @@ def main():
         hailo_logger.error(f"Error in main: {e}", exc_info=True)
         print(f"Error: {e}", file=sys.stderr)
         raise
+    finally:
+        # Print summary on exit
+        if user_data is not None:
+            print_ocr_summary(user_data)
 
 
 if __name__ == "__main__":

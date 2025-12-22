@@ -8,11 +8,18 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <sys/stat.h>
+#include <atomic>
 
 #define LICENSE_PLATE_LABEL "license_plate"
 #define OCR_LABEL "text_region"
 
 static constexpr std::array<const char *, 2> VEHICLE_LABELS = {"car", "vehicle"};
+
+// Frame counter for unique filenames
+static std::atomic<int> g_frame_counter{0};
+static std::atomic<int> g_vehicle_crop_counter{0};
+static std::atomic<int> g_lp_crop_counter{0};
 
 static bool lpr_debug_enabled()
 {
@@ -23,6 +30,34 @@ static bool lpr_debug_enabled()
         enabled = (val && val[0] && val[0] != '0') ? 1 : 0;
     }
     return enabled == 1;
+}
+
+static bool lpr_save_crops_enabled()
+{
+    static int enabled = -1;
+    if (enabled == -1)
+    {
+        const char *val = std::getenv("HAILO_LPR_SAVE_CROPS");
+        enabled = (val && val[0] && val[0] != '0') ? 1 : 0;
+    }
+    return enabled == 1;
+}
+
+static const char* get_crops_dir()
+{
+    static const char* dir = nullptr;
+    if (dir == nullptr)
+    {
+        dir = std::getenv("HAILO_LPR_CROPS_DIR");
+        if (dir == nullptr || dir[0] == '\0')
+            dir = "lpr_debug_crops";
+    }
+    return dir;
+}
+
+static void ensure_dir_exists(const std::string& path)
+{
+    mkdir(path.c_str(), 0755);
 }
 
 static void lpr_dbg(const char *fmt, ...)
@@ -46,6 +81,66 @@ static bool is_vehicle_label(const std::string &label)
             return true;
     }
     return false;
+}
+
+/**
+ * @brief Save a crop image to disk for debugging
+ */
+static void save_crop_image(std::shared_ptr<HailoMat> image, const HailoBBox& bbox, 
+                            const std::string& prefix, int id)
+{
+    if (!lpr_save_crops_enabled() || !image)
+        return;
+    
+    try
+    {
+        cv::Mat& mat = image->get_matrices()[0];
+        int img_width = image->width();
+        int img_height = image->height();
+        
+        // Calculate crop coordinates
+        int x1 = static_cast<int>(std::max(0.0f, bbox.xmin()) * img_width);
+        int y1 = static_cast<int>(std::max(0.0f, bbox.ymin()) * img_height);
+        int x2 = static_cast<int>(std::min(1.0f, bbox.xmax()) * img_width);
+        int y2 = static_cast<int>(std::min(1.0f, bbox.ymax()) * img_height);
+        
+        if (x2 <= x1 || y2 <= y1)
+            return;
+        
+        cv::Rect roi(x1, y1, x2 - x1, y2 - y1);
+        if (roi.x < 0 || roi.y < 0 || roi.x + roi.width > mat.cols || roi.y + roi.height > mat.rows)
+            return;
+        
+        cv::Mat crop = mat(roi).clone();
+        
+        // Convert to BGR if needed for saving
+        cv::Mat bgr_crop;
+        if (crop.channels() == 3)
+        {
+            cv::cvtColor(crop, bgr_crop, cv::COLOR_RGB2BGR);
+        }
+        else
+        {
+            bgr_crop = crop;
+        }
+        
+        // Create output directory
+        std::string base_dir = get_crops_dir();
+        ensure_dir_exists(base_dir);
+        std::string sub_dir = base_dir + "/" + prefix;
+        ensure_dir_exists(sub_dir);
+        
+        // Save image
+        char filename[512];
+        std::snprintf(filename, sizeof(filename), "%s/%s_%05d.jpg", sub_dir.c_str(), prefix.c_str(), id);
+        cv::imwrite(filename, bgr_crop);
+        
+        lpr_dbg("SAVED: %s (%dx%d)", filename, bgr_crop.cols, bgr_crop.rows);
+    }
+    catch (const std::exception& e)
+    {
+        lpr_dbg("Failed to save crop: %s", e.what());
+    }
 }
 
 /**
@@ -232,6 +327,11 @@ std::vector<HailoROIPtr> license_plate_quality_estimation(std::shared_ptr<HailoM
             if (variance >= QUALITY_THRESHOLD)
             {
                 lpr_dbg("license_plate_quality_estimation: [veh %d][lp %d] KEEP - good quality, sending to OCR", veh_idx, lp_idx);
+                
+                // Save LP crop for debugging (before it goes to OCR)
+                int crop_id = g_lp_crop_counter.fetch_add(1);
+                save_crop_image(image, license_plate_box, "lp_to_ocr", crop_id);
+                
                 crop_rois.emplace_back(license_plate);
             }
             else
@@ -318,6 +418,13 @@ std::vector<HailoROIPtr> license_plate_no_quality(std::shared_ptr<HailoMat> imag
             
             // No quality check - just add all plates with matching label
             lpr_dbg("license_plate_no_quality: [veh %d][lp %d] KEEP - sending to OCR (no quality filter)", veh_idx, lp_idx);
+            
+            // Save LP crop for debugging (before it goes to OCR)
+            // Use flattened bbox to get actual image coordinates
+            HailoBBox lp_flat_bbox = hailo_common::create_flattened_bbox(lp_bbox, license_plate->get_scaling_bbox());
+            int crop_id = g_lp_crop_counter.fetch_add(1);
+            save_crop_image(image, lp_flat_bbox, "lp_to_ocr", crop_id);
+            
             crop_rois.emplace_back(license_plate);
             lp_idx++;
         }
@@ -434,6 +541,11 @@ std::vector<HailoROIPtr> vehicles_without_ocr(std::shared_ptr<HailoMat> image, H
         if (!has_ocr)
         {
             lpr_dbg("vehicles_without_ocr: [%d] ENQUEUE - vehicle needs LP detection", det_idx);
+            
+            // Save vehicle crop for debugging (before it goes to LP detection)
+            int crop_id = g_vehicle_crop_counter.fetch_add(1);
+            save_crop_image(image, vehicle_bbox, "vehicle_to_lp_det", crop_id);
+            
             crop_rois.emplace_back(detection);
         }
         else

@@ -364,6 +364,7 @@ class GStreamerLPRApp(GStreamerApp):
             post_function_name=self.vehicle_post_function_name,
             config_json=self.vehicle_json,
             additional_params=self.thresholds_str,
+            batch_size=2,
             name="vehicle_detection",
         )
         vehicle_detection_wrapper = INFERENCE_PIPELINE_WRAPPER(vehicle_detection)
@@ -515,6 +516,7 @@ class GStreamerLPRApp(GStreamerApp):
             post_function_name=self.vehicle_post_function_name,
             config_json=self.vehicle_json,
             additional_params=self.thresholds_str,
+            batch_size=2,
             name="vehicle_detection",
         )
         vehicle_detection_wrapper = INFERENCE_PIPELINE_WRAPPER(vehicle_detection)
@@ -538,6 +540,7 @@ class GStreamerLPRApp(GStreamerApp):
             post_function_name=self.license_det_post_function_name,
             config_json=self.license_json,
             additional_params=self.thresholds_str,
+            batch_size=8,
             name="plate_detection",
         )
 
@@ -588,6 +591,7 @@ class GStreamerLPRApp(GStreamerApp):
             post_function_name=self.vehicle_post_function_name,
             config_json=self.vehicle_json,
             additional_params=self.thresholds_str,
+            batch_size=2,
             name="vehicle_detection",
         )
         vehicle_detection_wrapper = INFERENCE_PIPELINE_WRAPPER(vehicle_detection)

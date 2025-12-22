@@ -88,6 +88,7 @@ hailo-multisource =         "hailo_apps.python.pipeline_apps.multisource.multiso
 hailo-reid =                "hailo_apps.python.pipeline_apps.reid_multisource.reid_multisource:main"
 hailo-clip =                "hailo_apps.python.pipeline_apps.clip.clip:main"
 hailo-ocr  =                "hailo_apps.python.pipeline_apps.paddle_ocr.paddle_ocr:main"
+hailo-lpr =                 "hailo_apps.python.pipeline_apps.license_plate_recognition.license_plate_recognition:main"
 hailo-audio-troubleshoot =  "hailo_apps.python.gen_ai_apps.gen_ai_utils.voice_processing.audio_troubleshoot:main"
 
 [tool.setuptools.packages.find]

@@ -13,7 +13,7 @@
 #include "hailomat.hpp"
 
 #define CROP_RATIO 0.1
-#define QUALITY_THRESHOLD 100.0
+#define QUALITY_THRESHOLD 50.0
 #define CROP_WIDTH_LIMIT 10
 #define CROP_HEIGHT_LIMIT 10
 
