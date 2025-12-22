@@ -41,18 +41,19 @@ from hailo_apps.python.core.common.core import (
     configure_multi_model_hef_path,
     resolve_hef_paths,
 )
+from hailo_apps.python.core.common.hef_utils import get_hef_labels_json
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.gstreamer.gstreamer_app import GStreamerApp, app_callback_class, dummy_callback
 
 hailo_logger = get_logger(__name__)
 from hailo_apps.python.core.gstreamer.gstreamer_helper_pipelines import (
-    QUEUE, 
-    SOURCE_PIPELINE, 
-    INFERENCE_PIPELINE, 
-    INFERENCE_PIPELINE_WRAPPER, 
-    TRACKER_PIPELINE, 
-    USER_CALLBACK_PIPELINE, 
-    DISPLAY_PIPELINE, 
+    QUEUE,
+    SOURCE_PIPELINE,
+    INFERENCE_PIPELINE,
+    INFERENCE_PIPELINE_WRAPPER,
+    TRACKER_PIPELINE,
+    USER_CALLBACK_PIPELINE,
+    DISPLAY_PIPELINE,
     CROPPER_PIPELINE
 )
 from hailo_apps.python.pipeline_apps.clip.text_image_matcher import text_image_matcher
@@ -67,13 +68,14 @@ class GStreamerClipApp(GStreamerApp):
         parser.add_argument("--json-path", type=str, default=None, help="Path to JSON file to load and save embeddings. If not set, embeddings.json will be used.")
         parser.add_argument("--detection-threshold", type=float, default=0.5, help="Detection threshold.")
         parser.add_argument("--disable-runtime-prompts", action="store_true", help="When set, app will not support runtime prompts. Default is False.")
-        
+        parser.add_argument("--labels-json", type=str, default=None, help="Path to custom labels JSON file for detection model.")
+
         # Configure --hef-path for multi-model support (detection + clip)
         configure_multi_model_hef_path(parser)
-        
+
         # Handle --list-models flag before full initialization
         handle_list_models_flag(parser, CLIP_PIPELINE)
-        
+
         super().__init__(parser, user_data)
         setproctitle.setproctitle(CLIP_APP_TITLE)
         if self.options_menu.input is None:
@@ -102,6 +104,14 @@ class GStreamerClipApp(GStreamerApp):
         # order as in hailo_apps/config/resources_config.yaml
         self.hef_path_clip = models[0].path
         self.hef_path_detection = models[1].path
+
+        # User-defined label JSON file for detection model
+        self.labels_json = self.options_menu.labels_json
+        if self.labels_json is None and self.options_menu.detector != 'none':
+            # Auto-detect labels JSON from detection HEF file if not provided
+            self.labels_json = get_hef_labels_json(self.hef_path_detection)
+            if self.labels_json is not None:
+                hailo_logger.info("Auto detected Labels JSON: %s", self.labels_json)
 
         self.post_process_so_detection = get_resource_path(pipeline_name=None, resource_type=RESOURCES_SO_DIR_NAME, model=DETECTION_POSTPROCESS_SO_FILENAME)
         self.post_process_so_clip = get_resource_path(pipeline_name=None, resource_type=RESOURCES_SO_DIR_NAME, model=CLIP_POSTPROCESS_SO_FILENAME)
@@ -154,6 +164,7 @@ class GStreamerClipApp(GStreamerApp):
                 post_process_so=self.post_process_so_detection,
                 post_function_name=self.detection_post_process_function_name,
                 batch_size=self.detection_batch_size,
+                config_json=self.labels_json,
                 scheduler_priority=31,
                 scheduler_timeout_ms=100,
                 name='detection_inference'
