@@ -31,13 +31,27 @@ from hailo_apps.python.core.gstreamer.gstreamer_app import app_callback_class
 hailo_logger = get_logger(__name__)
 
 
+def lpr_debug_enabled() -> bool:
+    val = os.getenv("HAILO_LPR_DEBUG")
+    if val is None:
+        return True
+    return val != "0"
+
+
+def lpr_dbg(msg: str, *args) -> None:
+    if not lpr_debug_enabled():
+        return
+    text = msg % args if args else msg
+    print(f"[lpr_py] {text}")
+
+
 class user_app_callback_class(app_callback_class):
     def __init__(self):
         super().__init__()
         self.output_file = "ocr_results.txt"
         self.save_ocr_results = True  # Enable/disable OCR result saving
-        self.save_vehicle_crops = False
-        self.save_lp_crops = False
+        self.save_vehicle_crops = True
+        self.save_lp_crops = True
         self.crops_dir = "lpr_crops"
         self.disable_found_lp_gate = False
 
@@ -147,11 +161,14 @@ def _iter_classifications(roi):
 
 
 def app_callback(element, buffer, user_data):
+    lpr_dbg("callback: ENTER frame=%s", getattr(user_data, "get_count", lambda: "n/a")())
     if buffer is None:
+        lpr_dbg("callback: buffer is None => EXIT")
         return
 
     roi = hailo.get_roi_from_buffer(buffer)
     if roi is None:
+        lpr_dbg("callback: roi is None => EXIT")
         return
 
     # Optional frame extraction (needed for crop saving)
@@ -173,6 +190,7 @@ def app_callback(element, buffer, user_data):
                     frame = cv2.cvtColor(frame, cv2.COLOR_YUV2RGB_YUY2)
             except Exception as e:
                 hailo_logger.debug("Failed extracting frame: %s", e)
+        lpr_dbg("callback: frame_extract fmt=%s size=%sx%s", fmt, width, height)
 
     # Track vehicles and mark found_lp per tracker ID.
     detections = roi.get_objects_typed(hailo.HAILO_DETECTION)
@@ -196,6 +214,13 @@ def app_callback(element, buffer, user_data):
             if (nested.get_label() or "") == "license_plate":
                 nested_plates_by_track.setdefault(track_id, []).append(nested)
                 plates.append(nested)
+    lpr_dbg(
+        "callback: detections=%d vehicles=%d plates=%d nested_tracks=%d",
+        len(detections),
+        len(vehicles),
+        len(plates),
+        len(nested_plates_by_track),
+    )
 
     # Build a quick index from plate -> best-matching vehicle (center-in-bbox)
     newly_found_tracks: set[int] = set()
@@ -222,8 +247,8 @@ def app_callback(element, buffer, user_data):
                         lp_crop = user_data._crop_from_bbox(vehicle_crop, pb, pw, ph, pad_frac=0.02)
                         if lp_crop is not None:
                             out_dir = Path(getattr(user_data, "crops_dir", "lpr_crops")) / "lp" / f"track_{track_id}"
-                            out_path = out_dir / f"frame_{user_data.get_count():06d}.jpg"
-                            user_data.enqueue_crop_save(lp_crop, out_path)
+                    out_path = out_dir / f"frame_{user_data.get_count():06d}.jpg"
+                    user_data.enqueue_crop_save(lp_crop, out_path)
     elif vehicles and plates:
         for plate in plates:
             pb = plate.get_bbox()
@@ -251,6 +276,8 @@ def app_callback(element, buffer, user_data):
                     out_dir = Path(getattr(user_data, "crops_dir", "lpr_crops")) / "lp" / f"track_{best_track}"
                     out_path = out_dir / f"frame_{user_data.get_count():06d}.jpg"
                     user_data.enqueue_crop_save(lp_crop, out_path)
+    if newly_found_tracks:
+        lpr_dbg("callback: newly_found_tracks=%s", sorted(newly_found_tracks))
 
     # Update per-track vehicle info and optionally save vehicle crops (until LP is found)
     for track_id, vdet in vehicles:
@@ -295,16 +322,6 @@ def app_callback(element, buffer, user_data):
             existing = vdet.get_objects_typed(hailo.HAILO_CLASSIFICATION)
             existing_types = {c.get_classification_type() for c in existing}
 
-            if "found_lp" not in existing_types:
-                found_cls = hailo.HailoClassification(type="found_lp", label="yes", confidence=1.0)
-                vdet.add_object(found_cls)
-                if tracker and tracker_name:
-                    try:
-                        tracker.remove_classifications_from_track(tracker_name, track_id, "found_lp")
-                        tracker.add_object_to_track(tracker_name, track_id, found_cls)
-                    except Exception:
-                        pass
-
             # Gate the vehicle cropper (vehicles_without_ocr) by attaching a "text_region" classification type.
             # The cropper checks for classification_type=="text_region" and skips cropping in that case.
             if "text_region" not in existing_types:
@@ -316,13 +333,27 @@ def app_callback(element, buffer, user_data):
                         tracker.add_object_to_track(tracker_name, track_id, gate_cls)
                     except Exception:
                         pass
+        lpr_dbg(
+            "callback: gating found_lp_tracks=%d disable_found_lp_gate=%s",
+            len(user_data.found_lp_tracks),
+            getattr(user_data, "disable_found_lp_gate", False),
+        )
 
     # Process OCR results - iterate through all classifications to find text_region (OCR results)
     # Filter thresholds
-    MIN_OCR_CONFIDENCE = 0.3  # Minimum confidence to accept OCR result
     MIN_PLATE_LENGTH = 4      # Minimum characters for a valid plate
     MAX_PLATE_LENGTH = 12     # Maximum characters for a valid plate
     
+    vehicles_by_track = {track_id: vdet for track_id, vdet in vehicles}
+    try:
+        tracker = HailoTracker.get_instance() if HailoTracker is not None else None
+        tracker_names = tracker.get_trackers_list() if tracker is not None else []
+        tracker_name = tracker_names[0] if tracker_names else None
+    except Exception:
+        tracker = None
+        tracker_name = None
+
+    accepted_ocr = 0
     for det, cls in _iter_classifications(roi):
         cls_type = cls.get_classification_type() if hasattr(cls, 'get_classification_type') else ""
         label = cls.get_label()
@@ -332,27 +363,42 @@ def app_callback(element, buffer, user_data):
         # Only process OCR results (text_region classification type)
         if cls_type != "text_region":
             continue
-            
+
         confidence = cls.get_confidence()
-        
-        # Filter by confidence threshold
-        if confidence < MIN_OCR_CONFIDENCE:
-            continue
-        
-        # Filter by plate length (too short or too long is likely garbage)
-        if len(label) < MIN_PLATE_LENGTH or len(label) > MAX_PLATE_LENGTH:
-            continue
-        
-        # Try to get track_id from the parent detection
         track_id = None
         if det is not None:
             uid = det.get_objects_typed(hailo.HAILO_UNIQUE_ID)
             if uid:
                 track_id = uid[0].get_id()
+        track_str = f"Track {track_id}" if track_id is not None else "No Track"
+        print(f"[LPR] OCR Raw: '{label}' (Confidence: {confidence:.2f}, {track_str})")
+            
+        # Filter by plate length (too short or too long is likely garbage)
+        if len(label) < MIN_PLATE_LENGTH or len(label) > MAX_PLATE_LENGTH:
+            continue
         
         # Print to console
-        track_str = f"Track {track_id}" if track_id is not None else "No Track"
         print(f"[LPR] OCR Result: '{label}' (Confidence: {confidence:.2f}, {track_str})")
+        accepted_ocr += 1
+
+        # Replace the "yes/100%" overlay with the actual plate text.
+        if track_id is not None and track_id in vehicles_by_track:
+            vdet = vehicles_by_track[track_id]
+            try:
+                existing_cls = vdet.get_objects_typed(hailo.HAILO_CLASSIFICATION)
+                for ec in existing_cls:
+                    if ec.get_classification_type() == "found_lp":
+                        vdet.remove_object(ec)
+                plate_cls = hailo.HailoClassification(type="found_lp", label=label, confidence=float(confidence))
+                vdet.add_object(plate_cls)
+                if tracker and tracker_name:
+                    try:
+                        tracker.remove_classifications_from_track(tracker_name, track_id, "found_lp")
+                        tracker.add_object_to_track(tracker_name, track_id, plate_cls)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
         
         # Save to file
         try:
@@ -360,6 +406,7 @@ def app_callback(element, buffer, user_data):
         except Exception as e:
             hailo_logger.debug(f"Failed writing OCR text: {e}")
 
+    lpr_dbg("callback: accepted_ocr=%d", accepted_ocr)
     return
 
 

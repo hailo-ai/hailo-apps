@@ -22,6 +22,8 @@ Use `--pipeline` to pick a pipeline graph:
 - `vehicle_and_lp`: vehicle detection + license-plate detection (no tracking, no OCR)
 - `vehicle_only`: vehicle detection only
 - `lp_only`: license-plate detection only (full-frame)
+- `lp_only_crops`: license-plate detection only (full-frame) + crop saving (no OCR, no display)
+- `lp_and_ocr`: license-plate detection (full-frame) + OCR
 - `ocr_only`: OCR only (results are printed by the Python callback)
 
 ### JSON configs

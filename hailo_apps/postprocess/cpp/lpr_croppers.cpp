@@ -12,9 +12,15 @@
 #include <atomic>
 
 #define LICENSE_PLATE_LABEL "license_plate"
-#define OCR_LABEL "text_region"
+#define OCR_RESULT_LABEL "lpr_result"
 
 static constexpr std::array<const char *, 2> VEHICLE_LABELS = {"car", "vehicle"};
+static constexpr float VEHICLE_TRI_X1 = 0.0f;
+static constexpr float VEHICLE_TRI_Y1 = 0.75f;
+static constexpr float VEHICLE_TRI_X2 = 1.0f;
+static constexpr float VEHICLE_TRI_Y2 = 0.33f;
+static constexpr float VEHICLE_TRI_X3 = 1.0f;
+static constexpr float VEHICLE_TRI_Y3 = 1.0f;
 
 // Frame counter for unique filenames
 static std::atomic<int> g_frame_counter{0};
@@ -27,7 +33,7 @@ static bool lpr_debug_enabled()
     if (enabled == -1)
     {
         const char *val = std::getenv("HAILO_LPR_DEBUG");
-        enabled = (val && val[0] && val[0] != '0') ? 1 : 0;
+        enabled = (!val || val[0] == '\0' || val[0] != '0') ? 1 : 0;
     }
     return enabled == 1;
 }
@@ -38,7 +44,7 @@ static bool lpr_save_crops_enabled()
     if (enabled == -1)
     {
         const char *val = std::getenv("HAILO_LPR_SAVE_CROPS");
-        enabled = (val && val[0] && val[0] != '0') ? 1 : 0;
+        enabled = (!val || val[0] == '\0' || val[0] != '0') ? 1 : 0;
     }
     return enabled == 1;
 }
@@ -71,6 +77,42 @@ static void lpr_dbg(const char *fmt, ...)
     va_end(args);
     std::fprintf(stderr, "\n");
     std::fflush(stderr);
+}
+
+static void lpr_log_settings()
+{
+    static int logged = 0;
+    if (logged || !lpr_debug_enabled())
+        return;
+    logged = 1;
+    lpr_dbg("settings: HAILO_LPR_SAVE_CROPS=%d crops_dir='%s' OCR_RESULT_LABEL='%s' tri=(%.2f,%.2f)-(%.2f,%.2f)-(%.2f,%.2f)",
+            lpr_save_crops_enabled() ? 1 : 0,
+            get_crops_dir(),
+            OCR_RESULT_LABEL,
+            VEHICLE_TRI_X1,
+            VEHICLE_TRI_Y1,
+            VEHICLE_TRI_X2,
+            VEHICLE_TRI_Y2,
+            VEHICLE_TRI_X3,
+            VEHICLE_TRI_Y3);
+}
+
+static float tri_sign(float px, float py, float ax, float ay, float bx, float by)
+{
+    return (px - bx) * (ay - by) - (ax - bx) * (py - by);
+}
+
+static bool point_in_triangle(float px, float py,
+                              float ax, float ay,
+                              float bx, float by,
+                              float cx, float cy)
+{
+    float d1 = tri_sign(px, py, ax, ay, bx, by);
+    float d2 = tri_sign(px, py, bx, by, cx, cy);
+    float d3 = tri_sign(px, py, cx, cy, ax, ay);
+    bool has_neg = (d1 < 0.0f) || (d2 < 0.0f) || (d3 < 0.0f);
+    bool has_pos = (d1 > 0.0f) || (d2 > 0.0f) || (d3 > 0.0f);
+    return !(has_neg && has_pos);
 }
 
 static bool is_vehicle_label(const std::string &label)
@@ -194,6 +236,11 @@ float quality_estimation(std::shared_ptr<HailoMat> hailo_mat, const HailoBBox &r
     // If it is not too small then we can make the crop
     HailoROIPtr crop_roi = std::make_shared<HailoROI>(HailoBBox(cropped_xmin, cropped_ymin, cropped_width_n, cropped_height_n));
     std::vector<cv::Mat> cropped_image_vec = hailo_mat->crop(crop_roi);
+    if (cropped_image_vec.empty())
+    {
+        lpr_dbg("  quality_estimation: FAIL - empty crop => returning -1.0");
+        return -1.0f;
+    }
 
     // Convert image to BGR
     cv::Mat bgr_image;
@@ -218,6 +265,12 @@ float quality_estimation(std::shared_ptr<HailoMat> hailo_mat, const HailoBBox &r
     default:
         bgr_image = cropped_image_vec[0];
         break;
+    }
+
+    if (bgr_image.empty() || bgr_image.cols <= 0 || bgr_image.rows <= 0)
+    {
+        lpr_dbg("  quality_estimation: FAIL - empty bgr_image => returning -1.0");
+        return -1.0f;
     }
 
     // Resize the frame
@@ -263,6 +316,7 @@ std::vector<HailoROIPtr> license_plate_quality_estimation(std::shared_ptr<HailoM
 {
     std::vector<HailoROIPtr> crop_rois;
     float variance;
+    lpr_log_settings();
     lpr_dbg("========== license_plate_quality_estimation: ENTER ==========");
     if (!image || !roi)
     {
@@ -365,6 +419,7 @@ std::vector<HailoROIPtr> license_plate_quality_estimation(std::shared_ptr<HailoM
  */
 std::vector<HailoROIPtr> license_plate_no_quality(std::shared_ptr<HailoMat> image, HailoROIPtr roi)
 {
+    lpr_log_settings();
     std::vector<HailoROIPtr> crop_rois;
     lpr_dbg("========== license_plate_no_quality: ENTER ==========");
     if (!image || !roi)
@@ -437,6 +492,66 @@ std::vector<HailoROIPtr> license_plate_no_quality(std::shared_ptr<HailoMat> imag
 
 /**
  * @brief Returns a vector of HailoROIPtr to crop and resize.
+ *        Specific to LP-only pipelines, this function uses top-level
+ *        license plate detections (no vehicles required).
+ *
+ * @param image  -  cv::Mat
+ *        The original image.
+ *
+ * @param roi  -  HailoROIPtr
+ *        The main ROI of this picture.
+ *
+ * @return std::vector<HailoROIPtr>
+ *         vector of ROI's to crop and resize.
+ */
+std::vector<HailoROIPtr> license_plate_fullframe(std::shared_ptr<HailoMat> image, HailoROIPtr roi)
+{
+    lpr_log_settings();
+    std::vector<HailoROIPtr> crop_rois;
+    lpr_dbg("========== license_plate_fullframe: ENTER ==========");
+    if (!image || !roi)
+    {
+        lpr_dbg("license_plate_fullframe: null image=%d roi=%d => EXIT", image ? 1 : 0, roi ? 1 : 0);
+        return crop_rois;
+    }
+    lpr_dbg("license_plate_fullframe: image size=%dx%d", image->width(), image->height());
+
+    // Top-level detections are expected to be license plates.
+    std::vector<HailoDetectionPtr> detections_ptrs = hailo_common::get_hailo_detections(roi);
+    lpr_dbg("license_plate_fullframe: total detections=%zu", detections_ptrs.size());
+
+    int lp_idx = 0;
+    for (HailoDetectionPtr &license_plate : detections_ptrs)
+    {
+        std::string lp_label = license_plate->get_label();
+        float lp_conf = license_plate->get_confidence();
+        HailoBBox lp_bbox = license_plate->get_bbox();
+
+        lpr_dbg("license_plate_fullframe: [lp %d] label='%s' conf=%.3f bbox=[%.3f,%.3f,%.3f,%.3f]",
+                lp_idx, lp_label.c_str(), lp_conf,
+                lp_bbox.xmin(), lp_bbox.ymin(), lp_bbox.width(), lp_bbox.height());
+
+        if (LICENSE_PLATE_LABEL != lp_label)
+        {
+            lpr_dbg("license_plate_fullframe: [lp %d] SKIP - label mismatch (got '%s', expected '%s')",
+                    lp_idx, lp_label.c_str(), LICENSE_PLATE_LABEL);
+            lp_idx++;
+            continue;
+        }
+
+        int crop_id = g_lp_crop_counter.fetch_add(1);
+        save_crop_image(image, lp_bbox, "lp_fullframe", crop_id);
+        crop_rois.emplace_back(license_plate);
+        lp_idx++;
+    }
+
+    lpr_dbg("license_plate_fullframe: result crop_rois=%zu (plates to send to OCR)", crop_rois.size());
+    lpr_dbg("========== license_plate_fullframe: EXIT ==========");
+    return crop_rois;
+}
+
+/**
+ * @brief Returns a vector of HailoROIPtr to crop and resize.
  *        Specific to LPR pipelines, this function searches if
  *        a detected vehicle has an OCR classification. If not,
  *        then it is submitted for cropping.
@@ -456,6 +571,7 @@ std::vector<HailoROIPtr> vehicles_without_ocr(std::shared_ptr<HailoMat> image, H
 {
     std::vector<HailoROIPtr> crop_rois;
     bool has_ocr = false;
+    lpr_log_settings();
     lpr_dbg("========== vehicles_without_ocr: ENTER ==========");
     if (!image || !roi)
     {
@@ -511,10 +627,17 @@ std::vector<HailoROIPtr> vehicles_without_ocr(std::shared_ptr<HailoMat> image, H
             continue;
         }
 
-        // if the bbox is above the top half of the image then throw it out
-        if (vehicle_bbox.ymax() < 0.75)
+        float center_x = (vehicle_bbox.xmin() + vehicle_bbox.xmax()) * 0.5f;
+        float center_y = (vehicle_bbox.ymin() + vehicle_bbox.ymax()) * 0.5f;
+        bool in_keep_zone = point_in_triangle(center_x, center_y,
+                                               VEHICLE_TRI_X1, VEHICLE_TRI_Y1,
+                                               VEHICLE_TRI_X2, VEHICLE_TRI_Y2,
+                                               VEHICLE_TRI_X3, VEHICLE_TRI_Y3);
+        lpr_dbg("vehicles_without_ocr: [%d] center=(%.3f,%.3f) in_keep_zone=%d",
+                det_idx, center_x, center_y, in_keep_zone ? 1 : 0);
+        if (!in_keep_zone)
         {
-            lpr_dbg("vehicles_without_ocr: [%d] SKIP - vehicle too high in frame (ymax=%.3f < 0.75)", det_idx, vehicle_bbox.ymax());
+            lpr_dbg("vehicles_without_ocr: [%d] SKIP - center outside triangle keep zone", det_idx);
             det_idx++;
             continue;
         }
@@ -522,17 +645,17 @@ std::vector<HailoROIPtr> vehicles_without_ocr(std::shared_ptr<HailoMat> image, H
         has_ocr = false;
         // For each detection, check the classifications
         std::vector<HailoClassificationPtr> vehicle_classifications = hailo_common::get_hailo_classifications(detection);
-        lpr_dbg("vehicles_without_ocr: [%d] checking %zu classifications for OCR_LABEL='%s'", 
-                det_idx, vehicle_classifications.size(), OCR_LABEL);
+        lpr_dbg("vehicles_without_ocr: [%d] checking %zu classifications for OCR_RESULT_LABEL='%s'", 
+                det_idx, vehicle_classifications.size(), OCR_RESULT_LABEL);
         
         for (HailoClassificationPtr &classification : vehicle_classifications)
         {
             std::string cls_type = classification->get_classification_type();
             std::string cls_label = classification->get_label();
             lpr_dbg("vehicles_without_ocr: [%d]   classification type='%s' label='%s'", det_idx, cls_type.c_str(), cls_label.c_str());
-            if (OCR_LABEL == cls_type)
+            if (OCR_RESULT_LABEL == cls_type)
             {
-                lpr_dbg("vehicles_without_ocr: [%d]   => MATCH! Vehicle already has OCR", det_idx);
+                lpr_dbg("vehicles_without_ocr: [%d]   => MATCH! Vehicle already has OCR result", det_idx);
                 has_ocr = true;
                 break;
             }
@@ -550,7 +673,7 @@ std::vector<HailoROIPtr> vehicles_without_ocr(std::shared_ptr<HailoMat> image, H
         }
         else
         {
-            lpr_dbg("vehicles_without_ocr: [%d] SKIP - vehicle already has OCR classification", det_idx);
+            lpr_dbg("vehicles_without_ocr: [%d] SKIP - vehicle already has OCR result classification", det_idx);
         }
         det_idx++;
     }

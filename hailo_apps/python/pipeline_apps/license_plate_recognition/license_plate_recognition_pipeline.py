@@ -31,6 +31,7 @@ from hailo_apps.python.core.gstreamer.gstreamer_helper_pipelines import (
     QUEUE,
     SOURCE_PIPELINE,
     TRACKER_PIPELINE,
+    USER_CALLBACK_PIPELINE,
 )
 
 hailo_logger = get_logger(__name__)
@@ -51,6 +52,7 @@ DEFAULT_PLATE_POSTPROCESS_FUNCTION = "yolov8n_relu6_license_plate"
 DEFAULT_LPR_CROPPERS_SO = "liblpr_croppers.so"
 DEFAULT_VEHICLE_CROPPER_FUNCTION = "vehicles_without_ocr"
 DEFAULT_LP_CROPPER_FUNCTION = "license_plate_quality_estimation"
+DEFAULT_LP_FULLFRAME_CROPPER_FUNCTION = "license_plate_fullframe"
 
 DEFAULT_LPR_OVERLAY_SO = "liblpr_overlay.so"
 DEFAULT_LPR_OCRSINK_SO = "liblpr_ocrsink.so"
@@ -68,14 +70,17 @@ class GStreamerLPRApp(GStreamerApp):
             parser = get_pipeline_parser()
         parser.add_argument(
             "--pipeline",
-            default="simple",
+            default="optimized_direct",
             choices=[
                 "simple",
                 "complex",
                 "optimized",
                 "optimized_direct",
+                "candidate",
                 "vehicle_and_lp",
                 "vehicle_only",
+                "lp_only_crops",
+                "lp_and_ocr",
                 "lp_only",
                 "ocr_only",
             ],
@@ -150,11 +155,13 @@ class GStreamerLPRApp(GStreamerApp):
         parser.add_argument(
             "--save-vehicle-crops",
             action="store_true",
+            default=True,
             help="Save cropped vehicle images to disk (per track, until LP is found)",
         )
         parser.add_argument(
             "--save-lp-crops",
             action="store_true",
+            default=True,
             help="Save cropped license-plate images to disk (per track, first LP found)",
         )
         parser.add_argument(
@@ -188,7 +195,7 @@ class GStreamerLPRApp(GStreamerApp):
             self.video_source = get_resource_path(
                 pipeline_name=LPR_PIPELINE,
                 resource_type=RESOURCES_VIDEOS_DIR_NAME,
-                model="lpr_video0.mp4",
+                model="lpr_video2.mp4",
             )
 
         # Vehicle detection resources
@@ -332,6 +339,9 @@ class GStreamerLPRApp(GStreamerApp):
         if self.pipeline_type == "optimized_direct":
             print("Getting optimized_direct pipeline string (no LP quality estimation)")
             return self.get_pipeline_string_optimized_direct()
+        if self.pipeline_type == "candidate":
+            print("Getting candidate pipeline string")
+            return self.get_pipeline_string_candidate()
         if self.pipeline_type == "vehicle_and_lp":
             print("Getting vehicle_and_lp pipeline string")
             return self.get_pipeline_string_vehicle_and_lp()
@@ -344,6 +354,12 @@ class GStreamerLPRApp(GStreamerApp):
         if self.pipeline_type == "ocr_only":
             print("Getting ocr_only pipeline string")
             return self.get_pipeline_string_ocr_only()
+        if self.pipeline_type == "lp_only_crops":
+            print("Getting lp_only_crops pipeline string")
+            return self.get_pipeline_string_lp_only_crops()
+        if self.pipeline_type == "lp_and_ocr":
+            print("Getting lp_and_ocr pipeline string")
+            return self.get_pipeline_string_lp_and_ocr()
         print("Getting complex pipeline string")
         return self.get_pipeline_string_complex()
 
@@ -488,6 +504,258 @@ class GStreamerLPRApp(GStreamerApp):
             f"{source_pipeline} ! "
             f"{plate_detection_wrapper} ! "
             f"{display_pipeline}"
+        )
+
+        print(pipeline_string)
+        return pipeline_string
+
+    def get_pipeline_string_lp_and_ocr(self):
+        """
+        License plate detection (full frame) + OCR.
+        Uses a full-frame LP cropper (license_plate_fullframe) to feed OCR.
+        """
+        source_pipeline = SOURCE_PIPELINE(
+            video_source=self.video_source,
+            video_width=self.video_width,
+            video_height=self.video_height,
+            frame_rate=self.frame_rate,
+            sync=self.sync,
+        )
+
+        plate_detection = INFERENCE_PIPELINE(
+            hef_path=self.license_det_hef_path,
+            post_process_so=self.license_det_post_process_so,
+            post_function_name=self.license_det_post_function_name,
+            config_json=self.license_json,
+            additional_params=self.thresholds_str,
+            batch_size=4,
+            scheduler_timeout_ms=100,
+            name="plate_detection",
+        )
+        plate_detection_wrapper = INFERENCE_PIPELINE_WRAPPER(
+            plate_detection,
+            bypass_max_size_buffers=30,
+            name="plate_wrapper",
+        )
+
+        ocr_detection = INFERENCE_PIPELINE(
+            hef_path=self.ocr_hef_path,
+            post_process_so=self.ocr_post_process_so,
+            post_function_name=self.ocr_post_function_name,
+            name="ocr_detection",
+        )
+
+        lp_cropper = CROPPER_PIPELINE(
+            inner_pipeline=ocr_detection,
+            so_path=self.lpr_croppers_so,
+            function_name=DEFAULT_LP_FULLFRAME_CROPPER_FUNCTION,
+            internal_offset=True,
+            name="lp_cropper",
+        )
+
+        display_pipeline = DISPLAY_PIPELINE(
+            video_sink=self.video_sink,
+            sync=self.sync,
+            show_fps=self.show_fps,
+        )
+
+        pipeline_string = (
+            f"{source_pipeline} ! "
+            f"{plate_detection_wrapper} ! "
+            f"tee name=main_tee "
+            f"main_tee. ! {QUEUE('display_q', max_size_buffers=3, leaky='downstream')} ! "
+            f"{display_pipeline} "
+            f"main_tee. ! {QUEUE('processing_q', max_size_buffers=10)} ! "
+            f"{lp_cropper} ! "
+            f"{QUEUE('post_ocr_q', max_size_buffers=5)} ! "
+            f"identity name=identity_callback ! "
+            f"hailofilter use-gst-buffer=true "
+            f"so-path={self.lpr_ocrsink_so} "
+            f"qos=false ! "
+            f"fakesink sync=false async=false"
+        )
+
+        print(pipeline_string)
+        return pipeline_string
+
+    def get_pipeline_string_lp_only_crops(self):
+        """
+        License plate detection (full frame) + crop saving (no OCR, no display).
+        Uses license_plate_fullframe to save LP crops from full-frame detections.
+        """
+        source_pipeline = SOURCE_PIPELINE(
+            video_source=self.video_source,
+            video_width=self.video_width,
+            video_height=self.video_height,
+            frame_rate=self.frame_rate,
+            sync=self.sync,
+        )
+
+        plate_detection = INFERENCE_PIPELINE(
+            hef_path=self.license_det_hef_path,
+            post_process_so=self.license_det_post_process_so,
+            post_function_name=self.license_det_post_function_name,
+            config_json=self.license_json,
+            additional_params=self.thresholds_str,
+            batch_size=4,
+            scheduler_timeout_ms=100,
+            name="plate_detection",
+        )
+        plate_detection_wrapper = INFERENCE_PIPELINE_WRAPPER(
+            plate_detection,
+            bypass_max_size_buffers=30,
+            name="plate_wrapper",
+        )
+
+        lp_cropper = CROPPER_PIPELINE(
+            inner_pipeline=f"{QUEUE('lp_cropper_passthrough_q')} ! identity name=lp_cropper_passthrough",
+            so_path=self.lpr_croppers_so,
+            function_name=DEFAULT_LP_FULLFRAME_CROPPER_FUNCTION,
+            internal_offset=True,
+            name="lp_cropper",
+        )
+
+        user_callback_pipeline = USER_CALLBACK_PIPELINE()
+        display_pipeline = DISPLAY_PIPELINE(
+            video_sink="fakesink",
+            sync=False,
+            show_fps=False,
+        )
+
+        pipeline_string = (
+            f"{source_pipeline} ! "
+            f"{plate_detection_wrapper} ! "
+            f"{lp_cropper} ! "
+            f"{user_callback_pipeline} ! "
+            f"{display_pipeline}"
+        )
+
+        print(pipeline_string)
+        return pipeline_string
+
+    def get_pipeline_string_candidate(self):
+        pipeline_string = (
+            'filesrc location="/usr/local/hailo/resources/videos/lpr_video0.mp4" name=source ! '
+            "queue name=source_queue_decode leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "decodebin name=source_decodebin ! "
+            "queue name=source_scale_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "videoscale name=source_videoscale n-threads=2 ! "
+            "queue name=source_convert_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "videoconvert n-threads=3 name=source_convert qos=true ! "
+            "video/x-raw, pixel-aspect-ratio=1/1, format=RGB, width=1280, height=720 ! "
+            "videorate name=source_videorate ! "
+            "capsfilter name=source_fps_caps caps=\"video/x-raw, framerate=15/1\" ! "
+            "queue name=vehicle_wrapper_input_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "hailocropper name=vehicle_wrapper_crop "
+            "so-path=/usr/lib/x86_64-linux-gnu/hailo/tappas/post_processes/cropping_algorithms/libwhole_buffer.so "
+            "function-name=create_crops use-letterbox=true resize-method=inter-area internal-offset=true "
+            "hailoaggregator name=vehicle_wrapper_agg "
+            "vehicle_wrapper_crop. ! queue name=vehicle_wrapper_bypass_q leaky=no max-size-buffers=30 "
+            "max-size-bytes=0 max-size-time=0 ! vehicle_wrapper_agg.sink_0 "
+            "vehicle_wrapper_crop. ! queue name=vehicle_detection_scale_q leaky=no max-size-buffers=3 "
+            "max-size-bytes=0 max-size-time=0 ! "
+            "videoscale name=vehicle_detection_videoscale n-threads=2 qos=true ! "
+            "queue name=vehicle_detection_convert_q leaky=no max-size-buffers=3 max-size-bytes=0 "
+            "max-size-time=0 ! "
+            "video/x-raw, pixel-aspect-ratio=1/1 ! "
+            "videoconvert name=vehicle_detection_videoconvert n-threads=2 qos=true ! "
+            "queue name=vehicle_detection_hailonet_q leaky=no max-size-buffers=3 max-size-bytes=0 "
+            "max-size-time=0 ! "
+            "hailonet name=vehicle_detection_hailonet "
+            "hef-path=/usr/local/hailo/resources/models/hailo8/yolov5m_vehicles.hef batch-size=1 "
+            "vdevice-group-id=SHARED scheduler-timeout-ms=66 nms-score-threshold=0.3 "
+            "nms-iou-threshold=0.45 output-format-type=HAILO_FORMAT_TYPE_FLOAT32 force-writable=true ! "
+            "queue name=vehicle_detection_hailofilter_q leaky=no max-size-buffers=3 max-size-bytes=0 "
+            "max-size-time=0 ! "
+            "hailofilter name=vehicle_detection_hailofilter "
+            "so-path=/usr/local/hailo/resources/so/libyolo_hailortpp_postprocess.so "
+            "config-path=/home/omria/hailo/hailo-apps-infra/hailo_apps/python/pipeline_apps/"
+            "license_plate_recognition/configs/yolov5m_vehicles.json "
+            "function-name=yolov5m_vehicles qos=false ! "
+            "queue name=vehicle_detection_output_q leaky=no max-size-buffers=3 max-size-bytes=0 "
+            "max-size-time=0 ! "
+            "vehicle_wrapper_agg.sink_1 "
+            "vehicle_wrapper_agg. ! queue name=vehicle_wrapper_output_q leaky=no max-size-buffers=3 "
+            "max-size-bytes=0 max-size-time=0 ! "
+            "hailotracker name=vehicle_tracker class-id=-1 kalman-dist-thr=0.5 iou-thr=0.6 "
+            "init-iou-thr=0.7 keep-new-frames=2 keep-tracked-frames=5 keep-lost-frames=3 "
+            "keep-past-metadata=True qos=False ! "
+            "queue name=vehicle_tracker_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "tee name=main_tee "
+            "main_tee. ! queue name=lpr_display_q leaky=downstream max-size-buffers=3 "
+            "max-size-bytes=0 max-size-time=50000000 ! "
+            "hailooverlay name=lpr_display_overlay line-thickness=3 font-thickness=1 qos=false ! "
+            "hailofilter use-gst-buffer=true so-path=/usr/local/hailo/resources/so/liblpr_overlay.so qos=false ! "
+            "queue name=lpr_display_convert_q leaky=downstream max-size-buffers=3 "
+            "max-size-bytes=0 max-size-time=50000000 ! "
+            "videoconvert name=lpr_display_videoconvert n-threads=2 qos=true ! "
+            "queue name=lpr_display_sink_q leaky=downstream max-size-buffers=3 "
+            "max-size-bytes=0 max-size-time=50000000 ! "
+            "fpsdisplaysink name=lpr_display video-sink=autovideosink sync=true text-overlay=False "
+            "signal-fps-measurements=true "
+            "main_tee. ! queue name=processing_q leaky=downstream max-size-buffers=4 "
+            "max-size-bytes=0 max-size-time=50000000 ! "
+            "queue name=vehicle_cropper_input_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "hailocropper name=vehicle_cropper_cropper "
+            "so-path=/usr/local/hailo/resources/so/liblpr_croppers.so function-name=vehicles_without_ocr "
+            "use-letterbox=true no-scaling-bbox=true internal-offset=true resize-method=bilinear "
+            "hailoaggregator name=vehicle_cropper_agg "
+            "vehicle_cropper_cropper. ! queue name=vehicle_cropper_bypass_q leaky=downstream "
+            "max-size-buffers=30 max-size-bytes=0 max-size-time=0 ! vehicle_cropper_agg.sink_0 "
+            "vehicle_cropper_cropper. ! queue name=plate_detection_scale_q leaky=no max-size-buffers=3 "
+            "max-size-bytes=0 max-size-time=0 ! "
+            "videoscale name=plate_detection_videoscale n-threads=2 qos=true ! "
+            "queue name=plate_detection_convert_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "video/x-raw, pixel-aspect-ratio=1/1 ! "
+            "videoconvert name=plate_detection_videoconvert n-threads=2 qos=true ! "
+            "queue name=plate_detection_hailonet_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "hailonet name=plate_detection_hailonet "
+            "hef-path=/usr/local/hailo/resources/models/hailo8/"
+            "yolov8n_relu6_global_lp_det--640x640_quant_hailort_hailo8_1.hef "
+            "batch-size=2 vdevice-group-id=SHARED scheduler-timeout-ms=66 nms-score-threshold=0.3 "
+            "nms-iou-threshold=0.45 output-format-type=HAILO_FORMAT_TYPE_FLOAT32 force-writable=true ! "
+            "queue name=plate_detection_hailofilter_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "hailofilter name=plate_detection_hailofilter "
+            "so-path=/usr/local/hailo/resources/so/libyolo_hailortpp_postprocess.so "
+            "config-path=/home/omria/hailo/hailo-apps-infra/hailo_apps/python/pipeline_apps/"
+            "license_plate_recognition/configs/"
+            "yolov8n_relu6_global_lp_det--640x640_quant_hailort_hailo8_1.json "
+            "function-name=yolov8n_relu6_license_plate qos=false ! "
+            "queue name=plate_detection_output_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "vehicle_cropper_agg.sink_1 "
+            "vehicle_cropper_agg. ! queue name=vehicle_cropper_output_q leaky=no max-size-buffers=3 "
+            "max-size-bytes=0 max-size-time=0 ! "
+            "queue name=pre_lp_crop_q leaky=downstream max-size-buffers=4 max-size-bytes=0 max-size-time=50000000 ! "
+            "queue name=lp_cropper_input_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "hailocropper name=lp_cropper_cropper "
+            "so-path=/usr/local/hailo/resources/so/liblpr_croppers.so "
+            "function-name=license_plate_no_quality use-letterbox=true no-scaling-bbox=true "
+            "internal-offset=true resize-method=bilinear "
+            "hailoaggregator name=lp_cropper_agg "
+            "lp_cropper_cropper. ! queue name=lp_cropper_bypass_q leaky=downstream max-size-buffers=30 "
+            "max-size-bytes=0 max-size-time=0 ! lp_cropper_agg.sink_0 "
+            "lp_cropper_cropper. ! queue name=ocr_detection_scale_q leaky=no max-size-buffers=3 "
+            "max-size-bytes=0 max-size-time=0 ! "
+            "videoscale name=ocr_detection_videoscale n-threads=2 qos=true ! "
+            "queue name=ocr_detection_convert_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "video/x-raw, pixel-aspect-ratio=1/1 ! "
+            "videoconvert name=ocr_detection_videoconvert n-threads=2 qos=true ! "
+            "queue name=ocr_detection_hailonet_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "hailonet name=ocr_detection_hailonet "
+            "hef-path=/usr/local/hailo/resources/models/hailo8/ocr.hef batch-size=2 "
+            "vdevice-group-id=SHARED scheduler-timeout-ms=66 force-writable=true ! "
+            "queue name=ocr_detection_hailofilter_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "hailofilter name=ocr_detection_hailofilter "
+            "so-path=/usr/local/hailo/resources/so/libocr_postprocess.so "
+            "function-name=paddleocr_recognize qos=false ! "
+            "queue name=ocr_detection_output_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            "lp_cropper_agg.sink_1 "
+            "lp_cropper_agg. ! queue name=lp_cropper_output_q leaky=no max-size-buffers=3 max-size-bytes=0 "
+            "max-size-time=0 ! "
+            "queue name=post_ocr_q leaky=downstream max-size-buffers=2 max-size-bytes=0 max-size-time=50000000 ! "
+            "identity name=identity_callback ! "
+            "hailofilter use-gst-buffer=true so-path=/usr/local/hailo/resources/so/liblpr_ocrsink.so qos=false ! "
+            "fakesink sync=false async=false"
         )
 
         print(pipeline_string)

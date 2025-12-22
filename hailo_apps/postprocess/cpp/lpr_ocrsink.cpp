@@ -9,6 +9,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <map>
+#include <algorithm>
+#include <cctype>
 #include <typeinfo>
 #include <math.h>
 
@@ -32,6 +34,7 @@
 int singleton_map_key = 0;
 std::vector<int> seen_ocr_track_ids;
 const gchar *OCR_LABEL_TYPE = "text_region";
+const gchar *LPR_RESULT_LABEL_TYPE = "lpr_result";
 std::string tracker_name = "hailo_tracker";
 
 static bool lpr_debug_enabled()
@@ -40,7 +43,7 @@ static bool lpr_debug_enabled()
     if (enabled == -1)
     {
         const char *val = std::getenv("HAILO_LPR_DEBUG");
-        enabled = (val && val[0] && val[0] != '0') ? 1 : 0;
+        enabled = (!val || val[0] == '\0' || val[0] != '0') ? 1 : 0;
     }
     return enabled == 1;
 }
@@ -56,6 +59,55 @@ static void lpr_dbg(const char *fmt, ...)
     va_end(args);
     std::fprintf(stderr, "\n");
     std::fflush(stderr);
+}
+
+static const std::string &get_lpr_country()
+{
+    static const std::string country = []() -> std::string {
+        const char *env = std::getenv("HAILO_LPR_COUNTRY");
+        if (env && env[0] != '\0')
+            return std::string(env);
+        return std::string("default");
+    }();
+    return country;
+}
+
+static void lpr_log_settings()
+{
+    static int logged = 0;
+    if (logged || !lpr_debug_enabled())
+        return;
+    logged = 1;
+    lpr_dbg("settings: OCR_SCORE_THRESHOLD=%.2f OCR_LABEL_TYPE='%s' LPR_RESULT_LABEL_TYPE='%s' tracker_name='%s' country='%s'",
+            OCR_SCORE_THRESHOLD, OCR_LABEL_TYPE, LPR_RESULT_LABEL_TYPE, tracker_name.c_str(), get_lpr_country().c_str());
+}
+
+static std::string extract_digits_only(const std::string &input)
+{
+    std::string digits;
+    digits.reserve(input.size());
+    for (unsigned char ch : input)
+    {
+        if (std::isdigit(ch))
+            digits.push_back(static_cast<char>(ch));
+    }
+    return digits;
+}
+
+static bool normalize_ocr_label_default(const std::string &raw_label, std::string &normalized)
+{
+    normalized = extract_digits_only(raw_label);
+    return (normalized.size() == 7 || normalized.size() == 8);
+}
+
+static bool normalize_ocr_label_for_country(const std::string &country, const std::string &raw_label, std::string &normalized)
+{
+    if (country == "default" || country.empty())
+        return normalize_ocr_label_default(raw_label, normalized);
+
+    bool ok = normalize_ocr_label_default(raw_label, normalized);
+    lpr_dbg("ocr_normalize: country='%s' not implemented, using default rule (ok=%d)", country.c_str(), ok ? 1 : 0);
+    return ok;
 }
 
 void catalog_nv12_mat(std::string text, std::vector<cv::Mat> &mat)
@@ -275,6 +327,13 @@ void ocr_sink(HailoROIPtr roi, std::shared_ptr<HailoMat> hmat)
         }
         int track_id = unique_ids[0]->get_id();
         lpr_dbg("ocr_sink: [veh %d] track_id=%d", veh_idx, track_id);
+        bool already_seen = std::find(seen_ocr_track_ids.begin(), seen_ocr_track_ids.end(), track_id) != seen_ocr_track_ids.end();
+        if (already_seen)
+        {
+            lpr_dbg("ocr_sink: [veh %d] SKIP - track_id=%d already has final OCR result", veh_idx, track_id);
+            veh_idx++;
+            continue;
+        }
 
         // For each vehicle, get the license plate detection
         lp_detections = hailo_common::get_hailo_detections(vehicle_detection);
@@ -324,36 +383,46 @@ void ocr_sink(HailoROIPtr roi, std::shared_ptr<HailoMat> hmat)
             lpr_dbg("ocr_sink: [veh %d][lp %d] checking classification type='%s' vs expected='%s'", 
                     veh_idx, lp_idx, cls_type.c_str(), OCR_LABEL_TYPE);
             
-            if (OCR_LABEL_TYPE == cls_type)
+            if (cls_type == OCR_LABEL_TYPE)
             {
                 confidence = cls_conf;
                 license_plate_ocr_label = cls_label;
-                lpr_dbg("ocr_sink: [veh %d][lp %d] *** OCR MATCH *** text='%s' conf=%.3f", 
+                lpr_dbg("ocr_sink: [veh %d][lp %d] OCR raw text='%s' conf=%.3f", 
                         veh_idx, lp_idx, license_plate_ocr_label.c_str(), confidence);
-                
-                // Prominent debug print for detected license plate - easy to grep
-                lpr_dbg(">>>>>> DETECTED LP: \"%s\" (confidence: %.1f%%, track_id: %d) <<<<<<", 
-                        license_plate_ocr_label.c_str(), confidence * 100.0f, track_id);
-                
-                bool already_seen = std::find(seen_ocr_track_ids.begin(), seen_ocr_track_ids.end(), track_id) != seen_ocr_track_ids.end();
-                if (already_seen)
+
+                std::string normalized_label;
+                bool normalized_ok = normalize_ocr_label_for_country(get_lpr_country(), license_plate_ocr_label, normalized_label);
+                lpr_dbg("ocr_sink: [veh %d][lp %d] OCR normalized text='%s' (digits=%zu)", 
+                        veh_idx, lp_idx, normalized_label.c_str(), normalized_label.size());
+                if (!normalized_ok)
                 {
-                    lpr_dbg("ocr_sink: [veh %d][lp %d] SKIP - track_id=%d already processed", veh_idx, lp_idx, track_id);
+                    lpr_dbg("ocr_sink: [veh %d][lp %d] REJECT OCR - expected 7 or 8 digits", veh_idx, lp_idx);
                     lp_idx++;
                     continue;
                 }
                 
+                // Prominent debug print for detected license plate - easy to grep
+                lpr_dbg(">>>>>> DETECTED LP: \"%s\" (confidence: %.1f%%, track_id: %d) <<<<<<", 
+                        normalized_label.c_str(), confidence * 100.0f, track_id);
+                
                 lpr_dbg("ocr_sink: [veh %d][lp %d] adding track_id=%d to seen list", veh_idx, lp_idx, track_id);
                 seen_ocr_track_ids.emplace_back(track_id);
+
+                lpr_dbg("ocr_sink: [veh %d][lp %d] adding OCR result classification type='%s' label='%s'",
+                        veh_idx, lp_idx, LPR_RESULT_LABEL_TYPE, normalized_label.c_str());
+                HailoClassificationPtr final_classification = std::make_shared<HailoClassification>(
+                    LPR_RESULT_LABEL_TYPE, normalized_label, confidence);
+                vehicle_detection->add_object(final_classification);
 
                 // Update the tracker with the found ocr
                 lpr_dbg("ocr_sink: [veh %d][lp %d] updating tracker '%s' with OCR result", veh_idx, lp_idx, jde_tracker_name.c_str());
                 HailoTracker::GetInstance().add_object_to_track(jde_tracker_name,
                                                                 track_id,
-                                                                classification);
+                                                                final_classification);
 
                 lpr_dbg("ocr_sink: [veh %d][lp %d] cataloging license plate", veh_idx, lp_idx);
-                catalog_license_plate(license_plate_ocr_label, confidence, license_plate_box, hmat, lp_detection);
+                catalog_license_plate(normalized_label, confidence, license_plate_box, hmat, lp_detection);
+                break;
             }
             else
             {
@@ -370,6 +439,7 @@ void ocr_sink(HailoROIPtr roi, std::shared_ptr<HailoMat> hmat)
 
 void filter(HailoROIPtr roi, GstVideoFrame *frame)
 {
+    lpr_log_settings();
     lpr_dbg("========== lpr_ocrsink filter: ENTER ==========");
     if (!frame)
     {

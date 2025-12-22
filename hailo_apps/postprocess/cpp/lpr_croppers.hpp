@@ -21,5 +21,6 @@ __BEGIN_DECLS
 float quality_estimation(std::shared_ptr<HailoMat> hailo_mat, const HailoBBox &roi, const float crop_ratio);
 std::vector<HailoROIPtr> license_plate_quality_estimation(std::shared_ptr<HailoMat> image, HailoROIPtr roi);
 std::vector<HailoROIPtr> license_plate_no_quality(std::shared_ptr<HailoMat> image, HailoROIPtr roi);
+std::vector<HailoROIPtr> license_plate_fullframe(std::shared_ptr<HailoMat> image, HailoROIPtr roi);
 std::vector<HailoROIPtr> vehicles_without_ocr(std::shared_ptr<HailoMat> image, HailoROIPtr roi);
 __END_DECLS
