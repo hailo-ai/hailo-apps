@@ -12,4 +12,3 @@
 | `pose_estimation`          | Pose estimation with yolov8                                      |
 | `semantic_segmentation`    | Semantic segmentation with Resnet18_fcn (Cityscapes dataset)     |
 | `zero_shot_classification` | Zero-shot classification with clip_vit_l14                       |
-| `oriented_object_detection`| Oriented object detection using YOLO11 OBB                       |

@@ -94,7 +94,7 @@ This repository provides three types of applications, each suited for different 
 | App Type | Best For | Examples |
 |----------|----------|----------|
 | **Pipeline Apps** | Production-ready video processing with cameras, RTSP streams, and real-time inference | Object detection, pose estimation, instance segmentation, face recognition |
-| **Standalone Apps** | Supports video and camera input, but specialized for image processing, model validation, and rapid prototyping | Lane detection, super resolution, OCR, oriented object detection |
+| **Standalone Apps** | Supports video and camera input, but specialized for image processing, model validation, and rapid prototyping | Lane detection, super resolution, OCR |
 | **GenAI Apps** | Hailo-10H generative AI applications | Voice assistants, VLM chat, voice-to-action agents, Whisper speech recognition |
 
 ### 📹 Pipeline Apps (`hailo_apps/python/pipeline_apps/`)
