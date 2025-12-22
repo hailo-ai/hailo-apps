@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 def run_pipeline_generic(
     cmd: list[str], log_file: str, run_time: int = TEST_RUN_TIME, term_timeout: int = TERM_TIMEOUT
-):
+) -> Tuple[bytes, bytes, int, bool]:
     """Run a command, terminate after run_time, capture logs.
 
     Features early failure detection - if process exits before run_time,
@@ -39,6 +39,11 @@ def run_pipeline_generic(
 
     Reads stdout/stderr in background threads to prevent pipe buffer overflow
     that would cause the process to block on write operations.
+
+    Returns:
+        Tuple of (stdout, stderr, return_code, early_exit)
+        - return_code: Process exit code (negative if killed by signal, e.g., -11 for SIGSEGV)
+        - early_exit: True if process exited before run_time (indicates crash/error)
     """
     # Thread-safe buffers for collecting output
     stdout_buffer = []
@@ -126,22 +131,39 @@ def run_pipeline_generic(
         # Log early exit information
         if early_exit:
             f.write(f"\n[EARLY EXIT] Process exited after {elapsed:.1f}s with code {proc.returncode}\n")
+            # Check for signal-based termination (segfault, etc.)
+            if proc.returncode < 0:
+                signal_num = -proc.returncode
+                signal_name = signal.Signals(signal_num).name if signal_num in signal.Signals._value2member_map_ else f"signal {signal_num}"
+                f.write(f"[SIGNAL] Process was killed by {signal_name}\n")
 
-        return out, err
+        return out, err, proc.returncode, early_exit
 
 
-def run_pipeline_module_with_args(module: str, args: list[str], log_file: str, **kwargs):
-    """Run a pipeline as a Python module."""
+def run_pipeline_module_with_args(module: str, args: list[str], log_file: str, **kwargs) -> Tuple[bytes, bytes, int, bool]:
+    """Run a pipeline as a Python module.
+
+    Returns:
+        Tuple of (stdout, stderr, return_code, early_exit)
+    """
     return run_pipeline_generic(["python", "-u", "-m", module, *args], log_file, **kwargs)
 
 
-def run_pipeline_pythonpath_with_args(script: str, args: list[str], log_file: str, **kwargs):
-    """Run a pipeline script using the current environment (setup_env sets PYTHONPATH)."""
+def run_pipeline_pythonpath_with_args(script: str, args: list[str], log_file: str, **kwargs) -> Tuple[bytes, bytes, int, bool]:
+    """Run a pipeline script using the current environment (setup_env sets PYTHONPATH).
+
+    Returns:
+        Tuple of (stdout, stderr, return_code, early_exit)
+    """
     return run_pipeline_generic(["python3", "-u", script, *args], log_file, **kwargs)
 
 
-def run_pipeline_cli_with_args(cli: str, args: list[str], log_file: str, **kwargs):
-    """Run a pipeline via CLI entry point."""
+def run_pipeline_cli_with_args(cli: str, args: list[str], log_file: str, **kwargs) -> Tuple[bytes, bytes, int, bool]:
+    """Run a pipeline via CLI entry point.
+
+    Returns:
+        Tuple of (stdout, stderr, return_code, early_exit)
+    """
     return run_pipeline_generic([cli, *args], log_file, **kwargs)
 
 
@@ -265,20 +287,66 @@ def run_pipeline_test(
             kwargs["term_timeout"] = term_timeout
 
         if run_method == "module":
-            stdout, stderr = run_func(pipeline_config["module"], args, log_file, **kwargs)
+            stdout, stderr, return_code, early_exit = run_func(pipeline_config["module"], args, log_file, **kwargs)
         elif run_method == "pythonpath":
-            stdout, stderr = run_func(pipeline_config["script"], args, log_file, **kwargs)
+            stdout, stderr, return_code, early_exit = run_func(pipeline_config["script"], args, log_file, **kwargs)
         elif run_method == "cli":
-            stdout, stderr = run_func(pipeline_config["cli"], args, log_file, **kwargs)
+            stdout, stderr, return_code, early_exit = run_func(pipeline_config["cli"], args, log_file, **kwargs)
         else:
             return b"", b"Invalid run method".encode(), False
 
-        # Check for errors
+        # Check for errors in output
         err_str = stderr.decode().lower() if stderr else ""
         out_str = stdout.decode().lower() if stdout else ""
         combined_output = (err_str + " " + out_str).lower()
 
-        success = "error" not in err_str and "traceback" not in err_str
+        # Start with success = True and check for failure conditions
+        success = True
+        failure_reasons = []
+
+        # Check 1: Process crashed or exited early (before run_time)
+        if early_exit:
+            success = False
+            if return_code < 0:
+                # Killed by signal (e.g., SIGSEGV = -11)
+                signal_num = -return_code
+                try:
+                    signal_name = signal.Signals(signal_num).name
+                except ValueError:
+                    signal_name = f"signal {signal_num}"
+                failure_reasons.append(f"Process killed by {signal_name} (code {return_code})")
+                logger.error(f"Process killed by {signal_name} (return code: {return_code})")
+            else:
+                failure_reasons.append(f"Process exited early with code {return_code}")
+                logger.error(f"Process exited early with return code: {return_code}")
+
+        # Check 2: Non-zero exit code (even if not early exit, a non-zero code after SIGTERM is unusual)
+        # Note: Normal SIGTERM termination returns -15, which is expected
+        elif return_code not in (0, -signal.SIGTERM):
+            success = False
+            failure_reasons.append(f"Process exited with non-zero code {return_code}")
+            logger.error(f"Process exited with non-zero return code: {return_code}")
+
+        # Check 3: Error or traceback in stderr
+        if "error" in err_str:
+            success = False
+            failure_reasons.append("'error' found in stderr")
+            logger.error(f"Error detected in stderr")
+
+        if "traceback" in err_str:
+            success = False
+            failure_reasons.append("'traceback' found in stderr (Python exception)")
+            logger.error(f"Python traceback detected in stderr")
+
+        # Check 4: Segmentation fault message in output
+        if "segmentation fault" in combined_output or "segfault" in combined_output:
+            success = False
+            failure_reasons.append("Segmentation fault detected in output")
+            logger.error(f"Segmentation fault message detected in output")
+
+        # Log all failure reasons if any
+        if failure_reasons:
+            logger.error(f"Test failed for reasons: {'; '.join(failure_reasons)}")
 
         # Check for FPS output when --show-fps is enabled
         # The actual log format is "FPS measurement: X.XX" (case-sensitive check on lowercase output)

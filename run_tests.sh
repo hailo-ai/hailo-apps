@@ -94,6 +94,10 @@ echo "Installing test requirements..."
 python -m pip install --upgrade pip --quiet
 python -m pip install -r "${TESTS_DIR}/test_resources/requirements.txt" --quiet
 
+# Install optional dependencies for CLIP tests
+echo "Installing CLIP dependencies..."
+python -m pip install -e ".[clip]" --quiet
+
 # Download resources for detected architecture only
 if [ "$DOWNLOAD_RESOURCES" = true ]; then
     echo ""
