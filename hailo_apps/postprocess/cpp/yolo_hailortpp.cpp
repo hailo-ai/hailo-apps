@@ -17,7 +17,7 @@ static const std::string DEFAULT_YOLOV5M_OUTPUT_LAYER = "yolov5m_wo_spp_60p/yolo
 static const std::string DEFAULT_YOLOV5M_VEHICLES_OUTPUT_LAYER = "yolov5m_vehicles/yolov5_nms_postprocess";
 static const std::string DEFAULT_YOLOV8S_OUTPUT_LAYER = "yolov8s/yolov8_nms_postprocess";
 static const std::string DEFAULT_YOLOV8M_OUTPUT_LAYER = "yolov8m/yolov8_nms_postprocess";
-static const std::string DEFAULT_YOLOV8N_OUTPUT_LAYER = "hailo_yolo8n_4cls_480x640/yolov8_nms_postprocess";
+static const std::string DEFAULT_YOLOV8N_OUTPUT_LAYER = "hailo_yolov8n_480_640/yolov8_nms_postprocess";
 
 #if __GNUC__ > 8
 #include <filesystem>
@@ -85,10 +85,12 @@ YoloParamsNMS *init(const std::string config_path, const std::string function_na
             }
 
             // set the params
-            if (doc_config_json.HasMember("detection_threshold")) {
+            if (doc_config_json.HasMember("detection_threshold"))
+            {
                 params->detection_threshold = doc_config_json["detection_threshold"].GetFloat();
             }
-            if (doc_config_json.HasMember("max_boxes")) {
+            if (doc_config_json.HasMember("max_boxes"))
+            {
                 params->max_boxes = doc_config_json["max_boxes"].GetInt();
                 params->filter_by_score = true;
             }
@@ -106,22 +108,19 @@ void free_resources(void *params_void_ptr)
 
 static std::map<uint8_t, std::string> yolo_vehicles_labels = {
     {0, "unlabeled"},
-    {1, "car"}
-};
+    {1, "car"}};
 
 static std::map<uint8_t, std::string> yolo_personface_labels = {
-        {0, "unlabeled"},
-        {1, "person"},
-        {2, "face"}
-};
+    {0, "unlabeled"},
+    {1, "person"},
+    {2, "face"}};
 
 static std::map<uint8_t, std::string> yolo8n_personface_labels = {
-        {0, "unlabeled"},
-        {1, "person"},
-        {2, "vehicle"},
-        {3, "face"},
-        {4, "license-plates"}
-};
+    {0, "unlabeled"},
+    {1, "person"},
+    {2, "vehicle"},
+    {3, "face"},
+    {4, "license-plates"}};
 
 void yolov8n_personface(HailoROIPtr roi)
 {
@@ -206,7 +205,7 @@ void yolov5s_nv12(HailoROIPtr roi)
 void yolov5s_personface(HailoROIPtr roi)
 {
     if (!roi->has_tensors())
-    {   
+    {
         return;
     }
     auto post = HailoNMSDecode(roi->get_tensor("yolov5s_personface_nv12/yolov5_nms_postprocess"), yolo_personface_labels);
@@ -275,7 +274,6 @@ void filter_letterbox(HailoROIPtr roi, void *params_void_ptr)
 
     // Clear the scaling bbox of main roi because all detections are fixed.
     roi->clear_scaling_bbox();
-
 }
 
 void filter(HailoROIPtr roi, void *params_void_ptr)
@@ -289,7 +287,7 @@ void filter(HailoROIPtr roi, void *params_void_ptr)
     // find the nms tensor
     for (auto tensor : tensors)
     {
-        if (std::regex_search(tensor->name(), std::regex("nms_postprocess"))) 
+        if (std::regex_search(tensor->name(), std::regex("nms")))
         {
             auto post = HailoNMSDecode(tensor, params->labels, params->detection_threshold, params->max_boxes, params->filter_by_score);
             auto detections = post.decode<float32_t, common::hailo_bbox_float32_t>();

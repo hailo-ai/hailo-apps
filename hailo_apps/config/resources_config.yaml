@@ -1,123 +1,454 @@
 # Resources configuration organized by app
 # Each app contains models (default/extra per architecture) and JSON files
-# Videos and images are shared across all apps (see top-level videos/images sections)
+# Videos, images, and JSONs are shared across all apps (see top-level sections)
 # Models can be from Model Zoo (mz), S3 (s3), or Gen-AI Model Zoo (gen-ai-mz)
 #
 # Structure:
 #   app_name:
 #     models:
 #       hailo8/hailo8l/hailo10h:
-#         default: single model entry or None
+#         default: [list of model entries]
 #         extra: [list of additional models for this arch]
 #       Each model entry:
 #         - {name: "model_name", source: "mz"}  # Model Zoo model
 #         - {name: "model_name", source: "s3"}  # S3 model (URL built dynamically)
 #         - {name: "model_name", url: "https://...", source: "s3"}  # S3 model with explicit URL (backward compatibility)
-#         - {name: "model_name", url: "https://...", source: "gen-ai-mz"}  # Gen-AI model from server (requires explicit URL)
-#     json: [list of JSON config file URLs with name field]
+#         - {name: "model_name", source: "gen-ai-mz"}  # Gen-AI model from server (URL built from metadata)
 #
-#   videos: [list of video entries with name and url]
+#   json: [list of JSON config file entries - shared across all apps]
+#   videos: [list of video entries with name field]
 #   images: [list of image entries with name and url]
 
 # Shared videos for all apps
+# Tags use app names only (no _p/_s suffixes)
 videos:
   - name: example.mp4
     source: s3
+    tag:
+      - detection
+      - object_detection
+      - simple_detection
+      - instance_segmentation
+      - pose_estimation
+      - semantic_segmentation
+      - classifier
+      - depth
+      - depth_estimation_mono
+      - depth_estimation_stereo
+      - reid_multisource
+      - multisource
   - name: example_640.mp4
     source: s3
+    tag:
+      - detection
+      - object_detection
+      - simple_detection
+      - instance_segmentation
+      - pose_estimation
+      - semantic_segmentation
+      - classifier
+      - depth
+      - depth_estimation_mono
+      - depth_estimation_stereo
+      - reid_multisource
+      - multisource
   - name: face_recognition.mp4
     source: s3
-  #- #name: ocr.mp4
-    #source: s3
+    tag:
+      - face_recognition
+  - name: ocr.mp4
+    source: s3
+    tag:
+      - paddle_ocr
   - name: tiling_visdrone_720p.mp4
     source: s3
+    tag:
+      - tiling
+      - detection
+      - object_detection
   - name: barcode.mp4
     source: s3
-#  - name: full_mov_slow.mp4
-#    source: s3
+    tag:
+      - detection
+      - object_detection
+  - name: clip_example.mp4
+    source: s3
+    tag:
+      - clip
+      - classifier
+  - name: full_mov_slow.mp4
+    source: s3
+    tag:
+      - detection
+      - object_detection
+      - simple_detection
+      - instance_segmentation
+      - pose_estimation
+      - semantic_segmentation
+      - classifier
+      - depth
+      - depth_estimation_mono
+      - onnxrt_hailo_pipeline
+      - reid_multisource
+      - multisource
+  - name: lane_detection.mp4
+    source: s3
+    tag:
+      - lane_detection
+  - name: walk_in_room.mp4
+    source: s3
+    tag:
+      - depth
+      - depth_estimation_mono
+      - depth_estimation_stereo
 
 # Shared images for all apps
+# Tags use app names only (no _p/_s suffixes)
 images:
-  - name: dog_bicycle.jpg
-    source: s3
   - name: zidane.jpg
     url: https://ultralytics.com/images/zidane.jpg
+    tag:
+      - detection
+      - object_detection
+      - simple_detection
+      - instance_segmentation
+      - pose_estimation
+      - classifier
+      - semantic_segmentation
+  - name: dog_bicycle.jpg
+    source: s3
+    tag:
+      - detection
+      - object_detection
+      - simple_detection
+      - instance_segmentation
+      - pose_estimation
+      - classifier
+      - semantic_segmentation
   - name: bus.jpg
     source: s3
+    tag:
+      - detection
+      - object_detection
+      - simple_detection
+      - instance_segmentation
+      - pose_estimation
+      - classifier
+      - semantic_segmentation
   - name: input_image.png
     source: s3
+    tag:
+      - detection
+      - object_detection
+      - simple_detection
+      - instance_segmentation
+      - pose_estimation
+      - classifier
+      - semantic_segmentation
   - name: ocr_img1.png
     source: s3
+    tag:
+      - paddle_ocr
   - name: ocr_img2.png
     source: s3
+    tag:
+      - paddle_ocr
+  - name: tree_branches.png
+    source: s3
+    tag:
+      - super_resolution
+  - name: apple.jpg
+    source: s3
+    tag:
+      - depth
+      - depth_estimation_mono
+      - depth_estimation_stereo
 
-detection:
+# Shared JSON config files for all apps
+# Tags use app names only (no _p/_s suffixes)
+json:
+  - name: hailo_4_classes.json
+    source: s3
+    tag:
+      - tiling
+      - detection
+      - object_detection
+      - clip
+  - name: scrfd.json
+    source: s3
+    tag:
+      - face_recognition
+      - reid_multisource
+  - name: yolov5m_seg.json
+    source: s3
+    tag:
+      - instance_segmentation
+  - name: yolov5n_seg.json
+    source: s3
+    tag:
+      - instance_segmentation
+  - name: visdrone.json
+    source: s3
+    tag:
+      - tiling
+  - name: barcode_labels.json
+    source: s3
+    tag:
+      - detection
+      - object_detection
+
+
+classifier: &classifier_app
   models:
     hailo8:
       default:
-        name: yolov8m
-        source: mz
+        - name: fastvit_sa12
+          source: mz
+      extra:
+        - name: hardnet39ds
+          source: mz
+        - name: hardnet68
+          source: mz
+        - name: resnet_v1_18
+          source: mz
+        - name: resnet_v1_34
+          source: mz
+        - name: resnet_v1_50
+          source: mz
+    hailo8l:
+      default:
+        - name: fastvit_sa12
+          source: mz
+      extra:
+        - name: hardnet39ds
+          source: mz
+        - name: hardnet68
+          source: mz
+        - name: resnet_v1_18
+          source: mz
+        - name: resnet_v1_34
+          source: mz
+        - name: resnet_v1_50
+          source: mz
+    hailo10h:
+      default:
+        - name: fastvit_sa12
+          source: mz
+      extra:
+        - name: hardnet39ds
+          source: mz
+        - name: hardnet68
+          source: mz
+        - name: resnet_v1_18
+          source: mz
+        - name: resnet_v1_34
+          source: mz
+        - name: resnet_v1_50
+          source: mz
+
+semantic_segmentation: &semantic_segmentation_app
+  models:
+    hailo8:
+      default:
+        - name: fcn8_resnet_v1_18
+          source: mz
+      extra:
+        - name: segformer_b0_bn
+          source: mz
+        - name: stdc1
+          source: mz
+        - name: deeplab_v3_mobilenet_v2_wo_dilation
+          source: mz
+    hailo8l:
+      default:
+        - name: fcn8_resnet_v1_18
+          source: mz
+      extra:
+        - name: segformer_b0_bn
+          source: mz
+        - name: stdc1
+          source: mz
+        - name: deeplab_v3_mobilenet_v2_wo_dilation
+          source: mz
+    hailo10h:
+      default:
+        - name: fcn8_resnet_v1_18
+          source: mz
+      extra:
+        - name: segformer_b0_bn
+          source: mz
+        - name: stdc1
+          source: mz
+        - name: deeplab_v3_mobilenet_v2_wo_dilation
+          source: mz
+
+detection: &detection_app
+  models:
+    hailo8:
+      default:
+        - name: yolov8m
+          source: mz
       extra:
         - name: yolov5m_wo_spp
           source: mz
         - name: yolov8s
           source: mz
-        - name: yolov11n
+        - name: yolov5s
           source: mz
-        - name: yolov11s
+        - name: yolov5m
           source: mz
-        - name: yolov8n
-          source: mz
-    hailo8l:
-      default:
-        name: yolov8s
-        source: mz
-      extra:
         - name: yolov6n
           source: mz
-        - name: yolov5m_wo_spp
+        - name: yolov7
+          source: mz
+        - name: yolov7x
+          source: mz
+        - name: yolov8n
+          source: mz
+        - name: yolov8l
+          source: mz
+        - name: yolov8x
+          source: mz
+        - name: yolov9c
+          source: mz
+        - name: yolov10n
+          source: mz
+        - name: yolov10s
+          source: mz
+        - name: yolov10b
+          source: mz
+        - name: yolov10x
           source: mz
         - name: yolov11n
           source: mz
         - name: yolov11s
           source: mz
+        - name: yolov11m
+          source: mz
+        - name: yolov11l
+          source: mz
+        - name: yolov11x
+          source: mz
+        - name: yolov11n
+          source: mz
+        - name: yolov11s
+          source: mz
+        - name: yolov8s-hailo8-barcode
+          url: https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/hefs/h8l_rpi/yolov8s-hailo8l-barcode.hef
+          source: s3
+    hailo8l:
+      default:
+        - name: yolov8s
+          source: mz
+      extra:
+        - name: yolov5s
+          source: mz
+        - name: yolov5m
+          source: mz
+        - name: yolov6n
+          source: mz
+        - name: yolov7
+          source: mz
+        - name: yolov7x
+          source: mz
+        - name: yolov5m_wo_spp
+          source: mz
         - name: yolov8n
           source: mz
+        - name: yolov8m
+          source: mz
+        - name: yolov8l
+          source: mz
+        - name: yolov8x
+          source: mz
+        - name: yolov9c
+          source: mz
+        - name: yolov10n
+          source: mz
+        - name: yolov10s
+          source: mz
+        - name: yolov10b
+          source: mz
+        - name: yolov10x
+          source: mz
+        - name: yolov11n
+          source: mz
+        - name: yolov11s
+          source: mz
+        - name: yolov11m
+          source: mz
+        - name: yolov11l
+          source: mz
+        - name: yolov11x
+          source: mz
+        - name: yolov8s-hailo8l-barcode
+          url: https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/hefs/h8l_rpi/yolov8s-hailo8l-barcode.hef
+          source: s3
     hailo10h:
       default:
-        name: yolov8m
-        source: mz
+        - name: yolov8m
+          source: mz
       extra:
         - name: yolov5m_wo_spp
           source: mz
+        - name: yolov5s
+          source: mz
+        - name: yolov5m
+          source: mz
+        - name: yolov6n
+          source: mz
+        - name: yolov7
+          source: mz
+        - name: yolov7x
+          source: mz
         - name: yolov8s
+          source: mz
+        - name: yolov8n
+          source: mz
+        - name: yolov8l
+          source: mz
+        - name: yolov8x
+          source: mz
+        - name: yolov9c
+          source: mz
+        - name: yolov10n
+          source: mz
+        - name: yolov10s
+          source: mz
+        - name: yolov10b
+          source: mz
+        - name: yolov10x
           source: mz
         - name: yolov11n
           source: mz
         - name: yolov11s
           source: mz
-        - name: yolov8n
+        - name: yolov11m
           source: mz
-  json:
-    - name: hailo_4_classes.json
-      source: s3
+        - name: yolov11l
+          source: mz
+        - name: yolov11x
+          source: mz
 
-simple_detection:
+# Standalone app uses the same model set and defaults as the pipeline app
+object_detection: *detection_app
+
+simple_detection: &simple_detection_app
   models:
     hailo8:
       default:
-        name: yolov6n
-        source: mz
+        - name: yolov6n
+          source: mz
     hailo8l:
       default:
-        name: yolov6n
-        source: mz
+        - name: yolov6n
+          source: mz
     hailo10h:
       default:
-        name: yolov6n
-        source: mz
+        - name: yolov6n
+          source: mz
 
-face_recognition:
+face_recognition: &face_recognition_app
   models:
     hailo8:
       default:
@@ -137,98 +468,163 @@ face_recognition:
           source: mz
         - name: arcface_mobilefacenet
           source: mz
-  json:
-    - name: scrfd.json
-      source: s3
 
-instance_segmentation:
+instance_segmentation: &instance_segmentation_app
   models:
     hailo8:
       default:
-        name: yolov5m_seg
-        source: mz
+        - name: yolov5m_seg
+          source: mz
+      extra:
+        - name: yolov5l_seg
+          source: mz
+        - name: yolov5n_seg
+          source: mz
+        - name: yolov5s_seg
+          source: mz
+        - name: yolov8m_seg
+          source: mz
+        - name: yolov8n_seg
+          source: mz
+        - name: yolov8s_seg
+          source: mz
+        - name: yolov5m_seg_with_nms
+          source: s3
+        - name: fast_sam_s
+          source: s3
     hailo8l:
       default:
-        name: yolov5n_seg
-        source: mz
+        - name: yolov5n_seg
+          source: mz
+      extra:
+        - name: yolov5l_seg
+          source: mz
+        - name: yolov5m_seg
+          source: mz
+        - name: yolov5s_seg
+          source: mz
+        - name: yolov8m_seg
+          source: mz
+        - name: yolov8n_seg
+          source: mz
+        - name: yolov8s_seg
+          source: mz
     hailo10h:
       default:
-        name: yolov5m_seg
-        source: mz
-  json:
-    - name: yolov5m_seg.json
-      source: s3
-    - name: yolov5n_seg.json
-      source: s3
+        - name: yolov5m_seg
+          source: mz
+      extra:
+        - name: yolov5l_seg
+          source: mz
+        - name: yolov5n_seg
+          source: mz
+        - name: yolov5s_seg
+          source: mz
+        - name: yolov8m_seg
+          source: mz
+        - name: yolov8n_seg
+          source: mz
+        - name: yolov8s_seg
+          source: mz
 
-pose_estimation:
+pose_estimation: &pose_estimation_app
   models:
     hailo8:
       default:
-        name: yolov8m_pose
-        source: mz
+        - name: yolov8m_pose
+          source: mz
       extra:
         - name: yolov8s_pose
           source: mz
     hailo8l:
       default:
-        name: yolov8s_pose
-        source: mz
+        - name: yolov8s_pose
+          source: mz
     hailo10h:
       default:
-        name: yolov8m_pose
-        source: mz
+        - name: yolov8m_pose
+          source: mz
       extra:
         - name: yolov8s_pose
           source: mz
 
-depth:
+depth: &depth_app
   models:
     hailo8:
       default:
-        name: scdepthv3
-        source: mz
+        - name: scdepthv3
+          source: mz
     hailo8l:
       default:
-        name: scdepthv3
-        source: mz
+        - name: scdepthv3
+          source: mz
     hailo10h:
       default:
-        name: scdepthv3
-        source: mz
+        - name: scdepthv3
+          source: mz
 
-tiling:
+# Standalone app uses the same model set and defaults as the pipeline app
+depth_estimation_mono: *depth_app
+
+depth_estimation_stereo: &depth_estimation_stereo_app
   models:
     hailo8:
       default:
-        name: hailo_yolov8n_4_classes_vga
+        - name: stereonet
+          source: s3
+    hailo8l:
+      default:
+        - name: stereonet
+          source: s3
+    hailo10h:
+      default:
+        - name: stereonet
+          source: s3
+
+onnxrt_hailo_pipeline: &onnxrt_hailo_pipeline_app
+  models:
+    hailo8:
+      default:
+        - name: yolov8m_seg
+          source: mz
+    hailo8l:
+      default:
+        - name: yolov8m_seg
+          source: mz
+    hailo10h:
+      default: None
+
+tiling: &tiling_app
+  models:
+    hailo8:
+      default:
+        - name: hailo_yolov8n_4_classes_vga
+          source: s3
+      extra:
+      - name: ssd_mobilenet_v1
+        source: mz
+      - name: ssd_mobilenet_v1_visdrone
         source: s3
+    hailo8l:
+      default:
+        - name: hailo_yolov8n_4_classes_vga
+          source: s3
       extra:
         - name: ssd_mobilenet_v1
           source: mz
         - name: ssd_mobilenet_v1_visdrone
           source: s3
-    hailo8l:
+    hailo10h:
       default:
-        name: hailo_yolov8n_4_classes_vga
-        source: s3
+        - name: hailo_yolov8n_4_classes_vga
+          source: s3
       extra:
         - name: ssd_mobilenet_v1
           source: mz
         - name: ssd_mobilenet_v1_visdrone
           source: s3
-    hailo10h:
-      default:
-        name: hailo_yolov8n_4_classes_vga
-        source: s3
-      extra:
-        - name: ssd_mobilenet_v1
-          source: mz
-  json:
-    - name: visdrone.json
-      source: s3
 
-paddle_ocr:
+paddle_ocr: &paddle_ocr_app
   models:
     hailo8:
       default:
@@ -237,7 +633,11 @@ paddle_ocr:
         - name: ocr
           source: s3
     hailo8l:
-      default: None
+      default:
+        - name: ocr_det
+          source: s3
+        - name: ocr
+          source: s3
     hailo10h:
       default:
         - name: ocr_det
@@ -245,91 +645,63 @@ paddle_ocr:
         - name: ocr
           source: s3
 
-clip:
+lane_detection: &lane_detection_app
   models:
     hailo8:
       default:
-        name: clip_resnet_50x4_image_encoder
-        source: mz
-      extra:
-        - name: hailo_yolov8n_480_640_h8_rgb
+        - name: ufld_v2_tu
+          source: s3
+    hailo8l:
+      default: None
+    hailo10h:
+      default:
+        - name: ufld_v2_tu
+          source: s3
+
+super_resolution: &super_resolution_app
+  models:
+    hailo8:
+      default:
+        - name: real_esrgan_x2
           source: mz
     hailo8l:
       default:
-        name: clip_resnet_50x4_image_encoder
-        source: mz
-      extra:
-        - name: hailo_yolov8n_480_640_h8l_rgb
+        - name: real_esrgan_x2
           source: mz
     hailo10h:
       default:
-        name: clip_resnet_50x4_image_encoder
-        source: mz
+        - name: real_esrgan_x2
+          source: mz
 
-retrain:
+reid_multisource: &reid_multisource_app
   models:
     hailo8:
       default:
-        name: yolov8s-hailo8-barcode
-        url: https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/hefs/h8l_rpi/yolov8s-hailo8l-barcode.hef
-        source: s3
+        - name: scrfd_10g
+          source: mz
+        - name: arcface_mobilefacenet
+          source: mz
     hailo8l:
       default:
-        name: yolov8s-hailo8l-barcode
-        url: https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/hefs/h8l_rpi/yolov8s-hailo8l-barcode.hef
-        source: s3
+        - name: scrfd_2.5g
+          source: mz
+        - name: arcface_mobilefacenet
+          source: mz
     hailo10h:
-      default: None
-  json:
-    - name: barcode_labels.json
-      source: s3
+      default:
+        - name: scrfd_10g
+          source: mz
+        - name: arcface_mobilefacenet
+          source: mz
 
-lane_detection:
-  models:
-    hailo8:
-      default:
-        name: ufld_v2_tu
-        source: s3
-    hailo8l:
-      default: None
-    hailo10h:
-      default:
-        name: ufld_v2_tu
-        source: s3
-
-super_resolution:
-  models:
-    hailo8:
-      default:
-        name: real_esrgan_x2
-        source: s3
-    hailo8l:
-      default: None
-    hailo10h:
-      default:
-        name: real_esrgan_x2
-        source: mz
-
-reid_multisource:
-  models:
-    hailo8:
-      default:
-        name: repvgg_a0_person_reid_512
-        source: mz
-    hailo8l:
-      default:
-        name: repvgg_a0_person_reid_512
-        source: mz
-    hailo10h:
-      default:
-        name: repvgg_a0_person_reid_512
-        source: mz
+# Multisource pipeline uses detection models
+multisource: *detection_app
 
 ########################################################
 # Gen AI models
 ########################################################
 
-vlm_chat:
+vlm_chat: &vlm_chat_app
   models:
     hailo8:
       default: None
@@ -337,11 +709,10 @@ vlm_chat:
       default: None
     hailo10h:
       default:
-        name: Qwen2-VL-2B-Instruct
-        url: https://dev-public.hailo.ai/v5.1.1/blob/Qwen2-VL-2B-Instruct.hef
-        source: gen-ai-mz
+        - name: Qwen2-VL-2B-Instruct
+          source: gen-ai-mz
 
-llm_chat:
+llm_chat: &llm_chat_app
   models:
     hailo8:
       default: None
@@ -349,11 +720,10 @@ llm_chat:
       default: None
     hailo10h:
       default:
-        name: Qwen2.5-1.5B-Instruct
-        url: https://dev-public.hailo.ai/v5.1.1/blob/Qwen2.5-1.5B-Instruct.hef
-        source: gen-ai-mz
+        - name: Qwen2.5-1.5B-Instruct
+          source: gen-ai-mz
 
-whisper_chat:
+whisper_chat: &whisper_chat_app
   models:
     hailo8:
       default: None
@@ -361,11 +731,11 @@ whisper_chat:
       default: None
     hailo10h:
       default:
-        name: Whisper-Base
-        url: https://dev-public.hailo.ai/v5.1.1/blob/Whisper-Base.hef
-        source: gen-ai-mz
+        - name: Whisper-Base
+          source: gen-ai-mz
 
-agent:
+# Voice assistant uses whisper for speech recognition and LLM for responses
+voice_assistant:
   models:
     hailo8:
       default: None
@@ -373,6 +743,56 @@ agent:
       default: None
     hailo10h:
       default:
-        name: Qwen2.5-Coder-1.5B-Instruct
-        url: https://dev-public.hailo.ai/v5.1.1/blob/Qwen2.5-Coder-1.5B-Instruct.hef
-        source: gen-ai-mz
+        - name: Whisper-Base
+          source: gen-ai-mz
+        - name: Qwen2.5-1.5B-Instruct
+          source: gen-ai-mz
+
+agent: &agent_app
+  models:
+    hailo8:
+      default: None
+    hailo8l:
+      default: None
+    hailo10h:
+      default:
+        - name: Qwen2.5-Coder-1.5B-Instruct
+          source: gen-ai-mz
+
+clip: &clip_app
+  models:
+    hailo8:
+      default:
+        - name: clip_resnet_50x4_image_encoder
+          source: mz
+        - name: hailo_yolov8n_4_classes_vga
+          source: s3
+    hailo8l:
+      default:
+        - name: clip_resnet_50x4_image_encoder
+          source: mz
+        - name: hailo_yolov8n_4_classes_vga
+          source: s3
+    hailo10h:
+      default:
+        - name: clip_resnet_50x4_image_encoder
+          source: mz
+        - name: hailo_yolov8n_4_classes_vga
+          source: s3
+
+
+#-------------------------------------------------------------------------------
+# METADATA
+#-------------------------------------------------------------------------------
+metadata:
+  # S3 base URLs for dynamic URL construction
+  s3_endpoints:
+    cs_bucket: "https://hailo-csdata.s3.eu-west-2.amazonaws.com"
+    model_zoo_h8: "https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled"
+    gen_ai_mz: "https://dev-public.hailo.ai"
+
+  # Model Zoo version mapping
+  model_zoo_versions:
+    hailo8: "v2.17.0"
+    hailo8l: "v2.17.0"
+    hailo10h: "v5.1.1"

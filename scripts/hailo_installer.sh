@@ -10,15 +10,13 @@
 #       * HailoRT driver deb
 #       * HailoRT deb
 #       * Tapas core deb
-#       * HailoRT Python bindings whl
-#       * Tapas core Python bindings whl
 #
 # The deb server is hosted at: http://dev-public.hailo.ai/
 # Owner: Sergii Tishchenko
 #
 #
 
-set -e
+set -euo pipefail
 
 # --- Configurable Variables ---
 
@@ -31,7 +29,7 @@ declare -a DOWNLOADED_URLS=()
 
 HAILORT_VERSION_H8="4.23.0"
 TAPPAS_CORE_VERSION_H8="5.1.0"
-HAILORT_VERSION_H10="5.1.0"
+HAILORT_VERSION_H10="5.1.1"
 TAPPAS_CORE_VERSION_H10="5.1.0"
 
 HAILORT_VERSION=""
@@ -39,9 +37,10 @@ TAPPAS_CORE_VERSION=""
 
 
 # Defaults (can be overridden by flags)
-HW_ARCHITECTURE=""               # hailo8 | hailo10
+HW_ARCHITECTURE=""               # hailo8 | hailo10h
 VENV_NAME="venv_hailo_apps"
 DOWNLOAD_ONLY="false"
+DRY_RUN="false"
 OUTPUT_DIR_BASE="/usr/local/hailo/resources/packages"
 
 PY_TAG_OVERRIDE=""
@@ -54,8 +53,9 @@ Options:
   --hailort-version=VER           Override HailoRT version
   --tappas-core-version=VER       Override TAPPAS Core version
   --venv-name=NAME                Virtualenv name (install mode only) [default: $VENV_NAME]
-  --hw-arch=hailo8|hailo10        Target hardware (affects version defaults & folder) [default: $HW_ARCHITECTURE]
+  --hw-arch=hailo8|hailo10h       Target hardware (affects version defaults & folder) [default: $HW_ARCHITECTURE]
   --download-only                 Only download packages, do NOT install
+  --dry-run                       Show URLs that would be downloaded without downloading
   --output-dir=DIR                Base output directory for downloads [default: $OUTPUT_DIR_BASE]
   --py-tag=TAG                    Wheel tag (e.g. cp311-cp311). Useful with --download-only
   -h|--help                       Show this help
@@ -78,20 +78,23 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --hw-arch=*)
             HW_ARCHITECTURE="${1#*=}"
-            if [[ "$HW_ARCHITECTURE" != "hailo8" && "$HW_ARCHITECTURE" != "hailo10" ]]; then
-                echo "Invalid hardware architecture specified. Use 'hailo8' or 'hailo10'."
+            if [[ "$HW_ARCHITECTURE" != "hailo8" && "$HW_ARCHITECTURE" != "hailo10h" ]]; then
+                echo "Invalid hardware architecture specified. Use 'hailo8' or 'hailo10h'."
                 exit 1
             fi
             if [[ "$HW_ARCHITECTURE" == "hailo8" ]]; then
                 HAILORT_VERSION="$HAILORT_VERSION_H8"
                 TAPPAS_CORE_VERSION="$TAPPAS_CORE_VERSION_H8"
-            elif [[ "$HW_ARCHITECTURE" == "hailo10" ]]; then
+            elif [[ "$HW_ARCHITECTURE" == "hailo10h" ]]; then
                 HAILORT_VERSION="$HAILORT_VERSION_H10"
                 TAPPAS_CORE_VERSION="$TAPPAS_CORE_VERSION_H10"
             fi
             ;;
         --download-only)
             DOWNLOAD_ONLY="true"
+            ;;
+        --dry-run)
+            DRY_RUN="true"
             ;;
         --output-dir=*)
             OUTPUT_DIR_BASE="${1#*=}"
@@ -111,9 +114,28 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
+# Validate that hardware architecture is specified
+if [[ -z "$HW_ARCHITECTURE" ]]; then
+    echo "Error: --hw-arch must be specified (hailo8 or hailo10h)"
+    echo
+    usage
+    exit 1
+fi
+
+# Ensure versions are set (either from --hw-arch or manually via --hailort-version/--tappas-core-version)
+if [[ -z "$HAILORT_VERSION" ]]; then
+    echo "Error: HailoRT version is not set. Either specify --hw-arch or --hailort-version"
+    exit 1
+fi
+if [[ -z "$TAPPAS_CORE_VERSION" ]]; then
+    echo "Error: TAPPAS Core version is not set. Either specify --hw-arch or --tappas-core-version"
+    exit 1
+fi
 
 TARGET_DIR="${OUTPUT_DIR_BASE}/${HW_ARCHITECTURE}"
-mkdir -p "$TARGET_DIR"
+if [[ "$DRY_RUN" != "true" ]]; then
+  mkdir -p "$TARGET_DIR"
+fi
 echo "Download target directory: $TARGET_DIR"
 HW_NAME=""
 # Determine hardware name based on architecture
@@ -129,6 +151,12 @@ download_file() {
   local rel="$1"
   local url="${BASE_URL}/${rel}"
   local dst="${TARGET_DIR}/${rel}"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[dry-run] Would download: $url"
+    DOWNLOADED_URLS+=("$url")
+    return
+  fi
 
   echo "Downloading ${rel}"
   mkdir -p "$(dirname "$dst")"
@@ -150,15 +178,7 @@ install_file() {
 
   echo "Installing $file..."
   if [[ "$file" == *.deb ]]; then
-    sudo dpkg -i "$path"
-  elif [[ "$file" == *.whl ]]; then
-    if python3 -c "import site; import os; print(os.access(site.getsitepackages()[0], os.W_OK))" 2>/dev/null | grep -q "True"; then
-      echo "Installing system-wide (writable site-packages)"
-      python3 -m pip install "$path" --break-system-packages
-    else
-      echo "Installing with --user flag (user site-packages)"
-      python3 -m pip install "$path" --user --break-system-packages
-    fi
+    sudo apt install -y "$path"
   else
     echo "Unknown file type: $file"
   fi
@@ -232,9 +252,8 @@ else
     fi
   fi
 fi
-echo "Using wheel tag: $PY_TAG"
 
-if [[ "$DOWNLOAD_ONLY" != "true" ]]; then
+if [[ "$DOWNLOAD_ONLY" != "true" && "$DRY_RUN" != "true" ]]; then
   KERNEL_VERSION="$(uname -r)"
   echo "Kernel version: $KERNEL_VERSION"
   OFFICIAL_KERNEL_PREFIX="6.5.0"
@@ -256,7 +275,6 @@ fi
 # -------- Build file lists --------
 common_files=(
   "hailort-pcie-driver_${HAILORT_VERSION}_all.deb"
-  "hailo_tappas_core_python_binding-${TAPPAS_CORE_VERSION}-py3-none-any.whl"
 )
 
 ARCH_FILES=()
@@ -280,13 +298,11 @@ case "$ARCH" in
       ARCH_FILES+=("hailo-tappas-core_${TAPPAS_CORE_VERSION}_amd64.deb")
       echo "Using generic AMD64 package (no Ubuntu detection)"
     fi
-    ARCH_FILES+=("hailort-${HAILORT_VERSION}-${PY_TAG}-linux_x86_64.whl")
     ;;
   aarch64|arm64)
     echo "Configuring ARM64 package names..."
     ARCH_FILES+=("hailort_${HAILORT_VERSION}_arm64.deb")
     ARCH_FILES+=("hailo-tappas-core_${TAPPAS_CORE_VERSION}_arm64.deb")
-    ARCH_FILES+=("hailort-${HAILORT_VERSION}-${PY_TAG}-linux_aarch64.whl")
     ;;
   rpi)
     echo "Configuring rpi  package names..."
@@ -297,7 +313,6 @@ case "$ARCH" in
     else
       ARCH_FILES+=("hailo-tappas-core_${TAPPAS_CORE_VERSION}_arm64.deb")
     fi
-    ARCH_FILES+=("hailort-${HAILORT_VERSION}-${PY_TAG}-linux_aarch64.whl")
     ;;
   *)
     echo "Unsupported architecture: $ARCH"
@@ -331,6 +346,12 @@ if ((${#DOWNLOADED_URLS[@]})); then
   echo
 fi
 
+# -------- Exit if dry-run --------
+if [[ "$DRY_RUN" == "true" ]]; then
+  echo "[dry-run] Done. No files were downloaded or installed."
+  exit 0
+fi
+
 # -------- Install (skipped if download-only) --------
 if [[ "$DOWNLOAD_ONLY" == "true" ]]; then
   echo "[download-only] Done. Packages saved under ${TARGET_DIR}"
@@ -341,7 +362,5 @@ echo "Starting installation..."
 install_file "${common_files[0]}"       # PCIe driver
 install_file "${ARCH_FILES[0]}"         # HailoRT deb
 install_file "${ARCH_FILES[1]}"         # Tappas Core deb
-install_file "${common_files[1]}"       # Tappas Core Python bindings (any)
-install_file "${ARCH_FILES[2]}"         # HailoRT wheel
 
 echo "Installation complete."

@@ -4,7 +4,12 @@ from pathlib import Path
 
 import setproctitle
 
-from hailo_apps.python.core.common.core import get_pipeline_parser, get_resource_path
+from hailo_apps.python.core.common.core import (
+    get_pipeline_parser,
+    get_resource_path,
+    handle_list_models_flag,
+    resolve_hef_path,
+)
 from hailo_apps.python.core.common.defines import (
     INSTANCE_SEGMENTATION_APP_TITLE,
     INSTANCE_SEGMENTATION_MODEL_NAME_H8,
@@ -14,11 +19,9 @@ from hailo_apps.python.core.common.defines import (
     INSTANCE_SEGMENTATION_POSTPROCESS_SO_FILENAME,
     JSON_FILE_EXTENSION,
     RESOURCES_JSON_DIR_NAME,
-    RESOURCES_MODELS_DIR_NAME,
     RESOURCES_SO_DIR_NAME,
 )
 
-# Logger
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.gstreamer.gstreamer_app import (
     GStreamerApp,
@@ -47,6 +50,9 @@ class GStreamerInstanceSegmentationApp(GStreamerApp):
     def __init__(self, app_callback, user_data, parser=None):
         if parser is None:
             parser = get_pipeline_parser()
+        
+        # Handle --list-models flag before full initialization
+        handle_list_models_flag(parser, INSTANCE_SEGMENTATION_PIPELINE)
 
         hailo_logger.info("Initializing GStreamer Instance Segmentation App...")
         super().__init__(parser, user_data)
@@ -77,17 +83,13 @@ class GStreamerInstanceSegmentationApp(GStreamerApp):
         # Architecture is already handled by GStreamerApp parent class
         # Use self.arch which is set by parent
 
-        # Set HEF path if not provided via parser
-        if self.hef_path is None:
-            self.hef_path = str(
-                get_resource_path(
-                    pipeline_name=INSTANCE_SEGMENTATION_PIPELINE,
-                    resource_type=RESOURCES_MODELS_DIR_NAME,
-                    arch=self.arch,
-                )
-            )
-        else:
-            self.hef_path = str(self.hef_path)
+        # Resolve HEF path with smart lookup and auto-download
+        resolved_path = resolve_hef_path(
+            self.hef_path,
+            app_name=INSTANCE_SEGMENTATION_PIPELINE,
+            arch=self.arch
+        )
+        self.hef_path = str(resolved_path) if resolved_path else None
         hailo_logger.info("HEF path: %s", self.hef_path)
 
         # Determine which JSON config to use

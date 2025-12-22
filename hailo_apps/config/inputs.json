@@ -1,0 +1,80 @@
+{
+  "resources": {
+    "default": {
+      "images": [
+        {
+          "name": "bus",
+          "description": "Bus with walking people",
+          "path": "https://ultralytics.com/images/bus.jpg"
+        },
+        {
+          "name": "dog_bicycle",
+          "description": "dog and a bicycle outdoor",
+          "path": "https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/images/dog_bicycle.jpg"
+        },
+        {
+          "name": "zidane",
+          "description": "Zidane and Carlo Ancelotti Italian football manager",
+          "path": "https://ultralytics.com/images/zidane.jpg"
+        }
+      ],
+      "videos": [
+        {
+          "name": "cars",
+          "description": "drive in the city",
+          "path": "https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/video/full_mov_slow.mp4"
+        }
+      ]
+    },
+
+    "lane_detection": {
+      "videos": [
+        {
+          "name": "lane_day",
+          "description": "Front camera lane driving (day)",
+          "path": "https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/video/lane_detection.mp4"
+        }
+      ]
+    },
+
+    "paddle_ocr": {
+      "images": [
+        {
+          "name": "ocr_img1",
+          "description": "medicine box showing printed details including GTIN, serial number, expiration date..",
+          "path": "https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/images/ocr_img1.png"
+        },
+        {
+          "name": "ocr_img2",
+          "description": "Medicine box with printed text on the front",
+          "path": "https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/images/ocr_img2.png"
+        }
+      ]
+    },
+    "super_resolution": {
+      "images": [
+        {
+          "name": "tree_branches",
+          "description": "Bare tree branches",
+          "path": "https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/images/tree_branches.png"
+        }
+      ]
+    },
+    "depth_estimation_mono": {
+      "images": [
+        {
+          "name": "apple",
+          "description": "A group of small apples arranged on a flat surface",
+          "path": "https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/images/apple.jpg"
+        }
+      ],
+      "videos": [
+        {
+          "name": "walk_in_office",
+          "description": "People are walking inside an office building",
+          "path": "https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/video/walk_in_room.mp4"
+        }
+      ]
+    }
+  }
+}

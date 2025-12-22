@@ -1,0 +1,118 @@
+# tools/weather/config.yaml
+version: "1.0"
+tool_name: "weather"
+
+persona:
+  role: "Weather Information Assistant"
+  style: "Informative, accurate, helpful"
+  constraints:
+    - "Only use this tool when user explicitly asks about weather"
+    - "Ask for location if not provided"
+    - "Convert relative dates to future_days parameter"
+
+capabilities:
+  - "Get current temperature for any location"
+  - "Provide weather forecasts up to 16 days ahead"
+  - "Include precipitation/rain probability"
+  - "Support worldwide locations"
+
+output_format:
+  tool_call: "XML-wrapped JSON: <tool_call>{...}</tool_call>"
+  direct_response: "Summarize weather clearly"
+  after_tool: "Present temperature and conditions naturally"
+
+tool_instructions: |
+  Use this tool when user asks about weather, temperature, or rain.
+  The function name is 'weather'.
+
+  Parameters:
+  - location: Required. City name or "City, Country" format
+  - future_days: 0=today, 1=tomorrow, 2=in 2 days (default: 0)
+  - include_rain: true to get precipitation data (default: false)
+
+  DEFAULT OPTION: If the user's request is not related to weather, or if you cannot determine the location,
+  set 'default' to true. The tool will automatically generate an appropriate error message.
+
+few_shot_examples:
+  - user: "What's the weather in London?"
+    tool_call:
+      name: "weather"
+      arguments:
+        location: "London"
+
+  - user: "Will it rain tomorrow in Paris?"
+    tool_call:
+      name: "weather"
+      arguments:
+        location: "Paris"
+        future_days: 1
+        include_rain: true
+
+  - user: "What's the temperature in New York?"
+    tool_call:
+      name: "weather"
+      arguments:
+        location: "New York"
+
+  - user: "What's the capital of France?"
+    tool_call:
+      name: "weather"
+      arguments:
+        default: true
+
+  - user: "Will it rain in Tokyo tomorrow?"
+    tool_call:
+      name: "weather"
+      arguments:
+        location: "Tokyo"
+        future_days: 1
+        include_rain: true
+
+  - user: "What's the weather in Berlin, Germany?"
+    tool_call:
+      name: "weather"
+      arguments:
+        location: "Berlin, Germany"
+
+  - user: "What's the weather like?"
+    tool_call:
+      name: "weather"
+      arguments:
+        default: true
+
+  - user: "Tell me the forecast for Madrid in 2 days"
+    tool_call:
+      name: "weather"
+      arguments:
+        location: "Madrid"
+        future_days: 2
+
+  - user: "What's the weather like in Sydney today?"
+    tool_call:
+      name: "weather"
+      arguments:
+        location: "Sydney"
+        future_days: 0
+
+test_cases:
+  - id: "weather_001"
+    input: "What's the temperature in New York?"
+    expected:
+      tool_called: true
+      tool_name: "weather"
+    tags: ["basic", "temperature"]
+    difficulty: "easy"
+
+  - id: "weather_002"
+    input: "Will it rain in Tokyo tomorrow?"
+    expected:
+      tool_called: true
+      tool_name: "weather"
+    tags: ["rain", "forecast"]
+    difficulty: "medium"
+
+metadata:
+  author: "hailo-team"
+  created: "2025-12-11"
+  description: "Weather tool using Open-Meteo API"
+

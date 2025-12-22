@@ -1,4 +1,7 @@
 #!/bin/bash
+# Uninstall all Hailo packages (pip, apt, kernel modules)
+
+set -euo pipefail
 
 echo "Uninstalling Hailo packages..."
 

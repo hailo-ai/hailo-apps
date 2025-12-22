@@ -1,108 +1,88 @@
 #!/usr/bin/env python3
-import argparse
 import os
 import sys
-from loguru import logger
 import queue
 import threading
 from functools import partial
 from types import SimpleNamespace
 import numpy as np
+from pathlib import Path
 
 try:
     from hailo_apps.python.core.tracker.byte_tracker import BYTETracker
     from hailo_apps.python.core.common.hailo_inference import HailoInfer
-    from hailo_apps.python.core.common.toolbox import init_input_source, get_labels, load_json_file, preprocess, visualize, FrameRateTracker
+    from hailo_apps.python.core.common.toolbox import (
+        init_input_source,
+        get_labels,
+        load_json_file,
+        preprocess,
+        visualize,
+        FrameRateTracker,
+        resolve_arch,
+        resolve_input_arg,
+        list_inputs,
+    )
+    from hailo_apps.python.core.common.core import handle_list_models_flag, resolve_hef_path
+    from hailo_apps.python.core.common.parser import get_standalone_parser
+    from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
+    from hailo_apps.python.standalone_apps.object_detection.object_detection_post_process import inference_result_handler
 except ImportError:
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'core')))
+    core_dir = Path(__file__).resolve().parents[2] / "core"
+    sys.path.insert(0, str(core_dir))
     from tracker.byte_tracker import BYTETracker
     from common.hailo_inference import HailoInfer
-    from common.toolbox import init_input_source, get_labels, load_json_file, preprocess, visualize, FrameRateTracker
-from object_detection_post_process import inference_result_handler
+    from common.toolbox import (
+        init_input_source,
+        get_labels,
+        load_json_file,
+        preprocess,
+        visualize,
+        FrameRateTracker,
+        resolve_arch,
+        resolve_input_arg,
+        list_inputs,
+    )
+    from common.core import handle_list_models_flag, resolve_hef_path
+    from common.parser import get_standalone_parser
+    from common.hailo_logger import get_logger, init_logging, level_from_args
+    from object_detection_post_process import inference_result_handler
+
+APP_NAME = Path(__file__).stem
+logger = get_logger(__name__)
 
 
-import argparse
-from pathlib import Path
-
-
-def parse_args() -> argparse.Namespace:
+def parse_args():
     """
     Parse command-line arguments for the detection application.
 
     Returns:
         argparse.Namespace: Parsed CLI arguments.
     """
-    parser = argparse.ArgumentParser(description="Run object detection with optional tracking and performance measurement.")
+    parser = get_standalone_parser()
+    parser.description = "Run object detection with optional tracking and performance measurement."
 
-    parser.add_argument(
-        "-n", "--net",
-        type=str,
-        default="yolov8n.hef",
-        help="Path to the network in HEF format."
-    )
-
-    parser.add_argument(
-        "-i", "--input",
-        type=str,
-        default="bus.jpg",
-        help="Path to the input (image, video, or folder)."
-    )
-
-    parser.add_argument(
-        "-b", "--batch_size",
-        type=int,
-        default=1,
-        help="Number of images per batch."
-    )
-
-    parser.add_argument(
-        "-l", "--labels",
-        type=str,
-        default=str(Path(__file__).parent.parent.parent.parent.parent / "local_resources" / "coco.txt"),
-        help="Path to label file (e.g., coco.txt). If not set, default COCO labels will be used."
-    )
-
-    parser.add_argument(
-        "-s", "--save_stream_output",
-        action="store_true",
-        help="Save the visualized stream output to disk."
-    )
-
-    parser.add_argument(
-        "-o", "--output-dir",
-        type=str,
-        default=None,
-        help="Directory to save result images or video."
-    )
-
-    parser.add_argument(
-        "-r", "--resolution",
-        type=str,
-        choices=["sd", "hd", "fhd"],
-        default="sd",
-        help="(Camera only) Input resolution: 'sd' (640x480), 'hd' (1280x720), or 'fhd' (1920x1080)."
-    )
-
-    parser.add_argument(
-        "--track",
-        action="store_true",
-        help="Enable object tracking across frames."
-    )
-
-    parser.add_argument(
-        "--show-fps",
-        action="store_true",
-        help="Enable FPS measurement and display."
-    )
+    handle_list_models_flag(parser, APP_NAME)
 
     args = parser.parse_args()
 
-    # Validate paths
-    if not os.path.exists(args.net):
-        raise FileNotFoundError(f"Network file not found: {args.net}")
-    if not os.path.exists(args.labels):
-        raise FileNotFoundError(f"Labels file not found: {args.labels}")
+    # Handle --list-inputs and exit
+    if args.list_inputs:
+        list_inputs(APP_NAME)
+        sys.exit(0)
 
+    # Resolve network and input paths
+    args.arch = resolve_arch(args.arch)
+    args.hef_path = resolve_hef_path(
+        hef_path=args.hef_path,
+        app_name=APP_NAME,
+        arch=args.arch,
+    )
+    if args.hef_path is None:
+        logger.error("Failed to resolve HEF path for %s", APP_NAME)
+        sys.exit(1)
+    args.input = resolve_input_arg(APP_NAME, args.input)
+
+    # Setup output directory
     if args.output_dir is None:
         args.output_dir = os.path.join(os.getcwd(), "output")
     os.makedirs(args.output_dir, exist_ok=True)
@@ -143,11 +123,11 @@ def run_inference_pipeline(net, input, batch_size, labels, output_dir,
     height, width, _ = hailo_inference.get_input_shape()
 
     preprocess_thread = threading.Thread(
-        target=preprocess, args=(images, cap, batch_size, input_queue, width, height)
+        target=preprocess, args=(images, cap, None, batch_size, input_queue, width, height)
     )
     postprocess_thread = threading.Thread(
         target=visualize, args=(output_queue, cap, save_stream_output,
-                                output_dir, post_process_callback_fn, fps_tracker)
+                                output_dir, post_process_callback_fn, fps_tracker, None, None)
     )
     infer_thread = threading.Thread(
         target=infer, args=(hailo_inference, input_queue, output_queue)
@@ -246,9 +226,18 @@ def main() -> None:
     Main function to run the script.
     """
     args = parse_args()
-    run_inference_pipeline(args.net, args.input, args.batch_size, args.labels,
-          args.output_dir, args.save_stream_output, args.resolution,
-          args.track, args.show_fps)
+    init_logging(level=level_from_args(args))
+    run_inference_pipeline(
+        args.hef_path,
+        args.input,
+        args.batch_size,
+        args.labels,
+        args.output_dir,
+        args.save_output,
+        args.resolution,
+        args.track,
+        args.show_fps
+    )
 
 
 

@@ -2,261 +2,298 @@
 
 ## Overview
 
-The Hailo Apps Infrastructure test framework is a comprehensive, configuration-driven testing system designed to validate all pipeline applications across different architectures, models, and execution methods. The framework uses three YAML configuration files to control test execution, making it easy to customize which tests run without modifying code:
+The Hailo Apps Infrastructure test framework is a comprehensive, configuration-driven testing system designed to validate the installation, environment, and pipeline applications across different architectures, models, and execution methods.
 
-- **`test_control.yaml`** - Controls what tests to run (test combinations, custom tests, run methods)
-- **`test_definition_config.yaml`** - Defines test suites, app configurations, and test combinations
-- **`resources_config.yaml`** - Defines models and resources for each app and architecture
+The framework consists of three test categories:
+
+| Test File | Purpose | Markers |
+|-----------|---------|---------|
+| `test_sanity_check.py` | Environment & runtime validation | `@pytest.mark.sanity` |
+| `test_installation.py` | Installation & resources validation | `@pytest.mark.installation`, `@pytest.mark.resources` |
+| `test_runner.py` | Pipeline functional tests | N/A |
 
 ## Table of Contents
 
-1. [Architecture](#architecture)
-2. [Configuration File Structure](#configuration-file-structure)
-3. [Configuration Options](#configuration-options)
-4. [Running Tests](#running-tests)
-5. [Test Types](#test-types)
-6. [Logging](#logging)
-7. [Examples](#examples)
-8. [Troubleshooting](#troubleshooting)
+1. [Quick Start](#quick-start)
+2. [Test Categories](#test-categories)
+3. [Running Tests](#running-tests)
+4. [Configuration Files](#configuration-files)
+5. [Test Framework Architecture](#test-framework-architecture)
+6. [Adding New Tests](#adding-new-tests)
+7. [Troubleshooting](#troubleshooting)
 
-## Architecture
+## Quick Start
 
-### Test Framework Components
+### Run All Tests
+
+```bash
+./run_tests.sh
+```
+
+### Run Specific Test Categories
+
+```bash
+# Run only environment sanity checks
+./run_tests.sh --sanity
+
+# Run only installation/resource validation
+./run_tests.sh --install
+
+# Run only pipeline functional tests
+./run_tests.sh --pipelines
+
+# Skip resource download
+./run_tests.sh --no-download
+```
+
+### Run with pytest Directly
+
+```bash
+# Run sanity checks
+pytest tests/test_sanity_check.py -v
+
+# Run installation tests
+pytest tests/test_installation.py -v
+
+# Run pipeline tests
+pytest tests/test_runner.py -v
+
+# Run tests with specific markers
+pytest -m sanity -v
+pytest -m installation -v
+pytest -m "not requires_device" -v
+```
+
+## Test Categories
+
+### 1. Sanity Checks (`test_sanity_check.py`)
+
+Quick environment validation tests that verify the runtime is properly configured **before** running any actual pipeline tests.
+
+**Test Classes:**
+
+| Class | Tests |
+|-------|-------|
+| `TestHailoAppsPackage` | Package import, pip installation |
+| `TestPythonEnvironment` | Python version, critical packages (gi, numpy, opencv, yaml), HailoRT/TAPPAS bindings |
+| `TestHailoRuntime` | hailortcli availability, device detection, architecture validation |
+| `TestGStreamer` | GStreamer installation, critical elements, Hailo elements |
+| `TestEnvironmentConfiguration` | .env file, host arch detection, TAPPAS variant, postproc path |
+| `TestHostArchitectureSpecific` | RPi-specific tests (picamera2, libcamera) |
+
+**Run:**
+```bash
+pytest tests/test_sanity_check.py -v -m sanity
+```
+
+### 2. Installation Tests (`test_installation.py`)
+
+Validates that `hailo-post-install` completed successfully and all resources are properly downloaded and configured.
+
+**Test Classes:**
+
+| Class | Tests |
+|-------|-------|
+| `TestDirectoryStructure` | Resources root, symlink, models/videos/so/json directories |
+| `TestModelFiles` | Default models downloaded, HEF file validity |
+| `TestVideoFiles` | Expected videos downloaded, validity |
+| `TestImageFiles` | Expected images downloaded |
+| `TestJsonConfigFiles` | JSON files downloaded, valid JSON format |
+| `TestPostprocessSoFiles` | SO files compiled (from meson.build), valid ELF |
+| `TestConfigFiles` | resources_config.yaml, meson.build existence |
+| `TestIntegrationSmoke` | Package imports, HEF loading test |
+
+**Dynamic Parsing:**
+- Models, videos, images, JSON files are parsed from `resources_config.yaml`
+- Expected SO files are parsed from `postprocess/cpp/meson.build`
+
+**Run:**
+```bash
+pytest tests/test_installation.py -v -m installation
+```
+
+### 3. Pipeline Tests (`test_runner.py`)
+
+Functional tests that run actual pipeline applications with different configurations.
+
+**Configuration Files:**
+- `test_control.yaml` - Controls what tests to run
+- `test_definition_config.yaml` - Defines test suites and app configurations
+- `resources_config.yaml` - Defines models and resources
+
+**Run:**
+```bash
+pytest tests/test_runner.py -v
+```
+
+## Running Tests
+
+### Using `run_tests.sh`
+
+The `run_tests.sh` script is the recommended way to run tests. It:
+1. Activates the virtual environment
+2. Installs test dependencies
+3. Downloads resources for the **detected architecture only**
+4. Runs tests in order: sanity → installation → pipelines
+
+```bash
+# Run all tests
+./run_tests.sh
+
+# Run only sanity checks
+./run_tests.sh --sanity
+
+# Run only installation tests
+./run_tests.sh --install
+
+# Run only pipeline tests
+./run_tests.sh --pipelines
+
+# Skip resource download
+./run_tests.sh --no-download
+```
+
+**Note:** The script does NOT automatically download hailo8l resources. If you need to test hailo8l models on hailo8 devices, run manually:
+```bash
+python -m hailo_apps.installation.download_resources --arch hailo8l
+```
+
+### Using pytest Directly
+
+```bash
+# Run all sanity tests
+pytest tests/test_sanity_check.py -v
+
+# Run all installation tests
+pytest tests/test_installation.py -v
+
+# Run pipeline tests
+pytest tests/test_runner.py -v
+
+# Run standalone app smoke tests
+pytest tests/test_standalone_runner.py -v
+
+# Run tests with specific markers
+pytest -m sanity -v
+pytest -m installation -v
+pytest -m resources -v
+pytest -m "not requires_device" -v
+
+# Run specific test class
+pytest tests/test_sanity_check.py::TestPythonEnvironment -v
+
+# Run specific test
+pytest tests/test_installation.py::TestModelFiles::test_hef_files_valid -v
+
+# Run with verbose output
+pytest tests/test_sanity_check.py -vv
+
+# Run with output capture disabled
+pytest tests/test_sanity_check.py -v -s
+
+# Stop on first failure
+pytest tests/test_sanity_check.py -x
+```
+
+### Test Markers
+
+The framework defines custom pytest markers:
+
+| Marker | Description |
+|--------|-------------|
+| `@pytest.mark.sanity` | Quick environment sanity checks |
+| `@pytest.mark.installation` | Installation validation tests |
+| `@pytest.mark.resources` | Resource file validation tests |
+| `@pytest.mark.requires_device` | Tests requiring a Hailo device |
+| `@pytest.mark.requires_gstreamer` | Tests requiring GStreamer |
+
+## Configuration Files
+
+### Directory Structure
 
 ```
 tests/
-├── test_control.yaml          # Test execution control (what to run)
-├── test_runner.py             # Main test orchestrator
-├── test_sanity_check.py       # Environment and dependency checks
-├── all_tests.py              # Pipeline-specific test functions
-├── test_utils.py             # Utility functions for test execution
-└── README.md                 # This file
+├── conftest.py                # Shared fixtures and config parsing
+├── test_sanity_check.py       # Environment validation
+├── test_installation.py       # Installation/resource validation
+├── test_runner.py             # Pipeline functional tests
+├── test_control.yaml          # Test execution control
+├── all_tests.py               # Pipeline test functions
+├── test_utils.py              # Test utilities
+├── verify_configs.py          # Configuration verification
+└── README.md                  # This file
 
 hailo_apps/config/
-├── test_definition_config.yaml  # Test definitions (suites, apps, combinations)
-└── resources_config.yaml        # Resources configuration (models, videos, etc.)
+├── test_definition_config.yaml  # Test definitions
+└── resources_config.yaml        # Resources configuration
+
+hailo_apps/postprocess/cpp/
+└── meson.build                  # SO file definitions (parsed for expected SO files)
 ```
 
-### How It Works
+### `test_control.yaml` - Test Execution Control
 
-1. **Initialization** (`test_runner.py`):
-   - Detects host architecture (x86, ARM, RPi)
-   - Detects Hailo device architecture (hailo8, hailo8l, hailo10h)
-   - Sets environment variables if needed
-   - Loads and validates configuration from:
-     - `test_control.yaml` (test execution control)
-     - `test_definition_config.yaml` (test definitions)
-     - `resources_config.yaml` (resources and models)
-
-2. **Configuration Parsing**:
-   - Reads `test_control.yaml` - what to run (test combinations, custom tests)
-   - Reads `test_definition_config.yaml` - available test suites and app definitions
-   - Reads `resources_config.yaml` - models and resources for each app
-   - Merges configurations based on enabled flags
-   - Validates the merged configuration
-
-3. **Test Generation**:
-   - Resolves test selection based on profiles or fine-grained settings
-   - Filters based on detected hardware
-   - Generates test cases as combinations of:
-     - Pipelines × Architectures × Models × Run Methods × Test Suites
-
-4. **Test Execution**:
-   - Each test case runs a pipeline with specific parameters
-   - Tests are executed using pytest parametrization
-   - Results are logged to organized directories
-
-### Data Flow
-
-```
-test_control.yaml + test_definition_config.yaml + resources_config.yaml
-    ↓
-test_runner.py (loads & validates all configs)
-    ↓
-generate_test_cases() (creates test combinations from configs)
-    ↓
-pytest parametrization (executes tests)
-    ↓
-all_tests.py (pipeline-specific functions)
-    ↓
-test_utils.py (execution utilities)
-    ↓
-Log files & Results
-```
-
-## Configuration File Structure
-
-The test framework uses three separate configuration files:
-
-### 1. `test_control.yaml` (Test Execution Control)
-
-This file controls **what to run**. It includes:
-
-- **Control parameters**: Run times, timeouts
-- **Logging configuration**: Log directories and levels
-- **Test combinations**: Predefined test combinations (ci_run, all_extra, all_default)
-- **Custom tests**: Per-app test configuration (test_suite_mode, model_selection)
-- **Run methods**: Enable/disable execution methods (pythonpath, cli, module)
-- **Special tests**: Enable/disable special test categories
-
-### 2. `test_definition_config.yaml` (Test Definitions)
-
-This file contains **all available test options**:
-
-- **App definitions**: All pipelines with their module/script/cli paths
-- **Test suites**: Different test scenarios with their arguments
-- **Test run combinations**: Predefined combinations of apps, test suites, and models
-- **Test suite modes**: default, extra, all
-
-### 3. `resources_config.yaml` (Resources Configuration)
-
-This file defines **models and resources**:
-
-- **App models**: Models for each app per architecture (hailo8, hailo8l, hailo10h)
-- **Model selection**: default, extra, all models
-- **Videos**: Shared video files for all apps
-- **Images**: Shared image files for all apps
-- **JSON files**: Configuration JSON files per app
-
-The framework merges these configurations: `test_control.yaml` decides what to enable from `test_definition_config.yaml`, and `resources_config.yaml` provides the models and resources.
-
-## Configuration Options
-
-### Execution Settings (test_control.yaml)
+Controls **what** to run:
 
 ```yaml
+# Control parameters
 control_parameters:
-  default_run_time: 24              # Default test duration in seconds
-  term_timeout: 10                  # Termination timeout in seconds
-  human_verification_run_time: 48    # Duration for human verification tests
-```
+  default_run_time: 24
+  term_timeout: 10
 
-### Logging Configuration (test_control.yaml)
-
-```yaml
-logging:
-  base_dir: "./logs"                 # Base log directory
-  level: "INFO"                      # Log level (DEBUG, INFO, WARNING, ERROR)
-  format: "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
-  subdirs:
-    per_app:
-      detection:
-        default: "./logs/detection/default"
-        extra: "./logs/detection/extra"
-        all: "./logs/detection/all"
-      # ... more apps
-```
-
-### Test Combinations (test_control.yaml)
-
-Predefined test combinations. Enable one or more:
-
-```yaml
+# Test combinations
 test_combinations:
   ci_run:
-    enabled: false                   # CI/CD test run
-  all_extra:
-    enabled: false                   # All apps with extra models
+    enabled: false
   all_default:
-    enabled: false                   # All apps with default models
-```
+    enabled: false
 
-### Custom Tests (test_control.yaml)
-
-Per-app test configuration:
-
-```yaml
+# Custom per-app tests
 custom_tests:
-  enabled: false                     # Enable custom tests
+  enabled: true
   apps:
     detection:
-      test_suite_mode: "all"         # None | default | extra | all
-      model_selection: "all"         # default | extra | all
+      test_suite_mode: "default"  # None | default | extra | all
+      model_selection: "default"  # default | extra | all
     pose_estimation:
       test_suite_mode: "default"
       model_selection: "default"
-    # ... more apps
-```
 
-### Run Methods (test_control.yaml)
-
-Enable/disable execution methods:
-
-```yaml
+# Run methods
 run_methods:
   pythonpath:
-    enabled: true     # Run script with PYTHONPATH set (primary method)
-    priority: 1
+    enabled: true
   cli:
-    enabled: false    # Run using CLI command (e.g., hailo-detect)
-    priority: 2
+    enabled: false
   module:
-    enabled: false    # Run as Python module: python -m <module>
-    priority: 3
-```
+    enabled: false
 
-### Special Tests (test_control.yaml)
-
-Enable/disable special test categories:
-
-```yaml
+# Special tests
 special_tests:
   h8l_on_h8:
-    enabled: true     # Hailo8L compatibility tests on Hailo8 device
+    enabled: true  # Test h8l models on h8 devices
   sanity_checks:
-    enabled: true     # Environment sanity checks
-  human_verification:
-    enabled: true     # Human verification tests
-  golden_tests:
-    enabled: true     # Golden reference tests
+    enabled: true
 ```
 
-### App Definitions (test_definition_config.yaml)
+### `resources_config.yaml` - Resources Configuration
 
-Each app is defined with:
-
-```yaml
-apps:
-  detection:
-    name: "Object Detection Pipeline"
-    description: "Object Detection Pipeline"
-    module: "hailo_apps.python.pipeline_apps.detection.detection_pipeline"
-    script: "hailo_apps/python/pipeline_apps/detection/detection_pipeline.py"
-    cli: "hailo-detect"
-    default_test_suites:
-      - "basic_show_fps"
-      - "basic_input_video"
-      - "basic_input_usb"
-      - "input_video_with_hef"
-    extra_test_suites:
-      - "input_video_with_labels"
-      - "input_video_hef_labels"
-      # ... more suites
-```
-
-### Test Suites (test_definition_config.yaml)
-
-Test suites define different execution scenarios:
+Defines models and resources (dynamically parsed by tests):
 
 ```yaml
-test_suites:
-  basic_show_fps:
-    description: "Show FPS output"
-    flags: ["--show-fps"]
-  basic_input_video:
-    description: "Use video file as input"
-    flags: ["--input", "${VIDEO_PATH}"]
-  input_video_with_hef:
-    description: "Use video file with HEF path"
-    flags: ["--input", "${VIDEO_PATH}", "--hef-path", "${HEF_PATH}"]
-  # ... more suites
-```
+# Videos (shared)
+videos:
+  - name: example.mp4
+    source: s3
+  - name: face_recognition.mp4
+    source: s3
 
-### Resources Configuration (resources_config.yaml)
+# Images (shared)
+images:
+  - name: dog_bicycle.jpg
+    source: s3
 
-Models and resources are defined per app:
-
-```yaml
+# Per-app models
 detection:
   models:
     hailo8:
@@ -264,419 +301,208 @@ detection:
         name: yolov8m
         source: mz
       extra:
-        - name: yolov5m_wo_spp
-          source: mz
         - name: yolov8s
           source: mz
     hailo8l:
       default:
         name: yolov8s
         source: mz
-      extra:
-        - name: yolov6n
-          source: mz
   json:
     - name: hailo_4_classes.json
       source: s3
+```
 
+### `meson.build` - SO File Definitions
+
+The `postprocess/cpp/meson.build` file is parsed to extract expected `.so` files:
+
+```meson
+shared_library('yolo_hailortpp_postprocess', ...)
+shared_library('depth_postprocess', ...)
+# Results in expected: libyolo_hailortpp_postprocess.so, libdepth_postprocess.so, etc.
+```
+
+## Test Framework Architecture
+
+### Data Flow
+
+```
+                    ┌─────────────────────────┐
+                    │   resources_config.yaml │
+                    │   (models, videos, etc) │
+                    └───────────┬─────────────┘
+                                │
+                    ┌───────────▼─────────────┐
+                    │      conftest.py        │
+                    │ (parse_resources_config)│
+                    │ (parse_meson_shared_   │
+                    │   libraries)            │
+                    └───────────┬─────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        │                       │                       │
+        ▼                       ▼                       ▼
+┌───────────────┐    ┌───────────────────┐    ┌───────────────┐
+│test_sanity_   │    │test_installation. │    │test_runner.py │
+│check.py       │    │py                 │    │(pipelines)    │
+│               │    │                   │    │               │
+│• Environment  │    │• Directory struct │    │• Functional   │
+│• Packages     │    │• Models exist     │    │  tests        │
+│• GStreamer    │    │• Videos exist     │    │• All apps     │
+│• Hailo SDK    │    │• SO files valid   │    │               │
+└───────────────┘    └───────────────────┘    └───────────────┘
+```
+
+### Shared Fixtures (conftest.py)
+
+The `conftest.py` file provides:
+
+- **Configuration Parsing:**
+  - `parse_resources_config()` - Parses resources_config.yaml
+  - `parse_meson_shared_libraries()` - Parses meson.build for SO files
+
+- **Fixtures:**
+  - `resources_config` - Parsed resources configuration
+  - `expected_videos` - List of expected video files
+  - `expected_images` - List of expected image files
+  - `expected_so_files` - List of expected SO files
+  - `expected_models_for_arch` - Expected models for detected architecture
+  - `expected_json_files` - Expected JSON files
+  - `detected_hailo_arch` - Detected Hailo architecture (or None)
+  - `detected_host_arch` - Detected host architecture
+  - `resources_root_path` - Path to resources root
+  - `dotenv_path` - Path to .env file
+
+## Adding New Tests
+
+### Adding a Sanity Check
+
+Add to `test_sanity_check.py`:
+
+```python
+@pytest.mark.sanity
+class TestMyNewCheck:
+    def test_my_feature(self):
+        """Description of what this tests."""
+        # Test implementation
+        assert condition, "Error message"
+```
+
+### Adding an Installation Test
+
+Add to `test_installation.py`:
+
+```python
+@pytest.mark.installation
+class TestMyNewResourceCheck:
+    def test_my_resource_exists(self, resources_root_path):
+        """Verify my resource exists."""
+        resource_path = resources_root_path / "my_resource"
+        assert resource_path.exists(), f"Resource missing: {resource_path}"
+```
+
+### Adding Resources to Validation
+
+Resources are automatically validated by adding them to `resources_config.yaml`:
+
+```yaml
+# Add a new video
 videos:
-  - name: example.mp4
+  - name: my_new_video.mp4
     source: s3
-  - name: example_640.mp4
-    source: s3
-```
 
-### Placeholders
-
-The following placeholders are automatically replaced in test suite arguments:
-
-- `${RESOURCES_ROOT}` - Replaced with `/usr/local/hailo/resources` (or configured path)
-- `${HEF_PATH}` - Replaced with actual HEF file path
-- `${HAILO_ARCH}` - Replaced with detected Hailo architecture
-- `${HOST_ARCH}` - Replaced with detected host architecture
-
-### Sanity Checks Configuration
-
-Sanity checks can optionally use `test_config.yaml` (if it exists) for configuration, but will use defaults if not found. The sanity check now uses `resources_config.yaml` to determine expected resources.
-
-## Running Tests
-
-### Basic Usage
-
-1. **Edit `tests/test_control.yaml`** to configure what tests to run:
-   - Enable a test combination (e.g., `test_combinations.ci_run.enabled: true`), OR
-   - Enable custom tests (`custom_tests.enabled: true`) and configure per-app settings
-2. **Run the test runner**:
-   ```bash
-   pytest tests/test_runner.py -v
-   ```
-
-### Running Specific Test Files
-
-```bash
-# Run sanity checks only
-pytest tests/test_sanity_check.py -v
-
-# Run all tests in tests directory
-pytest tests/ -v
-
-# Run with more verbose output
-pytest tests/test_runner.py -vv
-
-# Run with output capture disabled (see print statements)
-pytest tests/test_runner.py -v -s
-```
-
-### Using pytest Options
-
-```bash
-# Run specific test by name pattern
-pytest tests/test_runner.py -k "detection" -v
-
-# Run tests and stop on first failure
-pytest tests/test_runner.py -x
-
-# Run tests with coverage
-pytest tests/test_runner.py --cov=hailo_apps --cov-report=html
-
-# Run tests in parallel (if pytest-xdist installed)
-pytest tests/test_runner.py -n auto
-```
-
-## Test Types
-
-### 1. Pipeline Tests
-
-Tests each pipeline with each model on each architecture using each run method.
-
-**Generated from**: Enabled pipelines × Architectures × Models × Run Methods × Test Suites
-
-**Example test case**: `detection_hailo8_yolov8m_cli_default`
-
-**What it tests**:
-- Pipeline can be executed
-- No critical errors occur
-- Pipeline runs for the configured duration
-- Proper termination
-
-### 2. Sanity Check Tests
-
-Validates the test environment before running pipeline tests.
-
-**Tests**:
-- Hailo runtime installation
-- Resource directory existence
-- Python environment and packages
-- GStreamer installation and plugins
-- Hailo GStreamer elements
-- Architecture-specific environment
-- Package installation
-- Environment variables
-
-**Run separately**:
-```bash
-pytest tests/test_sanity_check.py -v
-```
-
-### 3. Hailo8L on Hailo8 Tests
-
-Tests Hailo8L models running on Hailo8 devices (compatibility testing).
-
-**Configuration**: `hailo8l_on_hailo8_tests` section
-
-**When enabled**: Set `special_tests.hailo8l_on_hailo8: true`
-
-### 4. Human Verification Tests
-
-Tests that run for 25 seconds to allow human visual verification of output.
-
-**Configuration**: `human_verification` section
-
-**When enabled**: Set `special_tests.human_verification: true` or use `test_profiles.human_verification.enabled: true`
-
-### 5. Retraining Tests
-
-Tests the retraining pipeline functionality.
-
-**Configuration**: `retraining` section
-
-**When enabled**: Set `special_tests.retraining: true` or use `test_profiles.retraining.enabled: true`
-
-## Logging
-
-### Log File Organization
-
-Log files are organized by test type in subdirectories:
-
-```
-logs/
-├── detection_hailo8_yolov8m_cli_default.log
-├── detection_hailo8_yolov8m_module_video_file.log
-├── hef_tests/
-│   └── ...
-├── h8l_on_h8_tests/
-│   └── ...
-├── h8l_on_h8_comprehensive/
-│   └── ...
-└── human_verification/
-    └── ...
-```
-
-### Log File Naming
-
-Log files are named using the pattern:
-```
-{pipeline}_{architecture}_{model}_{run_method}_{test_suite}.log
-```
-
-Example: `detection_hailo8_yolov8m_cli_video_file.log`
-
-### Log Content
-
-Each log file contains:
-- Command executed
-- Standard output from the pipeline
-- Standard error from the pipeline
-- Execution duration
-- Termination status
-
-## Examples
-
-### Example 1: Enable Custom Tests for Detection
-
-Edit `test_control.yaml`:
-
-```yaml
-custom_tests:
-  enabled: true
-  apps:
-    detection:
-      test_suite_mode: "default"  # Run default test suites
-      model_selection: "default"  # Use default models
-```
-
-Then run:
-```bash
-pytest tests/test_runner.py -v
-```
-
-### Example 2: Enable Test Combination
-
-Edit `test_control.yaml`:
-
-```yaml
-test_combinations:
-  all_default:
-    enabled: true  # Run all apps with default models and test suites
-```
-
-### Example 3: Custom Tests for Multiple Apps
-
-Edit `test_control.yaml`:
-
-```yaml
-custom_tests:
-  enabled: true
-  apps:
-    detection:
-      test_suite_mode: "all"      # All test suites
-      model_selection: "default"  # Default models only
-    pose_estimation:
-      test_suite_mode: "default"
-      model_selection: "extra"    # Extra models only
-```
-
-### Example 4: Enable Specific Run Method
-
-Edit `test_control.yaml`:
-
-```yaml
-run_methods:
-  pythonpath:
-    enabled: true
-  cli:
-    enabled: true   # Also enable CLI method
-  module:
-    enabled: false
-```
-
-### Example 7: Run Sanity Checks Before Tests
-
-```bash
-# First, run sanity checks
-pytest tests/test_sanity_check.py -v
-
-# Then, if sanity checks pass, run pipeline tests
-pytest tests/test_runner.py -v
-```
-
-## Troubleshooting
-
-### No Tests Generated
-
-**Problem**: pytest reports no tests collected.
-
-**Solutions**:
-1. Check that at least one test profile is enabled OR `test_selection` is configured
-2. Verify pipelines are enabled in `enabled_pipelines`
-3. Check that models are configured for the selected architectures
-4. Ensure run methods are enabled in `enabled_run_methods`
-
-### Tests Skipped
-
-**Problem**: Tests are being skipped.
-
-**Solutions**:
-1. Verify the detected Hailo architecture matches selected architectures
-2. Check that required models exist in the resources directory
-3. Ensure test suites are properly configured
-4. Check for skip conditions in test code
-
-### Configuration Errors
-
-**Problem**: Configuration validation fails.
-
-**Solutions**:
-1. Validate YAML syntax in all three config files:
-   - `tests/test_control.yaml`
-   - `hailo_apps/config/test_definition_config.yaml`
-   - `hailo_apps/config/resources_config.yaml`
-2. Run `python tests/verify_configs.py` to verify all configs can be loaded
-3. Check that all required sections exist
-4. Verify app names match between config files
-5. Ensure indentation is correct (YAML is sensitive to indentation)
-
-### Missing Resources
-
-**Problem**: Tests fail due to missing resources.
-
-**Solutions**:
-1. Run sanity checks: `pytest tests/test_sanity_check.py -v`
-2. Check `required_resources` in `sanity_checks` section
-3. Verify resource paths in `resources` section
-4. Ensure resources are downloaded/installed
-
-### Import Errors
-
-**Problem**: Import errors when running tests.
-
-**Solutions**:
-1. Ensure the package is installed: `pip install -e .`
-2. Check Python path is set correctly
-3. Verify all dependencies are installed
-4. Run sanity checks to verify environment
-
-### Architecture Mismatch
-
-**Problem**: Tests fail because detected architecture doesn't match selection.
-
-**Solutions**:
-1. Check detected architecture in test output
-2. Update `test_selection.architectures` to match detected architecture
-3. For Hailo8 devices, enable `hailo8l_on_hailo8` special test if testing Hailo8L models
-
-### Log Files Not Created
-
-**Problem**: Log files are not being created.
-
-**Solutions**:
-1. Check log directory permissions
-2. Verify `logging.base_dir` in configuration
-3. Ensure directory exists or can be created
-4. Check disk space
-
-## Advanced Usage
-
-### Custom Test Suites
-
-Add custom test suites to `test_definition_config.yaml`:
-
-```yaml
-test_suites:
-  my_custom_suite:
-    description: "My custom test scenario"
-    flags: ["--input", "usb", "--show-fps", "--disable-sync"]
-```
-
-Then reference it in an app's `default_test_suites` or `extra_test_suites` in `test_definition_config.yaml`.
-
-### Adding New Pipelines
-
-1. Add app definition to `test_definition_config.yaml`:
-```yaml
-apps:
-  my_new_pipeline:
-    name: "My New Pipeline"
-    description: "My New Pipeline"
-    module: "hailo_apps.python.pipeline_apps.my_new_pipeline.pipeline"
-    script: "hailo_apps/python/pipeline_apps/my_new_pipeline/pipeline.py"
-    cli: "hailo-my-new-pipeline"
-    default_test_suites:
-      - "basic_show_fps"
-      - "basic_input_video"
-    extra_test_suites:
-      - "input_video_with_hef"
-```
-
-2. Add models to `resources_config.yaml`:
-```yaml
-my_new_pipeline:
+# Add a new app with models
+my_new_app:
   models:
     hailo8:
       default:
-        name: model1
+        name: my_model
         source: mz
-      extra:
-        - name: model2
-          source: mz
+  json:
+    - name: my_config.json
+      source: s3
 ```
 
-3. Add test function to `all_tests.py`:
-```python
-def run_my_new_pipeline_test(...):
-    # Implementation
+### Adding SO Files to Validation
+
+Add `shared_library()` calls to `postprocess/cpp/meson.build`:
+
+```meson
+shared_library('my_postprocess',
+    my_postprocess_sources,
+    dependencies : postprocess_dep,
+    gnu_symbol_visibility : 'default',
+    install: true,
+    install_dir: '/usr/local/hailo/resources/so',
+)
 ```
 
-4. Add to `PIPELINE_TEST_FUNCTIONS` mapping in `all_tests.py`
+The test framework will automatically expect `libmy_postprocess.so`.
 
-5. Enable in `test_control.yaml` under `custom_tests.apps` or in a test combination
+## Troubleshooting
 
-### Environment Variables
+### No Tests Collected
 
-The test runner automatically sets:
-- `HOST_ARCH`: Detected host architecture
-- `HAILO_ARCH`: Detected Hailo architecture
+**Problem:** pytest reports no tests collected.
 
-These are written to `.env` file if not already present.
+**Solutions:**
+1. Check pytest markers are correct
+2. Verify test class/function names start with `test_` or `Test`
+3. Ensure `conftest.py` is in the tests directory
+
+### Import Errors
+
+**Problem:** Import errors when running tests.
+
+**Solutions:**
+1. Ensure package is installed: `pip install -e .`
+2. Activate virtual environment: `source setup_env.sh`
+3. Run sanity checks: `pytest tests/test_sanity_check.py -v`
+
+### Missing Resources
+
+**Problem:** Tests fail due to missing resources.
+
+**Solutions:**
+1. Run: `python -m hailo_apps.installation.download_resources`
+2. Check internet connection
+3. Verify `resources_config.yaml` has correct entries
+
+### Device Not Detected
+
+**Problem:** Hailo device not detected, tests skipped.
+
+**Solutions:**
+1. Check device connection: `hailortcli fw-control identify`
+2. Verify HailoRT is installed
+3. Check device permissions
+
+### Verification Script
+
+Run the verification script to check all configurations:
+
+```bash
+python tests/verify_configs.py
+```
+
+This will validate:
+- All configuration files can be loaded
+- Test combinations match between files
+- All referenced test suites exist
+- All apps are properly defined
 
 ## Best Practices
 
-1. **Run sanity checks first**: Always run `test_sanity_check.py` before pipeline tests
-2. **Start with quick profile**: Use `quick` profile for initial validation
-3. **Use specific selections**: For CI/CD, use fine-grained `test_selection` instead of profiles
-4. **Check logs**: Review log files when tests fail
-5. **Validate config**: Ensure YAML syntax is correct before running tests
-6. **Resource management**: Ensure sufficient disk space for log files
-7. **Architecture awareness**: Be aware of which architectures your device supports
-
-## Contributing
-
-When adding new tests or modifying the test framework:
-
-1. Update configuration files:
-   - `test_control.yaml` - Add test combinations or custom test configs
-   - `test_definition_config.yaml` - Add app definitions or test suites
-   - `resources_config.yaml` - Add models and resources
-2. Add test functions to `all_tests.py` if needed
-3. Update utility functions in `test_utils.py` if needed
-4. Update this README with new features
-5. Run `python tests/verify_configs.py` to verify configurations
+1. **Run sanity checks first:** Always run `test_sanity_check.py` before other tests
+2. **Check installation:** Run `test_installation.py` to verify resources before pipeline tests
+3. **Use markers:** Use `-m` to run specific test categories
+4. **Review logs:** Check `tests/tests_logs/` for detailed output
+5. **Validate config:** Run `verify_configs.py` after config changes
 
 ## See Also
 
 - `test_control.yaml` - Test execution control configuration
 - `test_definition_config.yaml` - Test definitions and app configurations
 - `resources_config.yaml` - Resources and models configuration
-- `verify_configs.py` - Script to verify all configuration files
-- `TEST_FRAMEWORK_DOCUMENTATION.md` - Additional test framework documentation
-
+- `verify_configs.py` - Configuration verification script
+- `TEST_FRAMEWORK_DOCUMENTATION.md` - Additional detailed documentation

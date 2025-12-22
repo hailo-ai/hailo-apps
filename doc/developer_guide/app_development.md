@@ -23,7 +23,7 @@ The framework provides many specialized GStreamer elements.
 <summary><strong>Click to see the list of Core Tappas Elements</strong></summary>
 
 *   **AI/ML Processing Elements**
-    *   **[HailoNet](https://github.com/hailo-ai/tappas/blob/master/docs/elements/hailo_net.rst)**: Runs neural network inference on input video frames using a Hailo device.(This element is relased as part of HailoRT)
+    *   **[HailoNet](https://github.com/hailo-ai/tappas/blob/master/docs/elements/hailo_net.rst)**: Runs neural network inference on input video frames using a Hailo device.(This element is released as part of HailoRT)
     *   **[HailoFilter](https://github.com/hailo-ai/tappas/blob/master/docs/elements/hailo_filter.rst)**: Applies
     C++ post-processing functions to the raw output from `HailoNet`, converting it into structured data like
     detection objects.
@@ -49,10 +49,14 @@ The framework provides many specialized GStreamer elements.
 
 </details>
 
+### Debugging Tools
+For optimizing and debugging your GStreamer pipelines, we recommend using **GstShark**. It allows you to visualize queue levels, latency, and framerate to identify bottlenecks.
+See our [GstShark Debugging Guide](debugging_with_gst_shark.md) for installation and usage instructions.
+
 ### Level 3: Hailo Apps Python Layer
 This layer is developed in this repository to simplify the process of building and running applications on top of the GStreamer and TAPPAS foundation. It consists of three main components:
 *   **The Application Runner (`gstreamer_app.py`)**: This component features the `GStreamerApp` class, which serves as the core engine of the application. It is responsible for managing the pipeline's lifecycle, handling bus messages (such as errors or End-Of-Stream), and integrating your Python callback functions.
-*   **The Pipeline Factory (`gstreamer_helper_pipelines.py`)**: This module provides a set of Python functions that facilitate the creation of GStreamer pipeline strings in a modular and easily understandable manner.
+*   **The Pipeline Factory (`gstreamer_helper_pipelines.py`)**: This module provides a set of Python functions that facilitate the creation of GStreamer pipeline strings in a modular and easily understandable manner. For a comprehensive reference of all available helper functions, see the [GStreamer Helper Pipelines Reference](./gstreamer_helper_pipelines.md).
 *   **Hailo Pipelines**: These are pre-configured, ready-to-use AI pipelines that leverage the helper functions from the factory to form complete, executable applications for common scenarios like object detection or pose estimation. You can connect to their outputs with a simple callback, allowing you to easily integrate custom logic or processing steps.
 For example, `hailo_apps/python/pipeline_apps/detection/detection_pipeline.py`.
 
@@ -66,7 +70,7 @@ We suggest using one of our example callback applications, such as `hailo_apps/p
 The GStreamer pipeline handles all complex tasks, including video decoding, inference, and rendering. Your Python **callback** function is invoked for each frame processed by the pipeline, receiving both the video frame and the AI metadata.
 
 1.  **Data Production**: The pipeline processes a video frame, and the C++ post-processing library generates structured metadata (containing detections, etc.).
-2.  **Callback Invocation**: An `identity` element in the pipeline intercepts the GStreamer buffer and triggers your Python function, passing the metadata object to it.
+2.  **Callback Invocation**: An `identity` element in the pipeline intercepts the GStreamer buffer and triggers your Python function via the `handoff` signal, passing the element, buffer, and user data.
 3.  **Your Custom Logic**: Within your callback, you parse the metadata and perform any necessary actions.
 
 > **IMPORTANT**: The callback function must be non-blocking. Long-running tasks should be dispatched to a separate thread or process to prevent stalling the video pipeline.
@@ -76,7 +80,9 @@ The GStreamer pipeline handles all complex tasks, including video decoding, infe
 A user application script typically has three parts: an optional custom data class, a callback function, and a main execution block.
 
 #### 1. (Optional) Create a Custom Data Class
-This class lets you keep track of information between frames, such as the total number of people detected and the number of frames processed. By inheriting from `app_callback_class`, you can also use built-in features like frame counting. You can add any attributes you want to store custom statistics or state.
+This class lets you keep track of information between frames, such as the total number of people detected and the number of frames processed. By inheriting from `app_callback_class`, you get built-in features like automatic frame counting (via `get_count()`). You can add any attributes you want to store custom statistics or state.
+
+> **Note**: Frame counting is handled automatically by the framework. You do NOT need to call `user_data.increment()` in your callback - the framework wraps your callback function and handles this for you. Simply use `user_data.get_count()` to access the current frame number.
 
 ```python
 from hailo_apps.python.core.gstreamer.gstreamer_app import app_callback_class
@@ -98,11 +104,11 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gst
 import hailo
 
-def app_callback(pad, info, user_data):
+def app_callback(element, buffer, user_data):
     user_data.increment()  # Count the number of frames
-    buffer = info.get_buffer()  # Get the GstBuffer from the probe info
+    # buffer is passed directly
     if buffer is None:
-        return Gst.PadProbeReturn.OK
+        return
     detections = hailo.get_roi_from_buffer(buffer).get_objects_typed(hailo.HAILO_DETECTION)
     people_count = 0
     for det in detections:
@@ -124,18 +130,18 @@ def app_callback(pad, info, user_data):
             "Detection: " + detection.get_label() + " Confidence: " + str(round(detection.get_confidence(), 2)) + "\n"
         )
     print(string_to_print)
-    return Gst.PadProbeReturn.OK
+    return
 ```
 
 #### 3. Write the Main Execution Block
 This part ties everything together. It creates an instance of your callback class, sets up the detection pipeline, and starts the application. This is the entry point of your script.
 
 ```python
-from hailo_apps.python.pipeline_apps.detection_simple.detection_pipeline_simple import GStreamerDetectionApp
+from hailo_apps.python.pipeline_apps.detection_simple.detection_simple_pipeline import GStreamerDetectionSimpleApp
 
 if __name__ == "__main__":
     user_data = user_app_callback_class()
-    app = GStreamerDetectionApp(app_callback, user_data)
+    app = GStreamerDetectionSimpleApp(app_callback, user_data)
     app.run()
 ```
 
@@ -148,7 +154,7 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gst
 import hailo
 from hailo_apps.python.core.gstreamer.gstreamer_app import app_callback_class
-from hailo_apps.python.pipeline_apps.detection_simple.detection_pipeline_simple import GStreamerDetectionApp
+from hailo_apps.python.pipeline_apps.detection_simple.detection_simple_pipeline import GStreamerDetectionSimpleApp
 
 class user_app_callback_class(app_callback_class):
     def __init__(self):
@@ -157,7 +163,7 @@ class user_app_callback_class(app_callback_class):
         self.total_frames = 0
 
 def app_callback(pad, info, user_data):
-    user_data.increment()
+    # Note: Frame counting is handled automatically by the framework wrapper
     buffer = info.get_buffer()
     if buffer is None:
         return Gst.PadProbeReturn.OK
@@ -186,7 +192,7 @@ def app_callback(pad, info, user_data):
 
 if __name__ == "__main__":
     user_data = user_app_callback_class()
-    app = GStreamerDetectionApp(app_callback, user_data)
+    app = GStreamerDetectionSimpleApp(app_callback, user_data)
     app.run()
 ```
 
@@ -222,17 +228,17 @@ The process is straightforward:
 
 ### Example: Building a Simple Detection Pipeline
 
-Here is a simplified example based on `detection_pipeline_simple.py` that illustrates the concept:
+Here is a simplified example based on `detection_simple_pipeline.py` that illustrates the concept:
 
 ```python
 # Import necessary classes and pipeline helpers
-from hailo_apps.hailo_gstreamer.gstreamer_app import GStreamerApp
-from hailo_apps.hailo_gstreamer.gstreamer_helper_pipelines import (
+from hailo_apps.python.core.gstreamer.gstreamer_app import GStreamerApp
+from hailo_apps.python.core.gstreamer.gstreamer_helper_pipelines import (
     SOURCE_PIPELINE, INFERENCE_PIPELINE, DISPLAY_PIPELINE
 )
 
 # 1. Create a class that inherits from GStreamerApp
-class GStreamerDetectionApp(GStreamerApp):
+class MyCustomPipelineApp(GStreamerApp):
     def __init__(self, args, user_data):
         # Call the parent constructor
         super().__init__(args, user_data)
@@ -257,10 +263,12 @@ class GStreamerDetectionApp(GStreamerApp):
 # 3. Run the application
 if __name__ == "__main__":
     # app_callback and user_data are for the basic path; can be simple for this case
-    app = GStreamerDetectionApp(app_callback=dummy_callback, user_data=app_callback_class())
+    app = MyCustomPipelineApp(app_callback=dummy_callback, user_data=app_callback_class())
     app.run()
 ```
 You have full control to reorder, remove, or add new GStreamer elements in the string returned by `get_pipeline_string` to create your desired data flow.
+
+> **Note**: For detailed information about all available helper functions and their parameters, see the [GStreamer Helper Pipelines Reference](./gstreamer_helper_pipelines.md).
 
 ### Common Architectural Patterns
 The following patterns are examples for commonly used pipeline architectures. Most common patterns are already implemented in the GStreamerHelperPipelines.
@@ -271,11 +279,11 @@ It is highly recommended to use the helper functions to build your pipeline, but
 
 ```mermaid
 flowchart LR
-    A[Source] --> B[Video convertion] --> C[hailonet] --> D[hailofilter] --> E[hailooverlay] --> F[Display]
+    A[Source] --> B[Video conversion] --> C[hailonet] --> D[hailofilter] --> E[hailooverlay] --> F[Display]
 ```
 A high level code example for building this pipeline using the helper functions:
 ```python
-from hailo_apps.hailo_gstreamer.gstreamer_helper_pipelines import (
+from hailo_apps.python.core.gstreamer.gstreamer_helper_pipelines import (
     SOURCE_PIPELINE, INFERENCE_PIPELINE, DISPLAY_PIPELINE
 )
 
@@ -285,6 +293,8 @@ pipeline_string = (
     f"{DISPLAY_PIPELINE()}"
 )
 ```
+
+> **See also**: For complete examples and detailed function documentation, refer to the [GStreamer Helper Pipelines Reference](./gstreamer_helper_pipelines.md#complete-pipeline-examples).
 
 #### 2. Wrapped Inference for Resolution Preservation
 **Use case:** Run inference on a scaled-down version of the video for performance, but display the original high-res video with overlays.
@@ -304,7 +314,7 @@ flowchart LR
 
 A high level code example for building this pipeline using the helper functions:
 ```python
-from hailo_apps.hailo_gstreamer.gstreamer_helper_pipelines import (
+from hailo_apps.python.core.gstreamer.gstreamer_helper_pipelines import (
     SOURCE_PIPELINE, INFERENCE_PIPELINE, INFERENCE_PIPELINE_WRAPPER, DISPLAY_PIPELINE
 )
 
@@ -316,6 +326,8 @@ pipeline_string = (
     f"{DISPLAY_PIPELINE()}"
 )
 ```
+
+> **See also**: For detailed documentation on `INFERENCE_PIPELINE_WRAPPER`, see the [GStreamer Helper Pipelines Reference](./gstreamer_helper_pipelines.md#inference-pipeline-functions).
 
 
 #### 3. Cascaded Networks Pipeline
@@ -338,7 +350,7 @@ A high level code example for building this pipeline using the helper functions.
 Note that the `CROPPER_PIPELINE` is a helper function that is used to crop the detections from the first network and pass them to the second network. You can control the cropper by passing a custom C++ function to it.
 
 ```python
-from hailo_apps.hailo_gstreamer.gstreamer_helper_pipelines import (
+from hailo_apps.python.core.gstreamer.gstreamer_helper_pipelines import (
     SOURCE_PIPELINE, INFERENCE_PIPELINE, CROPPER_PIPELINE, DISPLAY_PIPELINE
 )
 
@@ -350,6 +362,8 @@ pipeline_string = (
     f"{first_infer} ! {cropper} ! {DISPLAY_PIPELINE()}"
 )
 ```
+
+> **See also**: For detailed documentation on `CROPPER_PIPELINE` and its parameters, see the [GStreamer Helper Pipelines Reference](./gstreamer_helper_pipelines.md#cropping-and-tiling-functions).
 
 #### 4. Parallel Networks Pipeline
 **Use case:** Run multiple models in parallel on the same input stream and combine their results.
@@ -365,7 +379,7 @@ flowchart TD
 A high level code example for building this pipeline using the helper functions.
 
 ```python
-from hailo_apps.hailo_gstreamer.gstreamer_helper_pipelines import (
+from hailo_apps.python.core.gstreamer.gstreamer_helper_pipelines import (
     SOURCE_PIPELINE, INFERENCE_PIPELINE, DISPLAY_PIPELINE
 )
 
@@ -376,14 +390,14 @@ pipeline_string = (
     f"m. ! {DISPLAY_PIPELINE()}"
 )
 ```
+
 #### 5. Tiled Inference Pipeline
 **Use case:** Split a high-res frame into tiles, run inference on each, and aggregate results for display.
-Gstreamer helper functions and examples will be added soon.
 
 ```mermaid
 flowchart LR
     A[Source] --> C
-    subgraph INFERENCE_PIPELINE_WRAP
+    subgraph TILE_CROPPER_PIPELINE
         C[hailotilecropper]
         C -- Tile --> I[Inner Pipeline]
         C -- Original Frame --> Q[Queue]
@@ -392,11 +406,34 @@ flowchart LR
     end
     AGG -- Original Frame with AI Metadata --> F[hailooverlay] --> G[Display]
 ```
+
+A high level code example for building this pipeline using the helper functions:
+
+```python
+from hailo_apps.python.core.gstreamer.gstreamer_helper_pipelines import (
+    SOURCE_PIPELINE, INFERENCE_PIPELINE, TILE_CROPPER_PIPELINE, DISPLAY_PIPELINE
+)
+
+tile_inference = INFERENCE_PIPELINE(hef_path='model.hef', post_process_so='post.so')
+tile_cropper = TILE_CROPPER_PIPELINE(
+    inner_pipeline=tile_inference,
+    tiles_along_x_axis=4,
+    tiles_along_y_axis=3,
+    overlap_x_axis=0.1
+)
+pipeline_string = (
+    f"{SOURCE_PIPELINE(video_source='input.mp4')} ! "
+    f"{tile_cropper} ! {DISPLAY_PIPELINE()}"
+)
+```
+
+> **See also**: For detailed documentation on `TILE_CROPPER_PIPELINE` and its parameters, see the [GStreamer Helper Pipelines Reference](./gstreamer_helper_pipelines.md#tile_cropper_pipeline).
+
 ## Additional Topics
 ### Retraining your own models
 See [Retraining your own models](retraining_example.md) for more information.
 
-### Bring you own models
+### Bring Your Own Models
 Compiling your own models is out of the scope of this repository.
 See our [hailo_model_zoo](https://github.com/hailo-ai/hailo_model_zoo) for additional supported models.
 For adding your own models, see our Data Flow Compiler (DFC) documentation in [Hailo Developer Zone (Requires registration)](https://developer.hailo.ai/docs/hailo-data-flow-compiler) for more information.

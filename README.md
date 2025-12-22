@@ -1,124 +1,224 @@
 ![Hailo Applications Infrastructure](doc/images/github_applications_infrastructure.png)
 
 # Hailo Applications
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hailo-ai/hailo-apps-infra)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hailo-ai/hailo-apps)
 
-Welcome to the Hailo Applications repository! This project provides a foundational infrastructure, reusable components, and practical examples for building and deploying high-performance AI applications using Hailo hardware accelerators.
+Build and deploy high-performance AI applications on edge devices with Hailo hardware accelerators. From real-time computer vision to **GenAI voice-to-action agents** - production-ready applications and reusable infrastructure to accelerate your AI development.
 
+**Highlight:** Voice-to-action AI agents that understand natural language commands and control hardware in real-time - elevators, servos, LEDs, and more.
 
-This repository is designed for both x86_64 Ubuntu systems and Raspberry Pi 5, with a special focus on Raspberry Pi 5, including integration with RPi cameras and GPIO-based applications.
+**Supports:** Hailo-8, Hailo-8L, and Hailo-10H accelerators
 
-- **Ready-to-use AI pipelines** for object detection, pose estimation, and more.
-- **Modular infrastructure** for rapid development and custom applications.
-- **Packaged as a Python library** for easy integration into your own projects.
+**Perfect for:** Raspberry Pi 5, x86_64 Ubuntu systems, and edge AI deployments.
 
-Visit the [Hailo Official Website](https://hailo.ai/) and [Hailo Community Forum](https://community.hailo.ai/) for more information.
+## What You Get
 
-## Getting Started
+✨ **20+ Ready-to-Run Applications**
+- **🎯 GenAI - Voice to Action (Featured):** AI agents that convert natural language into hardware control - talk to your devices and make things happen
+- **Computer Vision:** Object detection, pose estimation, instance segmentation, face recognition, depth estimation, OCR
+- **More GenAI:** Voice assistants, VLM chat, speech recognition (Whisper)
+- **Advanced:** Multi-camera tracking, zero-shot classification (CLIP), tiling for high-res processing
 
+🚀 **Production-Ready Infrastructure**
+- GStreamer-based pipelines for efficient video processing
+- Modular Python library for rapid prototyping
+- Hardware-optimized performance with Hailo accelerators
 
-### Hardware and Software Installation
+🛠️ **Developer-Friendly**
+- Install in minutes with automated scripts
+- Extensive documentation and examples
+- Easy integration into your own projects
 
-For detailed instructions on setting up your hardware, including both x86_64 Ubuntu systems and Raspberry Pi devices, please refer to the [Full Installation Guide](./doc/user_guide/installation.md#quick-start-automated-recommended). This guide covers everything from hardware setup to software installation, ensuring your environment is ready for deploying AI applications with Hailo hardware accelerators.
+**Learn more:** [Hailo Official Website](https://hailo.ai/) | [Community Forum](https://community.hailo.ai/)
 
+## Quick Start
 
-### Hailo Apps Installation
-Get up and running in minutes with the automated installation script.
+### Installation
 ```bash
-# Clone the repository
-git clone https://github.com/hailo-ai/hailo-apps-infra.git
-cd hailo-apps-infra
-
-# Run the installer
+git clone https://github.com/hailo-ai/hailo-apps.git
+cd hailo-apps
 sudo ./install.sh
 ```
 
-### Running Applications
+**Need help?** See the [Full Installation Guide](./doc/user_guide/installation.md) for hardware setup and troubleshooting.
 
-Here are a few of the ready-to-use applications included in this repository.
-Before running any application, ensure you activate the Python virtual environment created during installation. This ensures all dependencies are correctly loaded.
-
-**Setup environment:**
-
-This should be run on every new terminal session.
+### Run Your First Application
 ```bash
-source setup_env.sh
+source setup_env.sh           # Activate environment
+hailo-detect-simple           # Start object detection
 ```
-
-Additionally, in the common case of a Raspberry Pi connected remotely via SSH, add:
-```bash
-export DISPLAY=:0
-```
-
-#### Simple Object Detection
-A lightweight version focused on demonstrating raw Hailo performance with minimal CPU overhead.
-
-**Command:**
-```bash
-hailo-detect-simple
-```
-**Output:**
 
 ![Detection Example](doc/images/detection.gif)
 
-#### Full Object Detection
-A comprehensive detection application featuring object tracking and resolution scaling.
-
-**Command:**
+**Try more computer vision:**
 ```bash
-hailo-detect
+hailo-pose                    # Pose estimation
+hailo-seg                     # Instance segmentation
+hailo-tiling                  # Tiling for high-res processing
+hailo-depth                   # Depth estimation
 ```
 
-#### Pose Estimation
-Detects human pose keypoints (e.g., joints and limbs) in real-time.
+![Pose Estimation](doc/images/pose_estimation.gif)
+![Instance Segmentation](doc/images/instance_segmentation.gif)
+![Depth Estimation](doc/images/depth.gif)
 
-**Command:**
+### GenAI Applications
+> Hailo-10H generative AI demos: voice assistants, VLM chat, voice-to-action agents
+
 ```bash
-hailo-pose
+# Voice Assistant
+cd hailo_apps/python/gen_ai_apps/voice_assistant/
+python voice_assistant.py
+
+# Agent Tools - Voice to Action
+python -m hailo_apps.python.gen_ai_apps.agent_tools_example.agent
+
+# VLM Chat - Vision + Language
+cd hailo_apps/python/gen_ai_apps/vlm_chat/
+python vlm_chat.py
 ```
-**Output:**
 
-![Pose Estimation Example](doc/images/pose_estimation.gif)
 
-#### Instance Segmentation
-Provides pixel-level masks for each detected object.
+<details>
+<summary>All GenAI Apps — <a href="hailo_apps/python/gen_ai_apps">hailo_apps/python/gen_ai_apps</a></summary>
 
-**Command:**
-```bash
-hailo-seg
-```
-**Output:**
 
-![Instance Segmentation Example](doc/images/instance_segmentation.gif)
+| APP                   | Description                                                         |
+|:----------------------|:--------------------------------------------------------------------|
+| `voice_assistant`     | Voice assistant with speech recognition and TTS                     |
+| `agent_tools_example` | Voice-to-action agent tools: natural language → hardware control    |
+| `vlm_chat`            | Vision-Language chat: combine images and text for reasoning         |
+| `simple_llm_chat`     | Minimal text-only LLM chat example                                  |
+| `simple_vlm_chat`     | Minimal VLM chat example (image + text)                             |
+| `simple_whisper_chat` | Minimal Whisper-based speech recognition chat                       |
+| `hailo_ollama`        | Ollama integration utilities for running local LLMs                 |
 
-#### Tiling
-Detects small objects in high-resolution frames.
+</details>
 
-**Command:**
-```bash
-hailo-tiling
-```
-**Output:**
+### Pipeline Applications
+> Real-time pipelines for cameras, RTSP streams, and multi-source processing
 
-![Tiling Example](local_resources/tiling.gif)
+<details>
+<summary>All Pipeline Apps — <a href="hailo_apps/python/pipeline_apps">hailo_apps/python/pipeline_apps</a></summary>
 
-#### Wait there's more!
-For a complete list of all available applications and their features, please see the [Running Applications Guide](./doc/user_guide/running_applications.md).
+| APP                 | Description                                      |
+|:--------------------|:-------------------------------------------------|
+| `detection`         | Real-time object detection pipeline               |
+| `detection_simple`  | Lightweight object detection example              |
+| `instance_segmentation` | Instance segmentation pipeline                 |
+| `pose_estimation`   | Human pose estimation pipeline                    |
+| `depth`             | Depth estimation pipeline                         |
+| `face_recognition`  | Face detection and recognition                    |
+| `tiling`            | High-resolution tiling-based inference             |
+| `multisource`       | Multiple camera/source pipeline                    |
+| `reid_multisource`  | Multi-source person re-identification              |
+| `paddle_ocr`        | OCR pipeline (PaddleOCR)                           |
+| `clip`              | Zero-shot classification with CLIP                 |
 
-## Full Documentation
+</details>
 
-For detailed guides on installation, usage, and development, please see our complete documentation:
 
-**[➡️ View the Full Documentation](./doc/README.md)**
+### Standalone Apps (Python & C++)
+> Learn HailoRT with hands-on Python and C++ demos
 
-The documentation includes:
-*   **[User Guide](./doc/user_guide/README.md)**: How to run applications and configure the system.
-*   **[Developer Guide](./doc/developer_guide/README.md)**: How to build your own applications.
+<details>
+<summary>All C++ Standalone Apps — <a href="hailo_apps/cpp">hailo_apps/cpp</a></summary>
 
-## License
+| APP                        | Description                                                      |
+|:---------------------------|:-----------------------------------------------------------------|
+| `classification`           | Image classification with models trained on ImageNet             |
+| `depth_estimation`         | Depth estimation using scdepthv3 and stereonet                   |
+| `instance_segmentation`    | Instance segmentation with yolov5_seg and yolov8_seg             |
+| `object_detection`         | Generic and asynchronous object detection                        |
+| `onnxruntime`              | Inference with Hailo device and postprocessing via ONNXRuntime   |
+| `pose_estimation`          | Pose estimation with yolov8                                      |
+| `semantic_segmentation`    | Semantic segmentation with Resnet18_fcn (Cityscapes dataset)     |
+| `zero_shot_classification` | Zero-shot classification with clip_vit_l14                       |
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for complete details.
+</details>
 
-## Getting Help
+<details>
+<summary>All Python Standalone Apps — <a href="hailo_apps/python/standalone_apps">hailo_apps/python/standalone_apps</a></summary>
 
-If you run into any issues, the best place to get help is the [Hailo Community Forum](https://community.hailo.ai/). You can search for existing solutions or open a new topic to get help from the community and the Hailo team.
+| APP                        | Description                                                        |
+|:---------------------------|:-------------------------------------------------------------------|
+| `object_detection`         | Object detection and tracking with YOLO, SSD, and CenterNet        |
+| `instance_segmentation`    | Instance segmentation with yolov5_seg and yolov8_seg               |
+| `lane_detection`           | Lane detection using UFLDv2                                        |
+| `pose_estimation`          | Pose estimation with yolov8                                        |
+| `speech_recognition`       | Automatic speech recognition with the Whisper model                |
+| `super_resolution`         | Super-resolution with espcnx4 and SRGAN                            |
+
+</details>
+
+
+## Documentation
+
+**[📖 Complete Documentation](./doc/README.md)**
+
+| Guide | What's Inside |
+|-------|---------------|
+| **[User Guide](./doc/user_guide/README.md)** | Installation, running apps, configuration, repository structure |
+| **[Developer Guide](./doc/developer_guide/README.md)** | Build custom apps, write post-processing, model retraining |
+
+## Choosing the Right App Type
+
+This repository provides three types of applications, each suited for different development scenarios:
+
+| App Type | Best For | Examples |
+|----------|----------|----------|
+| **Pipeline Apps** | Production-ready video processing with cameras, RTSP streams, and real-time inference | Object detection, pose estimation, instance segmentation, face recognition |
+| **Standalone Apps** | Learn HailoRT (Python/C++); install only specific apps; images/video/camera | Object Detection, OCR, Stereo Depth Estimation |
+| **GenAI Apps** | Hailo-10H generative AI applications | Voice assistants, VLM chat, voice-to-action agents, Whisper speech recognition |
+
+### Pipeline Apps (`hailo_apps/python/pipeline_apps/`)
+Use pipeline apps when you need real-time video processing with:
+- Raspberry Pi Camera, USB cameras, or video files
+- RTSP streams for IP cameras
+- Multi-camera and multi-source processing
+- GStreamer-based efficient pipelines
+
+### Standalone Apps (`hailo_apps/python/standalone_apps/`, `hailo_apps/cpp/`)
+Use standalone apps when you need to:
+- Install only specific apps; no TAPPAS required
+- Learn the HailoRT API in Python/C++ (hands-on demos)
+- Work with images, videos, and camera streams
+- Prototype quickly and validate models
+
+
+### GenAI Apps (`hailo_apps/python/gen_ai_apps/`)
+Use GenAI apps for **Hailo-10H** generative AI features:
+- Voice assistants with speech recognition
+- Vision-Language Models (VLM) chat
+- Voice-to-action AI agents
+- Whisper-based speech recognition
+
+**📚 See all applications:** [Running Applications Guide](./doc/user_guide/running_applications.md)
+
+## Key Features
+
+**🎯 Input Flexibility**
+- Raspberry Pi Camera, USB cameras, video files, RTSP streams
+- Multi-camera and multi-source processing
+
+**⚡ Optimized Performance**
+- Hardware-accelerated inference on Hailo devices
+- Efficient GStreamer pipelines for real-time processing
+- Minimal CPU overhead
+
+**🧩 Modular & Extensible**
+- Reusable Python library (`hailo_apps`)
+- Custom model support with HEF files
+- Easy integration into existing projects
+
+**[→ Learn about the repository structure](./doc/user_guide/repository_structure.md)**
+
+## Support & Community
+
+💬 **[Hailo Community Forum](https://community.hailo.ai/)** - Get help, share projects, connect with other developers
+
+🐛 **Issues?** Search the forum or open a discussion - the community and Hailo team are here to help!
+
+---
+
+**License:** MIT - see [LICENSE](LICENSE) for details

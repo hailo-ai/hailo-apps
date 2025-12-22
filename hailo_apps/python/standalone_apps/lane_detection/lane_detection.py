@@ -1,26 +1,41 @@
 #!/usr/bin/env python3
 import multiprocessing as mp
-import argparse
 import sys
 import os
-from multiprocessing import Process
 from functools import partial
-
+from pathlib import Path
 import numpy as np
-from loguru import logger
 import cv2
 import threading
-
 from lane_detection_utils import (UFLDProcessing,
                                   check_process_errors,
                                   compute_scaled_radius)
 
 try:
+    from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
     from hailo_apps.python.core.common.hailo_inference import HailoInfer
+    from hailo_apps.python.core.common.toolbox import (
+        resolve_arch,
+        resolve_input_arg,
+        list_inputs,
+    )
+    from hailo_apps.python.core.common.core import handle_list_models_flag, resolve_hef_path
+    from hailo_apps.python.core.common.parser import get_standalone_parser
 except ImportError:
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'core')))
+    core_dir = Path(__file__).resolve().parents[2] / "core"
+    sys.path.insert(0, str(core_dir))
+    from common.hailo_logger import get_logger, init_logging, level_from_args
     from common.hailo_inference import HailoInfer
+    from common.toolbox import (
+        resolve_arch,
+        resolve_input_arg,
+        list_inputs,
+    )
+    from common.core import handle_list_models_flag, resolve_hef_path
+    from common.parser import get_standalone_parser
 
+APP_NAME = Path(__file__).stem
+logger = get_logger(__name__)
 
 
 def parser_init():
@@ -28,32 +43,39 @@ def parser_init():
     Initialize and configure the argument parser for this script.
     
     Returns:
-        argparse.ArgumentParser: An instance of ArgumentParser.
+        argparse.Namespace: Parsed arguments.
     """
-    parser = argparse.ArgumentParser(description="UFLD_v2 inference")
+    parser = get_standalone_parser()
+    parser.description = "UFLD_v2 lane detection inference."
 
-    parser.add_argument(
-        "-n",
-        "--net",
-        help="Path of model file in HEF format.",
-        default="ufld_v2_tu.hef"
+    handle_list_models_flag(parser, APP_NAME)
+
+    args = parser.parse_args()
+    init_logging(level=level_from_args(args))
+
+    # Handle --list-inputs and exit
+    if args.list_inputs:
+        list_inputs(APP_NAME)
+        sys.exit(0)
+
+    # Resolve network and input paths
+    args.arch = resolve_arch(args.arch)
+    args.hef_path = resolve_hef_path(
+        hef_path=args.hef_path,
+        app_name=APP_NAME,
+        arch=args.arch,
     )
+    if args.hef_path is None:
+        logger.error("Failed to resolve HEF path for %s", APP_NAME)
+        sys.exit(1)
+    args.input = resolve_input_arg(APP_NAME, args.input)
 
-    parser.add_argument(
-        "-i",
-        "--input_video",
-        default="input_video.mp4",
-        help="Path of the video to perform inference on.",
-    )
+    # Setup output directory
+    if args.output_dir is None:
+        args.output_dir = os.path.join(os.getcwd(), "output")
+    os.makedirs(args.output_dir, exist_ok=True)
 
-    parser.add_argument(
-        "-o",
-        "--output_video",
-        default="output_video.mp4",
-        help="Path of the output video.",
-    )
-
-    return parser
+    return args
 
 
 def get_video_info(video_path):
@@ -108,14 +130,14 @@ def preprocess_input(video_path: str,
 
 
 def postprocess_output(output_queue: mp.Queue,
-                       output_video_path: str,                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+                       output_dir: str,                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
                        ufld_processing: UFLDProcessing) -> None:
     """
     Post-process inference results, draw lane detections, and write output to a video.
 
     Args:
         output_queue (mp.Queue): Queue for output results.
-        output_video_path (str): Path to the output video file.
+        output_dir (str): Path to the output video file.
         ufld_processing (UFLDProcessing): Lane detection post-processing class.
     """
     # Import tqdm here to avoid issues with multiprocessing
@@ -123,8 +145,9 @@ def postprocess_output(output_queue: mp.Queue,
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     width, height = ufld_processing.get_original_frame_size()
-    output_video = cv2.VideoWriter(output_video_path, fourcc, 20,
-                                   (width, height))
+
+    out_path = os.path.join(output_dir, "output.mp4")
+    output_video = cv2.VideoWriter(out_path, fourcc, 20, (width, height))
 
     # Compute the scaled radius for the lane detection points
     radius = compute_scaled_radius(width, height)
@@ -149,7 +172,25 @@ def postprocess_output(output_queue: mp.Queue,
 
     pbar.close()
     output_video.release()
-
+    
+    # Convert to H.264 for better compatibility
+    import subprocess
+    logger.info("Converting video to H.264 format...")
+    temp_path = out_path.replace('.mp4', '_temp.mp4')
+    try:
+        result = subprocess.run([
+            'ffmpeg', '-y', '-loglevel', 'error', '-i', out_path, 
+            '-c:v', 'libx264', '-preset', 'medium', '-crf', '23',
+            temp_path
+        ], check=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        os.replace(temp_path, out_path)
+        logger.info("Video conversion complete!")
+    except subprocess.CalledProcessError as e:
+        logger.warning(f"Failed to convert video to H.264")
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+    except FileNotFoundError:
+        logger.warning("ffmpeg not found, keeping original mp4v format")
 
 
 def inference_callback(
@@ -228,7 +269,7 @@ def run_inference_pipeline(
     video_path: str,
     net_path: str,
     batch_size: int,
-    output_video_path: str,
+    output_dir: str,
     ufld_processing: UFLDProcessing
 ) -> None:
     """
@@ -238,7 +279,7 @@ def run_inference_pipeline(
         video_path (str): Path to the input video.
         net_path (str): Path to the HEF model file.
         batch_size (int): Number of frames per batch.
-        output_video_path (str): Path to save the output video.
+        output_dir (str): Path to save the output video.
         ufld_processing (UFLDProcessing): Lane detection processing class.
     """
 
@@ -258,7 +299,7 @@ def run_inference_pipeline(
     )
     postprocess_thread = threading.Thread(
         target=postprocess_output,
-        args=(output_queue, output_video_path, ufld_processing)
+        args=(output_queue, output_dir, ufld_processing)
     )
 
     infer_thread = threading.Thread(
@@ -276,33 +317,35 @@ def run_inference_pipeline(
     output_queue.put(None)
     postprocess_thread.join()
 
-    logger.info(f"Inference was successful! Results saved in {output_video_path}")
+    logger.info(f"Inference was successful! Results saved in {output_dir}")
 
 
 
 if __name__ == "__main__":
 
     # Parse command-line arguments
-    args = parser_init().parse_args()
+    args = parser_init()
     try:
-        original_frame_width, original_frame_height, total_frames= get_video_info(args.input_video)
+        original_frame_width, original_frame_height, total_frames = get_video_info(args.input)
     except ValueError as e:
         logger.error(e)
 
-    ufld_processing = UFLDProcessing(num_cell_row=100,
-                                     num_cell_col=100,
-                                     num_row=56,
-                                     num_col=41,
-                                     num_lanes=4,
-                                     crop_ratio=0.8,
-                                     original_frame_width = original_frame_width,
-                                     original_frame_height = original_frame_height,
-                                     total_frames = total_frames)
+    ufld_processing = UFLDProcessing(
+        num_cell_row=100,
+        num_cell_col=100,
+        num_row=56,
+        num_col=41,
+        num_lanes=4,
+        crop_ratio=0.8,
+        original_frame_width=original_frame_width,
+        original_frame_height=original_frame_height,
+        total_frames=total_frames,
+    )
 
     run_inference_pipeline(
-        args.input_video,
-        args.net,
-        batch_size=1,
-        output_video_path=args.output_video,
-        ufld_processing=ufld_processing
+        args.input,
+        args.hef_path,
+        batch_size=args.batch_size,
+        output_dir=args.output_dir,
+        ufld_processing=ufld_processing,
     )

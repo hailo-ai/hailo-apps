@@ -1,12 +1,14 @@
 """
 Test Functions for All Pipeline Types
 
-This module contains test functions for each pipeline/app type.
-Each function can be called with configuration options to run tests.
+This module provides a generic test runner that handles all pipeline types,
+dynamically loading available pipelines from the unified config_manager.
 """
 
 import logging
 from typing import Dict, List, Optional, Tuple
+
+from hailo_apps.config import config_manager
 
 from test_utils import (
     build_test_args,
@@ -17,8 +19,29 @@ from test_utils import (
 logger = logging.getLogger(__name__)
 
 
-def run_detection_test(
+def _load_supported_pipelines() -> List[str]:
+    """Load supported pipeline names from config_manager.
+
+    Returns:
+        List of pipeline names from the test definitions.
+        Falls back to an empty list if config cannot be loaded.
+    """
+    try:
+        pipelines = config_manager.get_defined_apps()
+        logger.debug(f"Loaded {len(pipelines)} pipelines from config: {pipelines}")
+        return pipelines
+    except Exception as e:
+        logger.error(f"Failed to load pipeline config: {e}")
+        return []
+
+
+# Dynamically load supported pipelines from config
+SUPPORTED_PIPELINES = _load_supported_pipelines()
+
+
+def run_pipeline_test_generic(
     config: Dict,
+    pipeline_name: str,
     model: str,
     architecture: str,
     run_method: str,
@@ -27,333 +50,176 @@ def run_detection_test(
     run_time: Optional[int] = None,
     term_timeout: Optional[int] = None,
 ) -> Tuple[bool, str]:
-    """Run detection pipeline test.
-    
-    Args:
-        config: Test configuration
-        model: Model name
-        architecture: Architecture (hailo8, hailo8l, hailo10h)
-        run_method: Run method (module, pythonpath, cli)
-        test_suite: Test suite name
-        extra_args: Additional arguments
-        run_time: Optional run time override
-        term_timeout: Optional termination timeout override
-    
-    Returns:
-        Tuple of (success, log_file_path)
     """
-    pipeline_config = config["pipelines"]["detection"]
-    
+    Generic pipeline test runner.
+
+    This function handles testing for any pipeline type, reducing code duplication.
+
+    Args:
+        config: Test configuration dictionary containing pipeline definitions
+        pipeline_name: Name of the pipeline (e.g., "detection", "pose_estimation")
+        model: Model name to test
+        architecture: Target architecture (hailo8, hailo8l, hailo10h)
+        run_method: How to run the test (module, pythonpath, cli)
+        test_suite: Test suite name (default: "default")
+        extra_args: Additional command-line arguments
+        run_time: Optional run time override in seconds
+        term_timeout: Optional termination timeout override in seconds
+
+    Returns:
+        Tuple of (success: bool, log_file_path: str)
+
+    Raises:
+        KeyError: If the pipeline_name is not found in config["pipelines"]
+    """
+    # Get pipeline configuration
+    pipeline_config = config["pipelines"][pipeline_name]
+
     # Build arguments
     args = build_test_args(
         config, pipeline_config, model, architecture, test_suite, extra_args
     )
-    
+
     # Get log file path
     log_file = get_log_file_path(
-        config, "pipeline", "detection", architecture, model, run_method, test_suite
+        config, "pipeline", pipeline_name, architecture, model, run_method, test_suite
     )
-    
+
     # Run test
     stdout, stderr, success = run_pipeline_test(
-        pipeline_config, model, architecture, run_method, args, log_file,
-        run_time=run_time, term_timeout=term_timeout
+        pipeline_config,
+        model,
+        architecture,
+        run_method,
+        args,
+        log_file,
+        run_time=run_time,
+        term_timeout=term_timeout,
     )
-    
+
+    # Format pipeline name for display
+    display_name = pipeline_name.replace("_", " ").title()
+
     if success:
-        logger.info(f"✓ Detection test passed: {model} on {architecture} using {run_method}")
+        logger.info(
+            f"✓ {display_name} test passed: {model} on {architecture} using {run_method}"
+        )
     else:
-        logger.error(f"✗ Detection test failed: {model} on {architecture} using {run_method}")
-        logger.error(f"Error: {stderr.decode() if stderr else 'Unknown error'}")
-    
+        logger.error(
+            f"✗ {display_name} test failed: {model} on {architecture} using {run_method}"
+        )
+        if stderr:
+            logger.error(
+                f"Error: {stderr.decode() if isinstance(stderr, bytes) else stderr}"
+            )
+
     return success, log_file
 
 
-def run_pose_estimation_test(
-    config: Dict,
-    model: str,
-    architecture: str,
-    run_method: str,
-    test_suite: str = "default",
-    extra_args: Optional[List[str]] = None,
-    run_time: Optional[int] = None,
-    term_timeout: Optional[int] = None,
-) -> Tuple[bool, str]:
-    """Run pose estimation pipeline test."""
-    pipeline_config = config["pipelines"]["pose_estimation"]
-    args = build_test_args(
-        config, pipeline_config, model, architecture, test_suite, extra_args
-    )
-    log_file = get_log_file_path(
-        config, "pipeline", "pose_estimation", architecture, model, run_method, test_suite
-    )
-    stdout, stderr, success = run_pipeline_test(
-        pipeline_config, model, architecture, run_method, args, log_file,
-        run_time=run_time, term_timeout=term_timeout
-    )
-    if success:
-        logger.info(f"✓ Pose estimation test passed: {model} on {architecture}")
-    else:
-        logger.error(f"✗ Pose estimation test failed: {model} on {architecture}")
-    return success, log_file
+def _create_pipeline_test_func(pipeline_name: str):
+    """
+    Factory function to create pipeline-specific test functions.
+
+    Args:
+        pipeline_name: Name of the pipeline
+
+    Returns:
+        A test function for the specific pipeline
+    """
+
+    def test_func(
+        config: Dict,
+        model: str,
+        architecture: str,
+        run_method: str,
+        test_suite: str = "default",
+        extra_args: Optional[List[str]] = None,
+        run_time: Optional[int] = None,
+        term_timeout: Optional[int] = None,
+    ) -> Tuple[bool, str]:
+        return run_pipeline_test_generic(
+            config,
+            pipeline_name,
+            model,
+            architecture,
+            run_method,
+            test_suite,
+            extra_args,
+            run_time,
+            term_timeout,
+        )
+
+    # Set function metadata
+    test_func.__doc__ = f"Run {pipeline_name.replace('_', ' ')} pipeline test."
+    test_func.__name__ = f"run_{pipeline_name}_test"
+    return test_func
 
 
-def run_depth_test(
-    config: Dict,
-    model: str,
-    architecture: str,
-    run_method: str,
-    test_suite: str = "default",
-    extra_args: Optional[List[str]] = None,
-    run_time: Optional[int] = None,
-    term_timeout: Optional[int] = None,
-) -> Tuple[bool, str]:
-    """Run depth estimation pipeline test."""
-    pipeline_config = config["pipelines"]["depth"]
-    args = build_test_args(
-        config, pipeline_config, model, architecture, test_suite, extra_args
-    )
-    log_file = get_log_file_path(
-        config, "pipeline", "depth", architecture, model, run_method, test_suite
-    )
-    stdout, stderr, success = run_pipeline_test(
-        pipeline_config, model, architecture, run_method, args, log_file,
-        run_time=run_time, term_timeout=term_timeout
-    )
-    if success:
-        logger.info(f"✓ Depth test passed: {model} on {architecture}")
-    else:
-        logger.error(f"✗ Depth test failed: {model} on {architecture}")
-    return success, log_file
-
-
-def run_instance_segmentation_test(
-    config: Dict,
-    model: str,
-    architecture: str,
-    run_method: str,
-    test_suite: str = "default",
-    extra_args: Optional[List[str]] = None,
-    run_time: Optional[int] = None,
-    term_timeout: Optional[int] = None,
-) -> Tuple[bool, str]:
-    """Run instance segmentation pipeline test."""
-    pipeline_config = config["pipelines"]["instance_segmentation"]
-    args = build_test_args(
-        config, pipeline_config, model, architecture, test_suite, extra_args
-    )
-    log_file = get_log_file_path(
-        config, "pipeline", "instance_segmentation", architecture, model, run_method, test_suite
-    )
-    stdout, stderr, success = run_pipeline_test(
-        pipeline_config, model, architecture, run_method, args, log_file,
-        run_time=run_time, term_timeout=term_timeout
-    )
-    if success:
-        logger.info(f"✓ Instance segmentation test passed: {model} on {architecture}")
-    else:
-        logger.error(f"✗ Instance segmentation test failed: {model} on {architecture}")
-    return success, log_file
-
-
-def run_simple_detection_test(
-    config: Dict,
-    model: str,
-    architecture: str,
-    run_method: str,
-    test_suite: str = "default",
-    extra_args: Optional[List[str]] = None,
-    run_time: Optional[int] = None,
-    term_timeout: Optional[int] = None,
-) -> Tuple[bool, str]:
-    """Run simple detection pipeline test."""
-    pipeline_config = config["pipelines"]["simple_detection"]
-    args = build_test_args(
-        config, pipeline_config, model, architecture, test_suite, extra_args
-    )
-    log_file = get_log_file_path(
-        config, "pipeline", "simple_detection", architecture, model, run_method, test_suite
-    )
-    stdout, stderr, success = run_pipeline_test(
-        pipeline_config, model, architecture, run_method, args, log_file,
-        run_time=run_time, term_timeout=term_timeout
-    )
-    if success:
-        logger.info(f"✓ Simple detection test passed: {model} on {architecture}")
-    else:
-        logger.error(f"✗ Simple detection test failed: {model} on {architecture}")
-    return success, log_file
-
-
-def run_face_recognition_test(
-    config: Dict,
-    model: str,
-    architecture: str,
-    run_method: str,
-    test_suite: str = "default",
-    extra_args: Optional[List[str]] = None,
-    run_time: Optional[int] = None,
-    term_timeout: Optional[int] = None,
-) -> Tuple[bool, str]:
-    """Run face recognition pipeline test."""
-    pipeline_config = config["pipelines"]["face_recognition"]
-    args = build_test_args(
-        config, pipeline_config, model, architecture, test_suite, extra_args
-    )
-    log_file = get_log_file_path(
-        config, "pipeline", "face_recognition", architecture, model, run_method, test_suite
-    )
-    stdout, stderr, success = run_pipeline_test(
-        pipeline_config, model, architecture, run_method, args, log_file,
-        run_time=run_time, term_timeout=term_timeout
-    )
-    if success:
-        logger.info(f"✓ Face recognition test passed: {model} on {architecture}")
-    else:
-        logger.error(f"✗ Face recognition test failed: {model} on {architecture}")
-    return success, log_file
-
-
-def run_multisource_test(
-    config: Dict,
-    model: str,
-    architecture: str,
-    run_method: str,
-    test_suite: str = "default",
-    extra_args: Optional[List[str]] = None,
-    run_time: Optional[int] = None,
-    term_timeout: Optional[int] = None,
-) -> Tuple[bool, str]:
-    """Run multisource pipeline test."""
-    pipeline_config = config["pipelines"]["multisource"]
-    args = build_test_args(
-        config, pipeline_config, model, architecture, test_suite, extra_args
-    )
-    log_file = get_log_file_path(
-        config, "pipeline", "multisource", architecture, model, run_method, test_suite
-    )
-    stdout, stderr, success = run_pipeline_test(
-        pipeline_config, model, architecture, run_method, args, log_file,
-        run_time=run_time, term_timeout=term_timeout
-    )
-    if success:
-        logger.info(f"✓ Multisource test passed: {model} on {architecture}")
-    else:
-        logger.error(f"✗ Multisource test failed: {model} on {architecture}")
-    return success, log_file
-
-
-def run_reid_multisource_test(
-    config: Dict,
-    model: str,
-    architecture: str,
-    run_method: str,
-    test_suite: str = "default",
-    extra_args: Optional[List[str]] = None,
-    run_time: Optional[int] = None,
-    term_timeout: Optional[int] = None,
-) -> Tuple[bool, str]:
-    """Run REID multisource pipeline test."""
-    pipeline_config = config["pipelines"]["reid_multisource"]
-    args = build_test_args(
-        config, pipeline_config, model, architecture, test_suite, extra_args
-    )
-    log_file = get_log_file_path(
-        config, "pipeline", "reid_multisource", architecture, model, run_method, test_suite
-    )
-    stdout, stderr, success = run_pipeline_test(
-        pipeline_config, model, architecture, run_method, args, log_file,
-        run_time=run_time, term_timeout=term_timeout
-    )
-    if success:
-        logger.info(f"✓ REID multisource test passed: {model} on {architecture}")
-    else:
-        logger.error(f"✗ REID multisource test failed: {model} on {architecture}")
-    return success, log_file
-
-
-def run_tiling_test(
-    config: Dict,
-    model: str,
-    architecture: str,
-    run_method: str,
-    test_suite: str = "default",
-    extra_args: Optional[List[str]] = None,
-    run_time: Optional[int] = None,
-    term_timeout: Optional[int] = None,
-) -> Tuple[bool, str]:
-    """Run tiling pipeline test."""
-    pipeline_config = config["pipelines"]["tiling"]
-    args = build_test_args(
-        config, pipeline_config, model, architecture, test_suite, extra_args
-    )
-    log_file = get_log_file_path(
-        config, "pipeline", "tiling", architecture, model, run_method, test_suite
-    )
-    stdout, stderr, success = run_pipeline_test(
-        pipeline_config, model, architecture, run_method, args, log_file,
-        run_time=run_time, term_timeout=term_timeout
-    )
-    if success:
-        logger.info(f"✓ Tiling test passed: {model} on {architecture}")
-    else:
-        logger.error(f"✗ Tiling test failed: {model} on {architecture}")
-    return success, log_file
-
-
-
-def run_paddle_ocr_test(
-    config: Dict,
-    model: str,
-    architecture: str,
-    run_method: str,
-    test_suite: str = "default",
-    extra_args: Optional[List[str]] = None,
-    run_time: Optional[int] = None,
-    term_timeout: Optional[int] = None,
-) -> Tuple[bool, str]:
-    """Run paddle OCR pipeline test."""
-    pipeline_config = config["pipelines"]["paddle_ocr"]
-    args = build_test_args(
-        config, pipeline_config, model, architecture, test_suite, extra_args
-    )
-    log_file = get_log_file_path(
-        config, "pipeline", "paddle_ocr", architecture, model, run_method, test_suite
-    )
-    stdout, stderr, success = run_pipeline_test(
-        pipeline_config, model, architecture, run_method, args, log_file,
-        run_time=run_time, term_timeout=term_timeout
-    )
-    if success:
-        logger.info(f"✓ Paddle OCR test passed: {model} on {architecture}")
-    else:
-        logger.error(f"✗ Paddle OCR test failed: {model} on {architecture}")
-    return success, log_file
-
-
-# Map pipeline names to test functions
-PIPELINE_TEST_FUNCTIONS = {
-    "detection": run_detection_test,
-    "pose_estimation": run_pose_estimation_test,
-    "depth": run_depth_test,
-    "instance_segmentation": run_instance_segmentation_test,
-    "simple_detection": run_simple_detection_test,
-    "face_recognition": run_face_recognition_test,
-    "multisource": run_multisource_test,
-    "reid_multisource": run_reid_multisource_test,
-    "tiling": run_tiling_test,
-    "paddle_ocr": run_paddle_ocr_test,
+# Auto-generate PIPELINE_TEST_FUNCTIONS dictionary from config
+PIPELINE_TEST_FUNCTIONS: Dict[str, callable] = {
+    name: _create_pipeline_test_func(name) for name in SUPPORTED_PIPELINES
 }
 
 
 def get_pipeline_test_function(pipeline_name: str):
-    """Get test function for a pipeline.
-    
+    """
+    Get test function for a pipeline.
+
+    For new code, consider using run_pipeline_test_generic() directly
+    instead of looking up specific functions.
+
     Args:
         pipeline_name: Name of the pipeline
-    
+
     Returns:
         Test function or None if not found
     """
+    # If the pipeline isn't in the pre-generated dict, create one dynamically
+    if pipeline_name not in PIPELINE_TEST_FUNCTIONS:
+        if pipeline_name in SUPPORTED_PIPELINES:
+            PIPELINE_TEST_FUNCTIONS[pipeline_name] = _create_pipeline_test_func(
+                pipeline_name
+            )
+        else:
+            # Pipeline not in config - create function anyway for flexibility
+            logger.debug(f"Creating test function for unlisted pipeline: {pipeline_name}")
+            return _create_pipeline_test_func(pipeline_name)
+
     return PIPELINE_TEST_FUNCTIONS.get(pipeline_name)
 
+
+# Create module-level aliases for backward compatibility
+def _create_module_aliases():
+    """Create module-level function aliases for backward compatibility."""
+    aliases = {}
+    for pipeline_name in SUPPORTED_PIPELINES:
+        func_name = f"run_{pipeline_name}_test"
+        aliases[func_name] = PIPELINE_TEST_FUNCTIONS.get(pipeline_name)
+    return aliases
+
+
+_aliases = _create_module_aliases()
+
+# Expose common aliases at module level for backward compatibility
+if "detection" in PIPELINE_TEST_FUNCTIONS:
+    run_detection_test = PIPELINE_TEST_FUNCTIONS["detection"]
+if "pose_estimation" in PIPELINE_TEST_FUNCTIONS:
+    run_pose_estimation_test = PIPELINE_TEST_FUNCTIONS["pose_estimation"]
+if "depth" in PIPELINE_TEST_FUNCTIONS:
+    run_depth_test = PIPELINE_TEST_FUNCTIONS["depth"]
+if "instance_segmentation" in PIPELINE_TEST_FUNCTIONS:
+    run_instance_segmentation_test = PIPELINE_TEST_FUNCTIONS["instance_segmentation"]
+if "simple_detection" in PIPELINE_TEST_FUNCTIONS:
+    run_simple_detection_test = PIPELINE_TEST_FUNCTIONS["simple_detection"]
+if "face_recognition" in PIPELINE_TEST_FUNCTIONS:
+    run_face_recognition_test = PIPELINE_TEST_FUNCTIONS["face_recognition"]
+if "multisource" in PIPELINE_TEST_FUNCTIONS:
+    run_multisource_test = PIPELINE_TEST_FUNCTIONS["multisource"]
+if "reid_multisource" in PIPELINE_TEST_FUNCTIONS:
+    run_reid_multisource_test = PIPELINE_TEST_FUNCTIONS["reid_multisource"]
+if "tiling" in PIPELINE_TEST_FUNCTIONS:
+    run_tiling_test = PIPELINE_TEST_FUNCTIONS["tiling"]
+if "paddle_ocr" in PIPELINE_TEST_FUNCTIONS:
+    run_paddle_ocr_test = PIPELINE_TEST_FUNCTIONS["paddle_ocr"]
+if "clip" in PIPELINE_TEST_FUNCTIONS:
+    run_clip_test = PIPELINE_TEST_FUNCTIONS["clip"]

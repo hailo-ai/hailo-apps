@@ -1,0 +1,83 @@
+# tools/_template/config.yaml
+# Copy and modify this file for your tool configuration
+version: "1.0"
+tool_name: "template_tool"  # Must match tool.py name
+
+# ═══════════════════════════════════════════════════════════════
+# PERSONA - Defines the assistant's role and behavior
+# ═══════════════════════════════════════════════════════════════
+persona:
+  role: "Template Assistant"
+  style: "Helpful and concise"
+  constraints:
+    - "Use the tool when appropriate"
+    - "Respond directly for greetings and simple questions"
+
+# ═══════════════════════════════════════════════════════════════
+# CAPABILITIES - What this agent can do
+# ═══════════════════════════════════════════════════════════════
+capabilities:
+  - "Process example parameters"
+  - "Return formatted results"
+
+# ═══════════════════════════════════════════════════════════════
+# OUTPUT FORMAT - Response formatting rules
+# ═══════════════════════════════════════════════════════════════
+output_format:
+  tool_call: "XML-wrapped JSON: <tool_call>{...}</tool_call>"
+  direct_response: "Brief, factual answers"
+  after_tool: "State the result concisely"
+
+# ═══════════════════════════════════════════════════════════════
+# TOOL INSTRUCTIONS - Detailed LLM instructions
+# ═══════════════════════════════════════════════════════════════
+tool_instructions: |
+  Use this tool when the user asks to process something.
+  The function name is 'template_tool'.
+
+  Call format:
+  <tool_call>
+  {"name": "template_tool", "arguments": {"example_param": "value"}}
+  </tool_call>
+
+  DEFAULT OPTION: If the user's request is not supported by this tool or if you cannot understand
+  how to translate the request, set 'default' to true. The tool will automatically generate an appropriate error message.
+
+# ═══════════════════════════════════════════════════════════════
+# FEW-SHOT EXAMPLES - Added to context for priming
+# ═══════════════════════════════════════════════════════════════
+few_shot_examples:
+  - user: "Process hello world"
+    tool_call:
+      name: "template_tool"
+      arguments:
+        example_param: "hello world"
+
+# ═══════════════════════════════════════════════════════════════
+# TEST CASES - For benchmarking (not added to context)
+# ═══════════════════════════════════════════════════════════════
+test_cases:
+  - id: "template_001"
+    input: "process test input"
+    expected:
+      tool_called: true
+      tool_name: "template_tool"
+      result_contains: "Processed"
+    tags: ["basic"]
+    difficulty: "easy"
+
+  - id: "template_002"
+    input: "hello, how are you?"
+    expected:
+      tool_called: false
+    tags: ["greeting", "no-tool"]
+    difficulty: "easy"
+
+# ═══════════════════════════════════════════════════════════════
+# METADATA
+# ═══════════════════════════════════════════════════════════════
+metadata:
+  author: "your-name"
+  created: "2025-12-11"
+  description: "Template tool - copy and modify for your tool"
+

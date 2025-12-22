@@ -84,8 +84,8 @@ Detailed Steps of the `callback` function:
    - If the buffer is invalid (`None`), it returns immediately without further processing.
 
 2. **Frame Counting**:
-   - The `user_data.increment()` method is called to increment the frame count.
-   - The current frame count is printed for debugging purposes.
+   - Frame counting is handled automatically by the framework wrapper before the callback is invoked.
+   - The current frame count is retrieved using `user_data.get_count()` for debugging purposes.
 
 3. **Frame Skipping**:
    - To reduce computational load, the function skips processing for frames based on the `frame_skip` value in `user_data`.

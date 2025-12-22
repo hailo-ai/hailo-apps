@@ -10,8 +10,9 @@ This guide provides comprehensive instructions for installing the Hailo Applicat
   - [Download Resources](#download-resources)
     - [Usage](#usage)
     - [Available Options](#available-options)
-    - [Resource Groups](#resource-groups)
+    - [App Groups](#app-groups)
     - [Examples](#examples)
+    - [Features](#features)
   - [Installing Hailo Packages](#installing-hailo-packages)
     - [Overview](#overview)
     - [Usage](#usage-1)
@@ -37,8 +38,8 @@ On the Raspberry Pi, make sure you first install the HW and SW as described in t
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/hailo-ai/hailo-apps-infra.git
-cd hailo-apps-infra
+git clone https://github.com/hailo-ai/hailo-apps.git
+cd hailo-apps
 
 # 2. Run the automated installation script
 sudo ./install.sh
@@ -103,7 +104,7 @@ Note that also on the x86_64 Ubuntu, the gi library is installed on the system (
 ---
 ## Download Resources
 
-The Hailo Apps Infrastructure includes a resource downloader utility that automatically fetches AI models, configuration files, and test videos optimized for your Hailo hardware. You can access this tool through the Python script `hailo_apps/python/core/installation/download_resources.py` or via the command-line tool `hailo-download-resources`.
+The Hailo Apps Infrastructure includes a robust resource downloader utility that automatically fetches AI models, configuration files, and test videos optimized for your Hailo hardware. The tool supports parallel downloads, automatic retry on failures, and file integrity validation.
 
 ### Usage
 
@@ -113,21 +114,39 @@ hailo-download-resources [OPTIONS]
 
 ### Available Options
 
-- `--all`: Download all available resources across all architectures
-- `--group <GROUP>`: Specify which resource group to download (see groups below)
-- `--config <PATH>`: Use a custom resources configuration file (defaults to system config)
-- `--arch <ARCHITECTURE>`: Force a specific Hailo architecture (hailo8, hailo8l, hailo10h). If not specified, the architecture will be auto-detected
+| Option | Description |
+|--------|-------------|
+| `--all` | Download all models (default + extra) for all apps |
+| `--group <APP>` | Download resources for a specific app (e.g., `detection`, `vlm_chat`, `face_recognition`) |
+| `--model <NAME>` | Download a specific model by name |
+| `--arch <ARCH>` | Force a specific Hailo architecture: `hailo8`, `hailo8l`, or `hailo10h`. Auto-detected if not specified |
+| `--config <PATH>` | Use a custom resources configuration file |
+| `--list-models` | List all available models for the detected/selected architecture |
+| `--dry-run` | Preview what would be downloaded without actually downloading |
+| `--force` | Force re-download even if files already exist |
+| `--no-parallel` | Disable parallel downloads (download sequentially) |
+| `--include-gen-ai` | Include gen-ai apps (VLM, LLM, Whisper) in bulk downloads |
 
-### Resource Groups
+### App Groups
 
-- **default**: Core models and videos needed for basic functionality (yolov6n, scdepthv3, sample videos)
-- **hailo8**: Models optimized for Hailo-8 (yolov8m, scrfd_10g, arcface_mobilefacenet)
-- **hailo8l**: Models optimized for Hailo-8L (yolov8s, scrfd_2.5g, arcface_mobilefacenet_h8l)
-- **all**: Complete model collection including all architectures and specialized models
-- **retrain**: Additional resources for model retraining examples (custom barcode detection model and test video)
+Resources are organized by application. Each app has models optimized for different architectures:
 
-By default, we download models that support real-time frame rates for your device. Note that larger models can also be used, but the frame rate might be lower. If you need more accuracy, you can download a larger model. Additional models can be downloaded from the [Hailo Model Zoo](https://github.com/hailo-ai/hailo_model_zoo).
+| App | Description | Architectures |
+|-----|-------------|---------------|
+| `detection` | Object detection (YOLOv8, YOLOv11) | hailo8, hailo8l, hailo10h |
+| `pose_estimation` | Human pose estimation | hailo8, hailo8l, hailo10h |
+| `instance_segmentation` | Instance segmentation | hailo8, hailo8l, hailo10h |
+| `face_recognition` | Face detection and recognition | hailo8, hailo8l, hailo10h |
+| `depth` | Monocular depth estimation | hailo8, hailo8l, hailo10h |
+| `clip` | Zero-shot image classification | hailo8, hailo8l, hailo10h |
+| `tiling` | High-resolution tiled detection | hailo8, hailo8l, hailo10h |
+| `vlm_chat` | Vision-Language Model (Qwen2-VL) | hailo10h only |
+| `llm_chat` | Large Language Model (Qwen2.5) | hailo10h only |
+| `whisper_chat` | Speech-to-text (Whisper) | hailo10h only |
 
+> **Note:** Gen-AI apps (`vlm_chat`, `llm_chat`, `whisper_chat`) are only available on Hailo-10H hardware.
+
+By default, we download models optimized for real-time frame rates on your device. Larger models with higher accuracy can be downloaded using `--all`. Additional models are available from the [Hailo Model Zoo](https://github.com/hailo-ai/hailo_model_zoo).
 
 ### Examples
 
@@ -135,17 +154,43 @@ By default, we download models that support real-time frame rates for your devic
 # Download default resources for your detected hardware
 hailo-download-resources
 
-# Download all available resources
+# Download all models (default + extra) for all apps
 hailo-download-resources --all
 
-# Download only Hailo-8L specific resources
-hailo-download-resources --group hailo8l
+# Download resources for a specific app
+hailo-download-resources --group detection
 
-# Force download for specific architecture
-hailo-download-resources --arch hailo8 --group hailo8
+# Download a specific model
+hailo-download-resources --model yolov8m
+
+# Download for a specific architecture
+hailo-download-resources --arch hailo10h
+
+# Preview what would be downloaded (dry run)
+hailo-download-resources --dry-run
+
+# Force re-download existing files
+hailo-download-resources --force
+
+# Download gen-ai app (auto-includes gen-ai models)
+hailo-download-resources --group vlm_chat --arch hailo10h
+
+# Include gen-ai apps in bulk download
+hailo-download-resources --all --include-gen-ai --arch hailo10h
+
+# List all available models for your architecture
+hailo-download-resources --list-models
 ```
 
-The downloader automatically organizes resources into appropriate directories under the `resources/` folder, with models separated by architecture and videos/configs in dedicated subdirectories.
+### Features
+
+- **Parallel Downloads**: Downloads multiple files simultaneously for faster completion
+- **Automatic Retry**: Retries failed downloads with exponential backoff (3 attempts by default)
+- **File Validation**: Compares file sizes to detect corrupted or partial downloads
+- **Atomic Operations**: Uses temporary files to prevent incomplete downloads from being saved
+- **Architecture Awareness**: Automatically downloads models appropriate for your Hailo hardware
+
+The downloader organizes resources into `/usr/local/hailo/resources/`, with models separated by architecture (`models/hailo8/`, `models/hailo10h/`, etc.) and videos/configs in dedicated subdirectories.
 
 ---
 
@@ -190,7 +235,7 @@ sudo ./scripts/hailo_installer.sh [options]
 
 | Option                      | Description                                                                       |                                     |
 | --------------------------- | --------------------------------------------------------------------------------- | ----------------------------------- |
-| `--hw-arch=`           | hailo10,hailo8                                                                          | Target hardware platform. Required. |
+| `--hw-arch=`           | hailo10h,hailo8                                                                         | Target hardware platform. Required. |
 | `--venv-name=NAME`          | Name of the Python virtual environment (default: `hailo_venv`).                   |                                     |
 | `--download-only`           | Only download the packages without installing them.                               |                                     |
 | `--output-dir=DIR`          | Change where packages are saved (default: `/usr/local/hailo/resources/packages`). |                                     |
@@ -208,13 +253,13 @@ sudo ./scripts/hailo_installer.sh --hw-arch=hailo8
 #### Download Only (No Installation)
 
 ```bash
-./scripts/hailo_installer.sh --hw-arch=hailo10 --download-only
+./scripts/hailo_installer.sh --hw-arch=hailo10h --download-only
 ```
 
 Packages will be saved under:
 
 ```
-/usr/local/hailo/resources/packages/<hailo8|hailo10>/
+/usr/local/hailo/resources/packages/<hailo8|hailo10h>/
 ```
 
 ---
@@ -275,12 +320,14 @@ After running any of the installation methods, you can verify that everything is
 
 1.  **Activate your environment**
     ```bash
-    source hailo_infra_venv/bin/activate
+    source venv_hailo_apps/bin/activate
+    # or simply run the helper each session
+    source setup_env.sh
     ```
 2.  **Check installed Hailo packages**
     ```bash
     pip list | grep hailo
-    # You should see packages like hailort, hailo-tappas-core, and hailo-apps-infra.
+    # You should see packages like hailort, hailo-tappas-core, and hailo-apps.
 
     apt list | grep hailo
     # This shows all installed Hailo-related system packages.
@@ -302,6 +349,17 @@ After running any of the installation methods, you can verify that everything is
 *   **Driver Issues (RPi)**: If you see driver errors, ensure your kernel is up to date (`sudo apt update && sudo apt full-upgrade`).
 *   **`DEVICE_IN_USE()` Error**: This means the Hailo device is being used by another process. Run the cleanup script: `./scripts/kill_first_hailo.sh`.
 *   **GStreamer `cannot allocate memory in static TLS block` (RPi)**: This is a known issue. Add `export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1` to your `~/.bashrc` file and reboot.
+*   **Emoji Display Issues (RPi)**: If emoji icons (❌, ✅, etc.) are not displaying correctly in terminal output, install the Noto Color Emoji font:
+    ```bash
+    sudo apt-get update
+    sudo apt-get install fonts-noto-color-emoji
+    fc-cache -f -v
+    ```
+    After installation, restart your terminal or log out and back in. If emojis still don't display, ensure your locale supports UTF-8:
+    ```bash
+    export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    ```
 
 </details>
 

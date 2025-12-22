@@ -4,17 +4,21 @@ from pathlib import Path
 
 import setproctitle
 
-from hailo_apps.python.core.common.core import get_pipeline_parser, get_resource_path
+from hailo_apps.python.core.common.core import (
+    get_pipeline_parser,
+    get_resource_path,
+    handle_list_models_flag,
+    resolve_hef_path,
+)
 from hailo_apps.python.core.common.defines import (
     DETECTION_APP_TITLE,
     DETECTION_PIPELINE,
     DETECTION_POSTPROCESS_FUNCTION,
     DETECTION_POSTPROCESS_SO_FILENAME,
-    RESOURCES_MODELS_DIR_NAME,
     RESOURCES_SO_DIR_NAME,
 )
+from hailo_apps.python.core.common.hef_utils import get_hef_labels_json
 
-# Logger
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.gstreamer.gstreamer_app import (
     GStreamerApp,
@@ -49,9 +53,12 @@ class GStreamerDetectionApp(GStreamerApp):
             default=None,
             help="Path to costume labels JSON file",
         )
+        
+        # Handle --list-models flag before full initialization
+        handle_list_models_flag(parser, DETECTION_PIPELINE)
+        
         hailo_logger.info("Initializing GStreamer Detection App...")
 
-        # Call the parent class constructor
         super().__init__(parser, user_data)
 
         hailo_logger.debug(
@@ -73,9 +80,12 @@ class GStreamerDetectionApp(GStreamerApp):
         # Architecture is already handled by GStreamerApp parent class
         # Use self.arch which is set by parent
 
-        # Set HEF path if not provided via parser
-        if self.hef_path is None:
-            self.hef_path = get_resource_path(DETECTION_PIPELINE, RESOURCES_MODELS_DIR_NAME, self.arch)
+        # Resolve HEF path with smart lookup and auto-download
+        self.hef_path = resolve_hef_path(
+            self.hef_path,
+            app_name=DETECTION_PIPELINE,
+            arch=self.arch
+        )
 
             # Set the post-processing shared object file
         self.post_process_so = get_resource_path(
@@ -85,6 +95,10 @@ class GStreamerDetectionApp(GStreamerApp):
         self.post_function_name = DETECTION_POSTPROCESS_FUNCTION
         # User-defined label JSON file
         self.labels_json = self.options_menu.labels_json
+        if self.labels_json is None: # if no labels JSON file is provided, try auto-detect it from the HEF file
+            self.labels_json = get_hef_labels_json(self.hef_path)
+            if self.labels_json is not None:
+                hailo_logger.info("Auto detected Labels JSON: %s", self.labels_json)
 
         hailo_logger.info(
             "Resources | hef=%s | post_so=%s | post_fn=%s | labels_json=%s",

@@ -2,7 +2,7 @@ import os
 import signal
 import subprocess
 import time
-import cv2
+
 from .defines import UDEV_CMD
 from .hailo_logger import get_logger
 

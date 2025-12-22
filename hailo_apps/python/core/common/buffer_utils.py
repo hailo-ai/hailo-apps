@@ -37,7 +37,6 @@ def handle_rgb(map_info, width, height):
 def handle_nv12(map_info, width, height):
     hailo_logger.debug(f"Handling NV12 frame - Width: {width}, Height: {height}")
     y_plane_size = width * height
-    width * height // 2
     y_plane = np.ndarray(
         shape=(height, width), dtype=np.uint8, buffer=map_info.data[:y_plane_size]
     ).copy()

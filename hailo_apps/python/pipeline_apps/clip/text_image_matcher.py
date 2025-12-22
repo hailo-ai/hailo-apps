@@ -3,6 +3,23 @@ import os
 import sys
 import argparse
 import numpy as np
+
+# Prevent importing local clip.py file by ensuring it's not in sys.path
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_original_path = sys.path.copy()
+
+# Remove all instances of current directory from sys.path
+while _current_dir in sys.path:
+    sys.path.remove(_current_dir)
+
+# Also remove empty string which represents current directory
+while '' in sys.path:
+    sys.path.remove('')
+
+# Also remove '.' which represents current directory
+while '.' in sys.path:
+    sys.path.remove('.')
+
 """
 This class is used to store the text embeddings and match them to image embeddings
 This class should be used as a singleton!
@@ -12,7 +29,7 @@ Example: from TextImageMatcher import text_image_matcher
 """
 
 # Set up global variables. Only required imports are done in the init functions
-clip = None
+openai_clip = None
 torch = None
 
 class TextEmbeddingEntry:
@@ -27,7 +44,7 @@ class TextEmbeddingEntry:
     def to_dict(self):
         return {
             "text": self.text,
-            "embedding": self.embedding.tolist(),  # Convert numpy array to list
+            "embedding": self.embedding.tolist(),
             "negative": self.negative,
             "ensemble": self.ensemble
         }
@@ -83,10 +100,17 @@ class TextImageMatcher:
 
     def init_clip(self):
         """Initialize the CLIP model."""
-        global clip, torch
-        import clip
+        global openai_clip, torch
+        
+        # Force fresh import of the external clip package
+        import importlib
+        if 'clip' in sys.modules:
+            del sys.modules['clip']
+        
+        import clip as openai_clip
         import torch
-        self.model, self.preprocess = clip.load(self.model_name, device=self.device)
+        
+        self.model, self.preprocess = openai_clip.load(self.model_name, device=self.device)
         self.model_runtime = "clip"
 
     def set_threshold(self, new_threshold):
@@ -116,8 +140,8 @@ class TextImageMatcher:
             return
         text_entries = [template.format(text) for template in self.ensemble_template] if ensemble else [self.text_prefix + text]
 
-        global clip, torch
-        text_tokens = clip.tokenize(text_entries).to(self.device)
+        global openai_clip, torch
+        text_tokens = openai_clip.tokenize(text_entries).to(self.device)
         with torch.no_grad():
             text_features = self.model.encode_text(text_tokens)
             text_features /= text_features.norm(dim=-1, keepdim=True)

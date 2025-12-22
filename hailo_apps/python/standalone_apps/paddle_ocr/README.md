@@ -1,7 +1,7 @@
 Paddle OCR
 ================
 
-This example performs end-to-end text detection and recognition using the PaddleOCR pipeline accelerated by a **Hailo8** or **Hailo10H** device.
+This example performs end-to-end text detection and recognition using the PaddleOCR pipeline accelerated by a **Hailo-8**, **Hailo-8L**, or **Hailo-10H** device.
 It processes images, videos, folders, or camera input, detects text regions, and decodes the text using an OCR model.
 
 Optionally, FPS performance can be shown, and output can be saved for each input.
@@ -11,7 +11,9 @@ Optionally, FPS performance can be shown, and output can be saved for each input
 Requirements
 ------------
 
-- hailo_platform==4.22.0
+- hailo_platform:
+    - 4.23.0 (for Hailo-8 devices)
+    - 5.1.1 (for Hailo-10H devices)
 - loguru
 - opencv-python
 - paddlepaddle
@@ -19,23 +21,27 @@ Requirements
 - pyclipper
 - symspellpy
 
+## Installation and Usage
 
-Usage
------
-To avoid compatibility issues, it's recommended to have a separate venv from the DFC.
+Run this app in one of two ways:
+1. Standalone installation in a clean virtual environment (no TAPPAS required) — see [Option 1](#option-1-standalone-installation)
+2. From an installed `hailo-apps` repository — see [Option 2](#option-2-inside-an-installed-hailo-apps-repository)
+
+## Option 1: Standalone Installation
+
+To avoid compatibility issues, it's recommended to use a clean virtual environment.
 
 0. Install PCIe driver and PyHailoRT
     - Download and install the PCIe driver and PyHailoRT from the Hailo website
     - To install the PyHailoRT whl:
-        ```shell script
-        pip install hailort-X.X.X-cpXX-cpXX-linux_x86_64.whl
-        ```
+    ```shell script
+    pip install hailort-X.X.X-cpXX-cpXX-linux_x86_64.whl
+    ```
 
 1. Clone the repository:
     ```shell script
-    git clone <https://github.com/hailo-ai/Hailo-Application-Code-Examples.git>
-        
-    cd Hailo-Application-Code-Examples/runtime/hailo-8/python/paddle_ocr
+    git clone https://github.com/hailo-ai/hailo-apps.git
+    cd hailo-apps/python/standalone_apps/paddle_ocr
     ```
 
 2. Install dependencies:
@@ -43,33 +49,54 @@ To avoid compatibility issues, it's recommended to have a separate venv from the
     pip install -r requirements.txt
     ```
 
-3. Download example files:
+## Option 2: Inside an Installed hailo-apps Repository
+If you installed the full repository:
+```shell script
+git clone https://github.com/hailo-ai/hailo-apps.git
+cd hailo-apps
+sudo ./install.sh
+source setup_env.sh
+```
+Then the app is already ready for usage:
+```shell script
+cd hailo-apps/python/standalone_apps/paddle_ocr
+```
 
-   The script supports both Hailo-8 and Hailo-10 files.  
-   Use the `--arch` flag to specify your target hardware:
-   ```shell
-   ./download_resources.sh --arch 8     # For Hailo-8
-   ./download_resources.sh --arch 10    # For Hailo-10
-    ```
-
-4. Run the script:
-    ```shell script
-    ./paddle_ocr.py -n ocr_det.hef,ocr_model.hef -i ocr_img1.jpg
-    ```
+## Run
+After completing either installation option, run from the application folder:
+```shell script
+./paddle_ocr.py -n <det_hef> <ocr_hef> -i <input_path>
+```
 
 The output results will be saved under a folder named `output`, or in the directory specified by `--output-dir`.
 
 Arguments
 ---------
 
-- `-n, --net`: Path to the pre-trained model file (HEF).
-- `-i, --input`: Path to the input (image, folder, video file, or `camera`).
-- `-b, --batch_size`: [optional] Number of images in one batch. Defaults to 1.
+- `-n, --net`: 
+    - A **model name** (e.g., `yolov8n`) → the script will automatically download and resolve the correct HEF for your device.
+    - A **file path** to a local HEF → the script will use the specified network directly.
+- `-i, --input`:
+  - An **input source** such as an image (`bus.jpg`), a video (`video.mp4`), a directory of images, or `camera` to use the system camera.
+  - A **predefined input name** from `inputs.json` (e.g., `bus`, `street`).
+    - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
+  - Use `--list-inputs` to display all available predefined inputs.
+- `-b, --batch-size`: [optional] Number of images in one batch. Defaults to 1.
 - `-s, --save_stream_output`: [optional] Save the output of the inference from a stream.
 - `-o, --output-dir`: [optional] Directory where output images/videos will be saved.
 - `--show-fps`: [optional] Display FPS performance metrics for video/camera input.
 - `--use-corrector`: [optional] Enable text correction after OCR (e.g., spelling or formatting fixes).
-- `-r, --resolution`: [Camera input only] Choose output resolution: `sd` (640x480), `hd` (1280x720), or `fhd` (1920x1080). If not specified, native camera resolution is used.
+- `--camera-resolution`: [optional][Camera only] Input resolution: `sd` (640x480), `hd` (1280x720), or `fhd` (1920x1080).
+- `--output-resolution`: [optional] Set output size using `sd|hd|fhd`, or pass custom width/height (e.g., `--output-resolution 1920 1080`).
+- `-f, --framerate`: [optional][Camera only] Override the camera input framerate.
+- `--list-nets` [optional] Print all supported networks for this application (from `networks.json`) and exit.
+- `--list-inputs`: [optional] Print the available predefined input resources (images/videos) defined in `inputs.json` for this application, then exit.
+
+
+### Environment Variables
+- `CAMERA_INDEX`: [Camera input only] Select which camera index to use when -i camera is specified. Defaults to 0 if not set.
+    - Example: `CAMERA_INDEX=1 ./paddle_ocr.py -n model.hef -i camera`
+
 
 For more information:
 ```shell script
@@ -77,6 +104,17 @@ For more information:
 ```
 Example 
 -------
+
+**List supported networks**
+```shell script
+./paddle_ocr.py --list-nets
+```
+
+**List available input resources**
+```shell script
+./paddle_ocr.py --list-inputs
+```
+
 **Inference on single image**
 ```shell script
 ./paddle_ocr.py -n ocr_det.hef ocr_model.hef -i ocr_img1.jpg
@@ -87,10 +125,14 @@ Example
 ./paddle_ocr.py -n ocr_det.hef ocr_model.hef -i camera
 ```
 
+**Inference on a camera stream with custom frame rate**
+```shell script
+./paddle_ocr.py -n ocr_det.hef ocr_model.hef -i camera -f 20
+```
+
+
 Additional Notes
 ----------------
-
-- The example was only tested with ``HailoRT v4.22.0``
 - Images are only supported in the following formats: .jpg, .jpeg, .png or .bmp
 - Number of input images should be divisible by batch_size
 - For any issues, open a post on the [Hailo Community](https://community.hailo.ai)

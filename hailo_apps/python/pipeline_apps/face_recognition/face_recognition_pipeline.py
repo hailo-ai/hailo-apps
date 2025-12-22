@@ -3,6 +3,7 @@
 import os
 import shutil
 import json
+import sys
 import time
 import threading
 import queue
@@ -21,14 +22,19 @@ from PIL import Image
 import hailo
 from hailo import HailoTracker
 from hailo_apps.python.core.common.db_handler import DatabaseHandler, Record
-from hailo_apps.python.core.common.core import get_pipeline_parser, get_resource_path
+from hailo_apps.python.core.common.core import (
+    get_pipeline_parser,
+    get_resource_path,
+    handle_list_models_flag,
+    configure_multi_model_hef_path,
+    resolve_hef_paths,
+)
 from hailo_apps.python.core.common.buffer_utils import get_numpy_from_buffer_efficient, get_caps_from_pad
 from hailo_apps.python.core.gstreamer.gstreamer_app import GStreamerApp
 from hailo_apps.python.core.common.defines import (
     RESOURCES_SO_DIR_NAME, 
-    FACE_DETECTION_PIPELINE, 
-    FACE_RECOGNITION_PIPELINE, 
-    RESOURCES_MODELS_DIR_NAME, 
+    FACE_RECOGNITION_PIPELINE,
+    FACE_RECOGNITION_APP_TITLE,
     FACE_DETECTION_POSTPROCESS_SO_FILENAME, 
     FACE_RECOGNITION_POSTPROCESS_SO_FILENAME, 
     FACE_ALIGN_POSTPROCESS_SO_FILENAME, 
@@ -43,23 +49,32 @@ from hailo_apps.python.core.common.defines import (
     FACE_RECON_DATABASE_DIR_NAME,
     FACE_RECON_LOCAL_SAMPLES_DIR_NAME,
     BASIC_PIPELINES_VIDEO_EXAMPLE_NAME,
-    SCRFD_8_POSTPROCESS_FUNCTION,
-    SCRFD_8L_POSTPROCESS_FUNCTION,
-    SCRFD_10_POSTPROCESS_FUNCTION,
+    SCRFD_10G_POSTPROCESS_FUNCTION,
+    SCRFD_2_5G_POSTPROCESS_FUNCTION,
     HAILO8_ARCH,
     HAILO10H_ARCH,
     HAILO8L_ARCH
 )
 from hailo_apps.python.core.gstreamer.gstreamer_helper_pipelines import QUEUE, SOURCE_PIPELINE, INFERENCE_PIPELINE, INFERENCE_PIPELINE_WRAPPER, TRACKER_PIPELINE, USER_CALLBACK_PIPELINE, DISPLAY_PIPELINE, CROPPER_PIPELINE
-# endregion
+from hailo_apps.python.core.common.hailo_logger import get_logger
+
+hailo_logger = get_logger(__name__)
+# endregion imports
 
 class GStreamerFaceRecognitionApp(GStreamerApp):
     def __init__(self, app_callback, user_data, parser=None):
-        setproctitle.setproctitle("Hailo Face Recognition App")
-        if parser == None:
+        if parser is None:
             parser = get_pipeline_parser()
         parser.add_argument("--mode", default='run', help="The mode of the application: run, train, delete")
+        
+        # Configure --hef-path for multi-model support (face detection + face recognition)
+        configure_multi_model_hef_path(parser)
+        
+        # Handle --list-models flag before full initialization
+        handle_list_models_flag(parser, FACE_RECOGNITION_PIPELINE)
+        
         super().__init__(parser, user_data)
+        setproctitle.setproctitle(FACE_RECOGNITION_APP_TITLE)
 
         # Criteria for when a candidate frame is good enough to try recognize a person from it (e.g., skip the first few frames since in them person only entered the frame and usually is blurry)
         json_file_path = os.path.join(os.path.dirname(__file__), "face_recon_algo_params.json")
@@ -98,18 +113,28 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
         self.processed_names = set()  # ((key-name, val-global_id)) for train mode - pipeline will be playing for 2 seconds, so we need to ensure each person will be processed only once
         self.processed_files = set()  # for train mode - pipeline will be playing for 2 seconds, so we need to ensure each file will be processed only once
 
-        # Set the HEF file path based on the arch
-        self.hef_path_detection = get_resource_path(pipeline_name=FACE_DETECTION_PIPELINE, resource_type=RESOURCES_MODELS_DIR_NAME, arch=self.arch)
-        self.hef_path_recognition = get_resource_path(pipeline_name=FACE_RECOGNITION_PIPELINE, resource_type=RESOURCES_MODELS_DIR_NAME, arch=self.arch)
+        # Resolve HEF paths for multi-model app (face detection + face recognition)
+        # Uses --hef-path arguments if provided, otherwise uses defaults
+        models = resolve_hef_paths(
+            hef_paths=self.options_menu.hef_path,  # List from action='append' or None
+            app_name=FACE_RECOGNITION_PIPELINE,
+            arch=self.arch,
+        )
+        self.hef_path_detection = models[0].path
+        self.hef_path_recognition = models[1].path
     
-        if self.arch == HAILO8_ARCH:
-            self.detection_func = SCRFD_8_POSTPROCESS_FUNCTION
-        elif self.arch == HAILO10H_ARCH:
-            self.detection_func = SCRFD_10_POSTPROCESS_FUNCTION
+        if self.arch in (HAILO8_ARCH, HAILO10H_ARCH):
+            self.detection_func = SCRFD_10G_POSTPROCESS_FUNCTION
         elif self.arch == HAILO8L_ARCH:
-            self.detection_func = SCRFD_8L_POSTPROCESS_FUNCTION
+            self.detection_func = SCRFD_2_5G_POSTPROCESS_FUNCTION
         else:
-            raise ValueError(f"Unsupported Hailo architecture: {self.arch}")
+            hailo_logger.error("Unsupported Hailo architecture: %s", self.arch)
+            print(
+                f"ERROR: Unsupported Hailo architecture: {self.arch}. "
+                "Supported architectures are: hailo8, hailo8l, hailo10h.",
+                file=sys.stderr
+            )
+            sys.exit(1)
         
         self.recognition_func = "filter"
         self.cropper_func = "face_recognition"
@@ -136,7 +161,6 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
         # Create a queue to hold the tasks
         self.task_queue = queue.Queue()
 
-        # Define the worker function
         def worker():
             while True:  # while pipeline playing
                 task = self.task_queue.get()
@@ -222,24 +246,24 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
                     shutil.copy2(source_path, destination_path)
 
         print(f"Training on images from {self.train_images_dir}")
-        for person_name in os.listdir(self.train_images_dir):  # Iterate over subfolders in the training directory
+        for person_name in os.listdir(self.train_images_dir):
             person_folder = os.path.join(self.train_images_dir, person_name)
-            if self.db_handler.get_record_by_label(label=person_name):  # Ensure the person exists in the database, or create a new record
+            if self.db_handler.get_record_by_label(label=person_name):
                 continue
-            if not os.path.isdir(person_folder):  # Skip if not a directory
+            if not os.path.isdir(person_folder):
                 continue
             print(f"Processing person: {person_name}")
-            for image_file in os.listdir(person_folder):  # Iterate over images in the person's folder
+            for image_file in os.listdir(person_folder):
                 print(f"Processing image: {image_file}")
-                self.current_file = os.path.join(person_folder, image_file)  # Set the current file for pipeline processing, used internally in get_pipeline_string
-                self.create_pipeline()  # Initialize the pipeline with the updated file path
-                self.connect_train_vector_db_callback()  # Connect the callback after pipeline initialization
-                try:  # Set the pipeline to PLAYING to process the image
+                self.current_file = os.path.join(person_folder, image_file)
+                self.create_pipeline()
+                self.connect_train_vector_db_callback()
+                try:
                     self.pipeline.set_state(Gst.State.PLAYING)
-                    time.sleep(2)  # Wait for processing to complete
+                    time.sleep(2)
                 except Exception as e:
                     print(f"Error processing image {image_file}: {e}")
-                finally:  # Stop and clean up the pipeline
+                finally:
                     if self.pipeline:
                         self.pipeline.set_state(Gst.State.NULL)
         print("Training completed")
@@ -257,7 +281,7 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
             identity_pad.add_probe(Gst.PadProbeType.BUFFER, self.train_vector_db_callback, self.user_data)  # trigger - when the pad gets buffer
 
     def save_image_file(self, frame, image_path):
-        image = Image.fromarray(frame)  # Convert the frame to an image
+        image = Image.fromarray(frame)
         image.save(image_path, format="JPEG", quality=85)  # Save as a compressed JPEG with quality 85
     
     def crop_frame(self, frame, bbox, width, height):
@@ -386,7 +410,7 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
             cropped_frame = self.crop_frame(frame, detection.get_bbox(), width, height)
             embedding_vector = np.array(embedding[0].get_data())
             image_path = os.path.join(self.samples_dir, f"{uuid.uuid4()}.jpeg")
-            self.add_task('save_image', frame=cropped_frame, image_path=image_path)  # Add the frame to the queue for processing
+            self.add_task('save_image', frame=cropped_frame, image_path=image_path)
             name = os.path.basename(os.path.dirname(self.current_file))
             if self.is_name_processed(name):
                 self.db_handler.insert_new_sample(record=self.db_handler.get_record_by_id(self.get_processed_names_by_name(name)), embedding=embedding_vector, sample=image_path, timestamp=int(time.time())) 

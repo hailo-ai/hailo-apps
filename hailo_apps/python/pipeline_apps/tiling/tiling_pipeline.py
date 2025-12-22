@@ -4,18 +4,14 @@ import setproctitle
 from pathlib import Path
 from typing import Optional, Any
 
-# Third-party imports
-import gi
-gi.require_version('Gst', '1.0')
-from gi.repository import Gst
-
 # Local application-specific imports
-from hailo_apps.python.core.common.core import get_pipeline_parser
-from hailo_apps.python.core.common.defines import TILING_APP_TITLE
+from hailo_apps.python.core.common.core import get_pipeline_parser, handle_list_models_flag
+from hailo_apps.python.core.common.defines import TILING_APP_TITLE, TILING_PIPELINE
 from hailo_apps.python.core.gstreamer.gstreamer_helper_pipelines import SOURCE_PIPELINE, INFERENCE_PIPELINE, USER_CALLBACK_PIPELINE, DISPLAY_PIPELINE, TILE_CROPPER_PIPELINE
 from hailo_apps.python.core.gstreamer.gstreamer_app import GStreamerApp, app_callback_class, dummy_callback
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.pipeline_apps.tiling.configuration import TilingConfiguration
+from hailo_apps.python.core.common.hef_utils import get_hef_labels_json
 
 hailo_logger = get_logger(__name__)
 # endregion imports
@@ -37,8 +33,10 @@ class GStreamerTilingApp(GStreamerApp):
 
         # Add tiling-specific arguments
         self._add_tiling_arguments(parser)
+        
+        # Handle --list-models flag before full initialization
+        handle_list_models_flag(parser, TILING_PIPELINE)
 
-        # Call the parent class constructor
         super().__init__(parser, user_data)
 
         # Initialize tiling configuration
@@ -54,7 +52,10 @@ class GStreamerTilingApp(GStreamerApp):
 
         # User-defined label JSON file
         self.labels_json = self.options_menu.labels_json
-        hailo_logger.info(f"Labels JSON: {self.labels_json}")
+        if self.labels_json is None: # if no labels JSON file is provided, try auto-detect it from the HEF file
+            self.labels_json = get_hef_labels_json(self.hef_path)
+            if self.labels_json is not None:
+                hailo_logger.info("Auto detected Labels JSON: %s", self.labels_json)
 
         self.app_callback = app_callback
         setproctitle.setproctitle(TILING_APP_TITLE)
@@ -72,7 +73,7 @@ class GStreamerTilingApp(GStreamerApp):
             default=None,
             help="Path to custom labels JSON file",
         )
-        
+
         # Tiling options (auto mode by default, manual if tiles-x/y specified)
         parser.add_argument("--tiles-x", type=int, default=None,
                           help="Number of tiles horizontally (triggers manual mode)")

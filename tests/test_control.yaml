@@ -5,9 +5,9 @@
 
 # Control parameters
 control_parameters:
-  default_run_time: 24  # seconds
-  term_timeout: 10      # seconds - timeout for test termination
-  human_verification_run_time: 48  # seconds - extended time for manual verification
+  default_run_time: 40  # seconds
+  term_timeout: 5      # seconds - timeout for test termination
+  human_verification_run_time: 60  # seconds - extended time for manual verification
 
 # Logging configuration
 logging:
@@ -52,10 +52,6 @@ logging:
         default: "./logs/clip/default"
         extra: "./logs/clip/extra"
         all: "./logs/clip/all"
-      retrain:
-        default: "./logs/retrain/default"
-        extra: "./logs/retrain/extra"
-        all: "./logs/retrain/all"
       lane_detection:
         default: "./logs/lane_detection/default"
         extra: "./logs/lane_detection/extra"
@@ -68,6 +64,30 @@ logging:
         default: "./logs/reid_multisource/default"
         extra: "./logs/reid_multisource/extra"
         all: "./logs/reid_multisource/all"
+      object_detection_standalone:
+        default: "./logs/standalone/object_detection/default"
+        extra: "./logs/standalone/object_detection/extra"
+        all: "./logs/standalone/object_detection/all"
+      instance_segmentation_standalone:
+        default: "./logs/standalone/instance_segmentation/default"
+        extra: "./logs/standalone/instance_segmentation/extra"
+        all: "./logs/standalone/instance_segmentation/all"
+      pose_estimation_standalone:
+        default: "./logs/standalone/pose_estimation/default"
+        extra: "./logs/standalone/pose_estimation/extra"
+        all: "./logs/standalone/pose_estimation/all"
+      lane_detection_standalone:
+        default: "./logs/standalone/lane_detection/default"
+        extra: "./logs/standalone/lane_detection/extra"
+        all: "./logs/standalone/lane_detection/all"
+      super_resolution_standalone:
+        default: "./logs/standalone/super_resolution/default"
+        extra: "./logs/standalone/super_resolution/extra"
+        all: "./logs/standalone/super_resolution/all"
+      paddle_ocr_standalone:
+        default: "./logs/standalone/paddle_ocr/default"
+        extra: "./logs/standalone/paddle_ocr/extra"
+        all: "./logs/standalone/paddle_ocr/all"
 
 # ============================================================================
 # Test combinations configuration
@@ -91,81 +111,94 @@ custom_tests:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "Object Detection Pipeline"
-    
+
     simple_detection:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "Simple Detection Pipeline"
-    
+
     face_recognition:
-      test_suite_mode: "None"  # None | default | extra | all
-      model_selection: "None"  # default | extra | all
+      test_suite_mode: "default"  # None | default | extra | all
+      model_selection: "default"  # default | extra | all
       description: "Face Recognition Pipeline"
-    
+
     instance_segmentation:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "Instance Segmentation Pipeline"
-    
+
     pose_estimation:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "Pose Estimation Pipeline"
-    
+
     depth:
       test_suite_mode: "default"  # None | default | extra | all
       model_selection: "default"  # default | extra | all
       description: "Depth Estimation Pipeline"
-    
+
     tiling:
-      test_suite_mode: "None"  # None | default | extra | all
-      model_selection: "None"  # default | extra | all
+      test_suite_mode: "default"  # None | default | extra | all
+      model_selection: "default"  # default | extra | all
       description: "Tiling Pipeline"
-    
+
     paddle_ocr:
-      test_suite_mode: "None"  # None | default | extra | all
-      model_selection: "None"  # default | extra | all
+      test_suite_mode: "default"  # None | default | extra | all
+      model_selection: "default"  # default | extra | all
       description: "Paddle OCR Pipeline"
-    
-    clip:
-      test_suite_mode: "None"  # None | default | extra | all
-      model_selection: "None"  # default | extra | all
-      description: "CLIP Pipeline"
-    
-    retrain:
-      test_suite_mode: "None"  # None | default | extra | all
-      model_selection: "None"  # default | extra | all
-      description: "Retraining Pipeline"
-    
-    lane_detection:
-      test_suite_mode: "None"  # None | default | extra | all
-      model_selection: "None"  # default | extra | all
-      description: "Lane Detection Pipeline"
-    
-    super_resolution:
-      test_suite_mode: "None"  # None | default | extra | all
-      model_selection: "None"  # default | extra | all
-      description: "Super Resolution Pipeline"
-    
+
     reid_multisource:
-      test_suite_mode: "None"  # None | default | extra | all
-      model_selection: "None"  # default | extra | all
+      test_suite_mode: "default"  # None | default | extra | all
+      model_selection: "default"  # default | extra | all
       description: "REID Multisource Pipeline"
+
+    clip:
+      test_suite_mode: "default"  # None | default | extra | all
+      model_selection: "default"  # default | extra | all
+      description: "CLIP Pipeline"
+
+standalone_tests:
+  enabled: true  # Enable standalone app tests
+  apps:
+    object_detection_standalone:
+      test_suite_mode: "default"  # None | default | extra | all
+      model_selection: "default"  # default | extra | all
+      description: "Standalone object detection"
+    instance_segmentation_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone instance segmentation"
+    pose_estimation_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone pose estimation"
+    lane_detection_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone lane detection"
+    super_resolution_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone super resolution"
+    paddle_ocr_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone Paddle OCR (smoke + show-fps only)"
 
 # Special tests configuration
 special_tests:
   h8l_on_h8:
     enabled: true
     description: "Run H8L architecture on H8 hardware"
-  
+
   sanity_checks:
     enabled: true
     description: "Basic sanity checks before test execution"
-  
+
   human_verification:
     enabled: false
     description: "Tests requiring human verification and validation"
-  
+
   golden_tests:
     enabled: false
     description: "Golden reference tests for baseline validation"
@@ -175,14 +208,13 @@ run_methods:
   pythonpath:
     enabled: true  # Always true (primary method)
     priority: 1
-  
+
   cli:
-    enabled: false
+    enabled: true
     priority: 2
     command_template: "python -m test_runner"
-  
+
   module:
     enabled: false
     priority: 3
     module_name: "test_execution.runner"
-

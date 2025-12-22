@@ -1,15 +1,16 @@
 Instance Segmentation
 =====================
-
-This example performs instance segmentation using a **Hailo8** or **Hailo10** device.  
-It processes input images, videos, or a camera stream, performs inference using the input HEF file, and overlays the segmentation masks, bounding boxes, class labels, and confidence scores on the resized output image.  
+This example demonstrates instance segmentation using a Hailo-8, Hailo-8L, or Hailo-10H device.<br>
+It processes input images, videos, or a camera stream, performs inference using the input HEF file, and overlays the segmentation masks, bounding boxes, class labels, and confidence scores on the resized output image.<br>  
 Optionally, object tracking across frames can be enabled for video and camera streams.
 
 ![output example](instance_segmentation_example.gif)
 
 Requirements
 ------------
-- hailo_platform==4.22.0
+- hailo_platform:
+    - 4.23.0 (for Hailo-8 devices)
+    - 5.1.1 (for Hailo-10H devices)
 - loguru
 - opencv-python
 - scipy
@@ -19,24 +20,34 @@ Requirements
 
 Supported Models
 ----------------
-yolov5n-seg, yolov5s-seg, yolov5m-seg, yolov5l-seg, yolov8n-seg, yolov8s-seg, yolov8m-seg, fast_sam_s.
+- yolov5*_seg
+- yolov8*_seg.
+- yolov5m_seg_with_nms
+- fast_sam_s
 
-Usage
------
-To avoid compatibility issues, it's recommended to have a separate venv from the DFC.
+
+## Installation and Usage
+
+Run this app in one of two ways:
+1. Standalone installation in a clean virtual environment (no TAPPAS required) — see [Option 1](#option-1-standalone-installation)
+2. From an installed `hailo-apps` repository — see [Option 2](#option-2-inside-an-installed-hailo-apps-repository)
+
+
+## Option 1: Standalone Installation
+
+To avoid compatibility issues, it's recommended to use a clean virtual environment.
 
 0. Install PCIe driver and PyHailoRT
     - Download and install the PCIe driver and PyHailoRT from the Hailo website
     - To install the PyHailoRT whl:
-        ```shell script
-        pip install hailort-X.X.X-cpXX-cpXX-linux_x86_64.whl
-        ```
+    ```shell script
+    pip install hailort-X.X.X-cpXX-cpXX-linux_x86_64.whl
+    ```
 
 1. Clone the repository:
     ```shell script
-    git clone <https://github.com/hailo-ai/Hailo-Application-Code-Examples.git>
-
-    cd Hailo-Application-Code-Examples/runtime/hailo-8/python/object_detection
+    git clone https://github.com/hailo-ai/hailo-apps.git
+    cd hailo-apps/python/standalone_apps/instance_segmentation
     ```
 
 2. Install dependencies:
@@ -44,40 +55,54 @@ To avoid compatibility issues, it's recommended to have a separate venv from the
     pip install -r requirements.txt
     ```
 
-3. Download example files:
+## Option 2: Inside an Installed hailo-apps Repository
+If you installed the full repository:
+```shell script
+git clone https://github.com/hailo-ai/hailo-apps.git
+cd hailo-apps
+sudo ./install.sh
+source setup_env.sh
+```
 
-   The script supports both Hailo-8 and Hailo-10 files.  
-   Use the `--arch` flag to specify your target hardware:
-   ```shell
-   ./download_resources.sh --arch 8     # For Hailo-8
-   ./download_resources.sh --arch 10    # For Hailo-10
-    ```
+Then the app is already ready for usage:
+```shell script
+cd hailo-apps/python/standalone_apps/instance_segmentation
+```
 
-4. Run the script:
-    ```shell script
-    ./instance_segmentation.py -n <model_path> -i <input_image_path> -a <arch> -b <batch_size>
-    ```
-
-You can choose between:
-- **Regular instance segmentation**
-- **instance segmentation with tracking** (by adding `--track`)
-
-The output results will be saved under a folder named `output`, or in the directory specified by `--output-dir`.
-
-
+## Run
+After completing either installation option, run from the application folder:
+```shell script
+./instance_segmentation.py -n <model_path> -i <input_path> -t <model-type>
+```
 
 Arguments
 ---------
 
-- `-n, --net`: Path to the pre-trained model file (HEF).
-- `-i, --input`: Path to the input (image, folder, video file, or `camera`).
-- `-b, --batch_size`: [optional] Number of images in one batch. Defaults to 1.
+- `-n, --net`: 
+    - A **model name** (e.g., `yolov8n`) → the script will automatically download and resolve the correct HEF for your device.
+    - A **file path** to a local HEF → the script will use the specified network directly.
+- `-i, --input`:
+  - An **input source** such as an image (`bus.jpg`), a video (`video.mp4`), a directory of images, or `camera` to use the system camera.
+  - A **predefined input name** from `inputs.json` (e.g., `bus`, `street`).
+    - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
+  - Use `--list-inputs` to display all available predefined inputs.
+- `-t, --model-type`: Specify the model family used by your HEF: v5 (YOLOv5), v8 (YOLOv8), fast (fast-seg).
+- `-b, --batch-size`: [optional] Number of images in one batch. Defaults to 1.
 - `-l, --labels`: [optional] Path to a text file containing class labels. If not provided, default COCO labels are used.
 - `-s, --save_stream_output`: [optional] Save the output of the inference from a stream.
 - `-o, --output-dir`: [optional] Directory where output images/videos will be saved.
-- `-r, --resolution`: [Camera input only] Choose output resolution: `sd` (640x480), `hd` (1280x720), or `fhd` (1920x1080). If not specified, native camera resolution is used.
+- `--camera-resolution`: [optional][Camera only] Input resolution: `sd` (640x480), `hd` (1280x720), or `fhd` (1920x1080).
+- `--output-resolution`: [optional] Set output size using `sd|hd|fhd`, or pass custom width/height (e.g., `--output-resolution 1920 1080`).
 - `--track`: [optional] Enable object tracking across frames using BYTETracker.
 - `--show-fps`: [optional] Display FPS performance metrics for video/camera input.
+- `-f, --framerate`: [optional][Camera only] Override the camera input framerate.
+- `--list-nets`: [optional] Print all supported networks for this application (from `networks.json`) and exit.
+- `--list-inputs`: [optional] Print the available predefined input resources (images/videos) defined in `inputs.json` for this application, then exit.
+
+
+### Environment Variables
+- `CAMERA_INDEX`: [Camera input only] Select which camera index to use when -i camera is specified. Defaults to 0 if not set.
+    - Example: `CAMERA_INDEX=1 ./instance_segmentation.py -n model.hef -i camera`
 
 For more information:
 ```shell script
@@ -86,24 +111,41 @@ For more information:
 
 Example 
 -------
+**List supported networks**
+```shell script
+./instance_segmentation.py --list-nets
+```
+
+**List available input resources**
+```shell script
+./instance_segmentation.py --list-inputs
+```
+
 **Regular object detection on a camera stream**
 ```shell script
-./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i camera -a v5
+./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i camera -t v5
 ```
 
 **Object detection with tracking on a camera stream**
 ```shell script
-./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i camera -a v5 --track
+./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i camera -t v5 --track
 ```
 
 **Inference on an image**
 ```shell script
-./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i zidane.jpg -a v5
+./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i zidane.jpg -t v5
 ```
 
 **Inference on a folder of images**
 ```shell script
-./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i input_folder -a v5
+./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i input_folder -t v5
+```
+
+**Output**
+Results are saved to output/ by default
+Override with:
+```shell script
+--output-dir <path>
 ```
 
 🔧 Visualization and Tracking Configuration
@@ -166,13 +208,15 @@ These models include optimized NMS and postprocessing inside the HEF, allowing f
 Additional Notes
 ----------------
 
-- The example was only tested with `HailoRT v4.22.0`
+- The example was tested with:
+    - HailoRT v4.23.0 (for Hailo-8)
+    - HailoRT v5.1.1 (for Hailo-10H)
 - Images are only supported in the following formats: .jpg, .jpeg, .png or .bmp
 - Number of input images should be divisible by `batch_size`
-- Using the yolov-seg model for inference, this example performs instance segmentation, draw detection boxes and add a label to each class. When using the FastSAM model, it only performs the instance segmenation.
-- As the example, as mentioned above, made to work with COCO trained yolo-seg models, when using a customly trained yolo-seg model, please notice that some values may need to be changed in the relevant functions AND that the classes under CLASS_NAMES_COCO in hailo_model_zoo/core/datasets/datasets_info.py file in the Hailo Model Zoo are to be changed according to the relevant classes of the custom model.
+- Using the yolov-seg model for inference, this example performs instance segmentation, draws detection boxes and adds a label to each class. When using the FastSAM model, it only performs the instance segmentation.
+- As this example is designed to work with COCO-trained yolo-seg models, when using a custom trained yolo-seg model, please note that some values may need to be changed in the relevant functions AND that the classes under CLASS_NAMES_COCO in hailo_model_zoo/core/datasets/datasets_info.py file in the Hailo Model Zoo are to be changed according to the relevant classes of the custom model.
+- The list of supported detection models is defined in `networks.json`.
 - For any issues, open a post on the [Hailo Community](https://community.hailo.ai)
-
 
 Disclaimer
 ----------

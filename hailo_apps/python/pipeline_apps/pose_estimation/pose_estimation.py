@@ -19,7 +19,6 @@ from hailo_apps.python.core.common.buffer_utils import (
     get_numpy_from_buffer,
 )
 
-# Logger
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.gstreamer.gstreamer_app import app_callback_class
 
@@ -33,35 +32,31 @@ hailo_logger = get_logger(__name__)
 class user_app_callback_class(app_callback_class):
     def __init__(self):
         super().__init__()
-        hailo_logger.debug("Initialized user_app_callback_class.")
 
 
 # -----------------------------------------------------------------------------------------------
 # User-defined callback function
 # -----------------------------------------------------------------------------------------------
-def app_callback(pad, info, user_data):
+def app_callback(element, buffer, user_data):
     hailo_logger.debug("Callback triggered. Current frame count=%d", user_data.get_count())
 
-    buffer = info.get_buffer()
+    # Note: Frame counting is handled automatically by the framework wrapper
     if buffer is None:
         hailo_logger.warning("Received None buffer.")
-        return Gst.PadProbeReturn.OK
+        return
 
-    user_data.increment()
-    hailo_logger.debug("Frame count incremented to %d", user_data.get_count())
+    hailo_logger.debug("Processing frame %d", user_data.get_count())
     string_to_print = f"Frame count: {user_data.get_count()}\n"
 
+    pad = element.get_static_pad("src")
     format, width, height = get_caps_from_pad(pad)
-    hailo_logger.debug("Video format=%s width=%d height=%d", format, width, height)
 
     frame = None
     if user_data.use_frame and format and width and height:
-        hailo_logger.debug("Extracting frame from buffer.")
         frame = get_numpy_from_buffer(buffer, format, width, height)
 
     roi = hailo.get_roi_from_buffer(buffer)
     detections = roi.get_objects_typed(hailo.HAILO_DETECTION)
-    hailo_logger.debug("Number of detections: %d", len(detections))
 
     keypoints = get_keypoints()
 
@@ -69,21 +64,18 @@ def app_callback(pad, info, user_data):
         label = detection.get_label()
         bbox = detection.get_bbox()
         confidence = detection.get_confidence()
-        hailo_logger.debug("Detection: label=%s confidence=%.2f bbox=%s", label, confidence, bbox)
 
         if label == "person":
             track_id = 0
             track = detection.get_objects_typed(hailo.HAILO_UNIQUE_ID)
             if len(track) == 1:
                 track_id = track[0].get_id()
-            hailo_logger.debug("Person track_id=%d", track_id)
 
             string_to_print += (
                 f"Detection: ID: {track_id} Label: {label} Confidence: {confidence:.2f}\n"
             )
 
             landmarks = detection.get_objects_typed(hailo.HAILO_LANDMARKS)
-            hailo_logger.debug("Number of landmarks: %d", len(landmarks))
             if landmarks:
                 points = landmarks[0].get_points()
                 for eye in ["left_eye", "right_eye"]:
@@ -91,7 +83,6 @@ def app_callback(pad, info, user_data):
                     point = points[keypoint_index]
                     x = int((point.x() * bbox.width() + bbox.xmin()) * width)
                     y = int((point.y() * bbox.height() + bbox.ymin()) * height)
-                    hailo_logger.debug("Eye %s position: x=%d y=%d", eye, x, y)
                     string_to_print += f"{eye}: x: {x:.2f} y: {y:.2f}\n"
                     if user_data.use_frame:
                         cv2.circle(frame, (x, y), 5, (0, 255, 0), -1)
@@ -99,15 +90,12 @@ def app_callback(pad, info, user_data):
     if user_data.use_frame:
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         user_data.set_frame(frame)
-        hailo_logger.debug("Frame updated in user_data.")
 
     print(string_to_print)
-    hailo_logger.debug("Frame log:\n%s", string_to_print)
-    return Gst.PadProbeReturn.OK
+    return
 
 
 def get_keypoints():
-    hailo_logger.debug("Fetching COCO keypoints mapping.")
     return {
         "nose": 0,
         "left_eye": 1,
@@ -130,7 +118,7 @@ def get_keypoints():
 
 
 def main():
-    hailo_logger.info("Starting Pose Estimation App...")
+    hailo_logger.info("Starting Pose Estimation App.")
     user_data = user_app_callback_class()
     app = GStreamerPoseEstimationApp(app_callback, user_data)
     app.run()

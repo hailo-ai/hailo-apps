@@ -1,6 +1,6 @@
-# REID Multisource Application (Beta Version)
+# REID Multisource Application
 
-#### Please note that this is a beta version release; some features may be unstable.
+> ⚠️ **Beta:** This application is currently in beta. Features and APIs may change.
 
 #### Run the REID example:
 ```bash

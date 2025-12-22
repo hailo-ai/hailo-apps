@@ -8,8 +8,8 @@ apps:
   detection:
     name: "Object Detection Pipeline"
     description: "Object Detection Pipeline"
-    module: "hailo_apps.python.pipeline_apps.detection.detection_pipeline"
-    script: "hailo_apps/python/pipeline_apps/detection/detection_pipeline.py"
+    module: "hailo_apps.python.pipeline_apps.detection.detection"
+    script: "hailo_apps/python/pipeline_apps/detection/detection.py"
     cli: "hailo-detect"
     default_test_suites:
       - "basic_show_fps"
@@ -22,12 +22,12 @@ apps:
       - "pipeline_disable_sync"
       - "pipeline_disable_callback"
       - "full_combination_video_hef_labels_sync"
-  
+
   simple_detection:
     name: "Simple Detection Pipeline"
     description: "Simple Detection Pipeline"
-    module: "hailo_apps.python.pipeline_apps.detection_simple.detection_pipeline_simple"
-    script: "hailo_apps/python/pipeline_apps/detection_simple/detection_pipeline_simple.py"
+    module: "hailo_apps.python.pipeline_apps.detection_simple.detection_simple"
+    script: "hailo_apps/python/pipeline_apps/detection_simple/detection_simple.py"
     cli: "hailo-detect-simple"
     default_test_suites:
       - "basic_show_fps"
@@ -37,28 +37,29 @@ apps:
     extra_test_suites:
       - "input_video_with_labels"
       - "pipeline_disable_sync"
-  
+
   face_recognition:
     name: "Face Recognition Pipeline"
-    description: "Face Recognition Pipeline"
+    description: "Face Recognition Pipeline (multi-model: scrfd + arcface)"
     module: "hailo_apps.python.pipeline_apps.face_recognition.face_recognition"
     script: "hailo_apps/python/pipeline_apps/face_recognition/face_recognition.py"
     cli: "hailo-face-recon"
+    # Multi-model app: test framework auto-detects and passes all HEF paths
     default_test_suites:
       - "basic_show_fps"
       - "basic_input_video"
-      - "basic_input_usb"
       - "input_video_with_hef"
     extra_test_suites:
+      - "basic_input_usb"
       - "face_mode_train"
       - "input_video_mode_train"
       - "pipeline_disable_sync"
-  
+
   instance_segmentation:
     name: "Instance Segmentation Pipeline"
     description: "Instance Segmentation Pipeline"
-    module: "hailo_apps.python.pipeline_apps.instance_segmentation.instance_segmentation_pipeline"
-    script: "hailo_apps/python/pipeline_apps/instance_segmentation/instance_segmentation_pipeline.py"
+    module: "hailo_apps.python.pipeline_apps.instance_segmentation.instance_segmentation"
+    script: "hailo_apps/python/pipeline_apps/instance_segmentation/instance_segmentation.py"
     cli: "hailo-seg"
     default_test_suites:
       - "basic_show_fps"
@@ -69,12 +70,12 @@ apps:
       - "with_labels_json"
       - "with_batch_size_2"
       - "pipeline_disable_sync"
-  
+
   pose_estimation:
     name: "Pose Estimation Pipeline"
     description: "Pose Estimation Pipeline"
-    module: "hailo_apps.python.pipeline_apps.pose_estimation.pose_estimation_pipeline"
-    script: "hailo_apps/python/pipeline_apps/pose_estimation/pose_estimation_pipeline.py"
+    module: "hailo_apps.python.pipeline_apps.pose_estimation.pose_estimation"
+    script: "hailo_apps/python/pipeline_apps/pose_estimation/pose_estimation.py"
     cli: "hailo-pose"
     default_test_suites:
       - "basic_show_fps"
@@ -84,12 +85,12 @@ apps:
     extra_test_suites:
       - "with_batch_size_2"
       - "pipeline_disable_sync"
-  
+
   depth:
     name: "Depth Estimation Pipeline"
     description: "Depth Estimation Pipeline"
-    module: "hailo_apps.python.pipeline_apps.depth.depth_pipeline"
-    script: "hailo_apps/python/pipeline_apps/depth/depth_pipeline.py"
+    module: "hailo_apps.python.pipeline_apps.depth.depth"
+    script: "hailo_apps/python/pipeline_apps/depth/depth.py"
     cli: "hailo-depth"
     default_test_suites:
       - "basic_show_fps"
@@ -98,12 +99,12 @@ apps:
       - "input_video_with_hef"
     extra_test_suites:
       - "pipeline_disable_callback"
-  
+
   tiling:
     name: "Tiling Pipeline"
     description: "Tiling Pipeline"
-    module: "hailo_apps.python.pipeline_apps.tiling.tiling_pipeline"
-    script: "hailo_apps/python/pipeline_apps/tiling/tiling_pipeline.py"
+    module: "hailo_apps.python.pipeline_apps.tiling.tiling"
+    script: "hailo_apps/python/pipeline_apps/tiling/tiling.py"
     cli: "hailo-tiling"
     default_test_suites:
       - "basic_show_fps"
@@ -115,86 +116,124 @@ apps:
       - "tiling_tiles_2x2"
       - "tiling_multi_scale"
       - "with_labels_json"
-  
+
   paddle_ocr:
     name: "Paddle OCR Pipeline"
-    description: "Paddle OCR Pipeline"
-    module: "hailo_apps.python.pipeline_apps.paddle_ocr.paddle_ocr_pipeline"
-    script: "hailo_apps/python/pipeline_apps/paddle_ocr/paddle_ocr_pipeline.py"
+    description: "Paddle OCR Pipeline (multi-model: ocr_det + ocr)"
+    module: "hailo_apps.python.pipeline_apps.paddle_ocr.paddle_ocr"
+    script: "hailo_apps/python/pipeline_apps/paddle_ocr/paddle_ocr.py"
     cli: "hailo-ocr"
+    # Multi-model app: test framework auto-detects and passes all HEF paths
     default_test_suites:
       - "basic_show_fps"
       - "basic_input_video"
-      - "basic_input_usb"
       - "input_video_with_hef"
+      - "basic_input_usb"
     extra_test_suites:
       - "pipeline_disable_sync"
-  
+
   clip:
     name: "CLIP Pipeline"
-    description: "CLIP Pipeline"
-    module: "hailo_apps.python.pipeline_apps.clip.clip_pipeline"
-    script: "hailo_apps/python/pipeline_apps/clip/clip_pipeline.py"
+    description: "CLIP Pipeline (multi-model: clip_encoder + detector)"
+    module: "hailo_apps.python.pipeline_apps.clip.clip"
+    script: "hailo_apps/python/pipeline_apps/clip/clip.py"
     cli: "hailo-clip"
+    # Multi-model app: test framework auto-detects and passes all HEF paths
     default_test_suites:
       - "basic_show_fps"
       - "basic_input_video"
-      - "basic_input_usb"
       - "clip_detector_none"
-    extra_test_suites:
+      - "basic_input_usb"
       - "clip_detector_person"
-      - "clip_detector_face"
-  
-  retrain:
-    name: "Retraining Pipeline"
-    description: "Retraining Pipeline"
-    module: "hailo_apps.python.pipeline_apps.retrain.retrain_pipeline"
-    script: "hailo_apps/python/pipeline_apps/retrain/retrain_pipeline.py"
-    cli: "hailo-retrain"
-    default_test_suites:
-      - "basic_show_fps"
-      - "basic_input_video"
     extra_test_suites: []
-  
-  lane_detection:
-    name: "Lane Detection Pipeline"
-    description: "Lane Detection Pipeline"
-    module: "hailo_apps.python.pipeline_apps.lane_detection.lane_detection_pipeline"
-    script: "hailo_apps/python/pipeline_apps/lane_detection/lane_detection_pipeline.py"
-    cli: "hailo-lane"
-    default_test_suites:
-      - "basic_show_fps"
-      - "basic_input_video"
-      - "basic_input_usb"
-      - "input_video_with_hef"
-    extra_test_suites:
-      - "pipeline_disable_sync"
-  
-  super_resolution:
-    name: "Super Resolution Pipeline"
-    description: "Super Resolution Pipeline"
-    module: "hailo_apps.python.pipeline_apps.super_resolution.super_resolution_pipeline"
-    script: "hailo_apps/python/pipeline_apps/super_resolution/super_resolution_pipeline.py"
-    cli: "hailo-super-res"
-    default_test_suites:
-      - "basic_show_fps"
-      - "basic_input_video"
-      - "basic_input_usb"
-      - "input_video_with_hef"
-    extra_test_suites:
-      - "pipeline_disable_sync"
-  
+
+
+
+
   reid_multisource:
     name: "REID Multisource Pipeline"
-    description: "REID Multisource Pipeline"
-    module: "hailo_apps.python.pipeline_apps.reid_multisource.reid_multisource_pipeline"
-    script: "hailo_apps/python/pipeline_apps/reid_multisource/reid_multisource_pipeline.py"
+    description: "REID Multisource Pipeline (multi-model: scrfd + arcface)"
+    module: "hailo_apps.python.pipeline_apps.reid_multisource.reid_multisource"
+    script: "hailo_apps/python/pipeline_apps/reid_multisource/reid_multisource.py"
     cli: "hailo-reid"
+    # Multi-model app: test framework auto-detects and passes all HEF paths
+    # Note: multisource tests require video device (e.g., /dev/video0)
     default_test_suites:
       - "basic_show_fps"
-      - "multisource_single"
     extra_test_suites:
+      - "multisource_single"
       - "multisource_multiple"
+
+  object_detection_standalone:
+    name: "Object Detection Standalone"
+    description: "Standalone object detection app"
+    module: "hailo_apps.python.standalone_apps.object_detection.object_detection"
+    script: "hailo_apps/python/standalone_apps/object_detection/object_detection.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  instance_segmentation_standalone:
+    name: "Instance Segmentation Standalone"
+    description: "Standalone instance segmentation app"
+    module: "hailo_apps.python.standalone_apps.instance_segmentation.instance_segmentation"
+    script: "hailo_apps/python/standalone_apps/instance_segmentation/instance_segmentation.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  pose_estimation_standalone:
+    name: "Pose Estimation Standalone"
+    description: "Standalone pose estimation app"
+    module: "hailo_apps.python.standalone_apps.pose_estimation.pose_estimation"
+    script: "hailo_apps/python/standalone_apps/pose_estimation/pose_estimation.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  lane_detection_standalone:
+    name: "Lane Detection Standalone"
+    description: "Standalone lane detection app"
+    module: "hailo_apps.python.standalone_apps.lane_detection.lane_detection"
+    script: "hailo_apps/python/standalone_apps/lane_detection/lane_detection.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  super_resolution_standalone:
+    name: "Super Resolution Standalone"
+    description: "Standalone super resolution app"
+    module: "hailo_apps.python.standalone_apps.super_resolution.super_resolution"
+    script: "hailo_apps/python/standalone_apps/super_resolution/super_resolution.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  paddle_ocr_standalone:
+    name: "Paddle OCR Standalone"
+    description: "Standalone Paddle OCR app (multi-model)"
+    module: "hailo_apps.python.standalone_apps.paddle_ocr.paddle_ocr"
+    script: "hailo_apps/python/standalone_apps/paddle_ocr/paddle_ocr.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+    extra_test_suites: []
 
 # Test suites with flag combinations (aligned with FLAG_COMBINATIONS.md)
 test_suites:
@@ -203,28 +242,32 @@ test_suites:
     flags:
       - "--show-fps"
     description: "Basic test with FPS display"
-  
+
   basic_input_video:
     flags:
       - "--input"
       - "${VIDEO_PATH}"
       - "--show-fps"
     description: "Basic: input video file with FPS"
-  
+
   basic_input_usb:
     flags:
       - "--input"
       - "usb"
       - "--show-fps"
     description: "Basic: USB camera input with FPS"
-  
+
   basic_input_rpi:
     flags:
       - "--input"
       - "rpi"
       - "--show-fps"
     description: "Basic: Raspberry Pi camera input with FPS"
-  
+
+  basic_image_smoke:
+    flags: []
+    description: "Standalone: image-based smoke test with defaults (no extra flags)"
+
   # With HEF path combinations
   with_hef_path:
     flags:
@@ -232,7 +275,7 @@ test_suites:
       - "${HEF_PATH}"
       - "--show-fps"
     description: "With HEF path explicitly specified"
-  
+
   input_video_with_hef:
     flags:
       - "--input"
@@ -241,7 +284,7 @@ test_suites:
       - "${HEF_PATH}"
       - "--show-fps"
     description: "Video file with explicit HEF path"
-  
+
   input_usb_with_hef:
     flags:
       - "--input"
@@ -250,7 +293,7 @@ test_suites:
       - "${HEF_PATH}"
       - "--show-fps"
     description: "USB camera with explicit HEF path"
-  
+
   input_rpi_with_hef:
     flags:
       - "--input"
@@ -259,46 +302,46 @@ test_suites:
       - "${HEF_PATH}"
       - "--show-fps"
     description: "RPi camera with explicit HEF path"
-  
+
   # Pipeline flag combinations (from Pipeline Parser Flags section)
   pipeline_disable_sync:
     flags:
       - "--disable-sync"
       - "--show-fps"
     description: "Pipeline: disable synchronization"
-  
+
   pipeline_disable_callback:
     flags:
       - "--disable-callback"
       - "--show-fps"
     description: "Pipeline: disable callback"
-  
+
   pipeline_use_frame:
     flags:
       - "--use-frame"
       - "--show-fps"
     description: "Pipeline: enable frame access"
-  
+
   pipeline_dump_dot:
     flags:
       - "--dump-dot"
       - "--show-fps"
     description: "Pipeline: export pipeline graph"
-  
+
   pipeline_disable_sync_callback:
     flags:
       - "--disable-sync"
       - "--disable-callback"
       - "--show-fps"
     description: "Pipeline: disable sync and callback"
-  
+
   pipeline_disable_sync_use_frame:
     flags:
       - "--disable-sync"
       - "--use-frame"
       - "--show-fps"
     description: "Pipeline: disable sync with frame access"
-  
+
   pipeline_all_flags:
     flags:
       - "--disable-sync"
@@ -307,7 +350,7 @@ test_suites:
       - "--dump-dot"
       - "--show-fps"
     description: "Pipeline: all pipeline flags combined"
-  
+
   # App-specific flag combinations
   # Detection/Simple Detection: labels-json
   with_labels_json:
@@ -316,7 +359,7 @@ test_suites:
       - "${LABELS_JSON_PATH}"
       - "--show-fps"
     description: "With labels JSON file (detection apps)"
-  
+
   input_video_with_labels:
     flags:
       - "--input"
@@ -325,7 +368,7 @@ test_suites:
       - "${LABELS_JSON_PATH}"
       - "--show-fps"
     description: "Video file with labels JSON"
-  
+
   input_usb_with_labels:
     flags:
       - "--input"
@@ -334,7 +377,7 @@ test_suites:
       - "${LABELS_JSON_PATH}"
       - "--show-fps"
     description: "USB camera with labels JSON"
-  
+
   input_rpi_with_labels:
     flags:
       - "--input"
@@ -343,7 +386,7 @@ test_suites:
       - "${LABELS_JSON_PATH}"
       - "--show-fps"
     description: "RPi camera with labels JSON"
-  
+
   input_video_hef_labels:
     flags:
       - "--input"
@@ -354,7 +397,7 @@ test_suites:
       - "${LABELS_JSON_PATH}"
       - "--show-fps"
     description: "Video file with HEF and labels JSON"
-  
+
   input_usb_hef_labels:
     flags:
       - "--input"
@@ -365,7 +408,7 @@ test_suites:
       - "${LABELS_JSON_PATH}"
       - "--show-fps"
     description: "USB camera with HEF and labels JSON"
-  
+
   # Face Recognition: mode combinations
   face_mode_train:
     flags:
@@ -373,14 +416,14 @@ test_suites:
       - "train"
       - "--show-fps"
     description: "Face recognition: training mode"
-  
+
   face_mode_delete:
     flags:
       - "--mode"
       - "delete"
       - "--show-fps"
     description: "Face recognition: delete mode"
-  
+
   input_video_mode_train:
     flags:
       - "--input"
@@ -389,7 +432,7 @@ test_suites:
       - "train"
       - "--show-fps"
     description: "Video file with training mode"
-  
+
   input_usb_mode_train:
     flags:
       - "--input"
@@ -398,7 +441,7 @@ test_suites:
       - "train"
       - "--show-fps"
     description: "USB camera with training mode"
-  
+
   # Instance Segmentation/Pose Estimation: batch size
   with_batch_size_2:
     flags:
@@ -406,14 +449,14 @@ test_suites:
       - "2"
       - "--show-fps"
     description: "With batch size 2"
-  
+
   with_batch_size_4:
     flags:
       - "--batch-size"
       - "4"
       - "--show-fps"
     description: "With batch size 4"
-  
+
   input_video_batch_size_2:
     flags:
       - "--input"
@@ -422,14 +465,14 @@ test_suites:
       - "2"
       - "--show-fps"
     description: "Video file with batch size 2"
-  
+
   # Tiling: specific flags
   tiling_general_detection:
     flags:
       - "--general-detection"
       - "--show-fps"
     description: "Tiling: general detection mode"
-  
+
   tiling_tiles_2x2:
     flags:
       - "--tiles-x"
@@ -438,7 +481,7 @@ test_suites:
       - "2"
       - "--show-fps"
     description: "Tiling: manual 2x2 tiles"
-  
+
   tiling_tiles_3x3:
     flags:
       - "--tiles-x"
@@ -447,13 +490,13 @@ test_suites:
       - "3"
       - "--show-fps"
     description: "Tiling: manual 3x3 tiles"
-  
+
   tiling_multi_scale:
     flags:
       - "--multi-scale"
       - "--show-fps"
     description: "Tiling: multi-scale mode"
-  
+
   tiling_multi_scale_levels_2:
     flags:
       - "--multi-scale"
@@ -461,7 +504,7 @@ test_suites:
       - "2"
       - "--show-fps"
     description: "Tiling: multi-scale with 2 levels"
-  
+
   tiling_multi_scale_levels_3:
     flags:
       - "--multi-scale"
@@ -469,7 +512,7 @@ test_suites:
       - "3"
       - "--show-fps"
     description: "Tiling: multi-scale with 3 levels"
-  
+
   # CLIP: detector combinations
   clip_detector_none:
     flags:
@@ -477,21 +520,15 @@ test_suites:
       - "none"
       - "--show-fps"
     description: "CLIP: no detector"
-  
+
   clip_detector_person:
     flags:
       - "--detector"
       - "person"
       - "--show-fps"
     description: "CLIP: person detector"
-  
-  clip_detector_face:
-    flags:
-      - "--detector"
-      - "face"
-      - "--show-fps"
-    description: "CLIP: face detector"
-  
+
+
   # Multisource/REID: sources
   multisource_single:
     flags:
@@ -499,14 +536,14 @@ test_suites:
       - "/dev/video0"
       - "--show-fps"
     description: "Multisource: single source"
-  
+
   multisource_multiple:
     flags:
       - "--sources"
       - "/dev/video0,${VIDEO_PATH}"
       - "--show-fps"
     description: "Multisource: multiple sources"
-  
+
   # Base parser combinations
   with_width_height:
     flags:
@@ -516,41 +553,41 @@ test_suites:
       - "640"
       - "--show-fps"
     description: "With custom resolution (640x640)"
-  
+
   with_frame_rate:
     flags:
       - "--frame-rate"
       - "30"
       - "--show-fps"
     description: "With custom frame rate (30 FPS)"
-  
+
   with_save_output:
     flags:
       - "--save-output"
       - "--show-fps"
     description: "With output file saving"
-  
+
   with_arch_hailo8:
     flags:
       - "--arch"
       - "hailo8"
       - "--show-fps"
     description: "With Hailo8 architecture"
-  
+
   with_arch_hailo8l:
     flags:
       - "--arch"
       - "hailo8l"
       - "--show-fps"
     description: "With Hailo8L architecture"
-  
+
   with_arch_hailo10h:
     flags:
       - "--arch"
       - "hailo10h"
       - "--show-fps"
     description: "With Hailo10H architecture"
-  
+
   # Full combinations (comprehensive tests)
   full_combination_video_hef_labels_sync:
     flags:
@@ -563,7 +600,7 @@ test_suites:
       - "--disable-sync"
       - "--show-fps"
     description: "Full combination: video, HEF, labels, disable sync"
-  
+
   full_combination_usb_hef_labels_sync:
     flags:
       - "--input"
@@ -585,7 +622,7 @@ resources:
     - name: "ocr.mp4"
     - name: "tiling_visdrone_720p.mp4"
     - name: "barcode.mp4"
-  
+
   photos:
     - name: "dog_bicycle.jpg"
     - name: "zidane.jpg"
@@ -593,7 +630,7 @@ resources:
     - name: "input_image.png"
     - name: "ocr_img1.png"
     - name: "ocr_img2.png"
-  
+
   json_files:
     - name: "hailo_4_classes.json"
     - name: "barcode_labels.json"
@@ -623,7 +660,7 @@ test_run_combinations:
     test_suite_mode: "all"  # None | default | extra | all
     model_selection: "all"  # default | extra | all
     description: "CI run with all apps using all test suites and all models"
-  
+
   all_default:
     name: "All Apps Default Mode"
     apps:
@@ -643,7 +680,7 @@ test_run_combinations:
     test_suite_mode: "default"  # None | default | extra | all
     model_selection: "default"  # default | extra | all
     description: "Run all apps with default test suites and default models only"
-  
+
   all_extra:
     name: "All Apps Extra Mode"
     apps:
@@ -663,4 +700,3 @@ test_run_combinations:
     test_suite_mode: "extra"  # None | default | extra | all
     model_selection: "extra"  # default | extra | all
     description: "Run all apps with default and extra test suites and extra models"
-

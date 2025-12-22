@@ -1,8 +1,18 @@
+import sys
 from multiprocessing import Process
 from math import hypot
+from pathlib import Path
 import numpy as np
 import cv2
-from loguru import logger
+
+try:
+    from hailo_apps.python.core.common.hailo_logger import get_logger
+except ImportError:
+    core_dir = Path(__file__).resolve().parents[2] / "core"
+    sys.path.insert(0, str(core_dir))
+    from common.hailo_logger import get_logger
+
+logger = get_logger(__name__)
 
 class UFLDProcessing:
     def __init__(self,

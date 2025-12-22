@@ -142,7 +142,6 @@ class BYTETracker(object):
         self.tracked_stracks = []  # type: list[STrack]
         self.lost_stracks = []  # type: list[STrack]
         self.removed_stracks = []  # type: list[STrack]
-
         self.frame_id = 0
         self.args = args
         #self.det_thresh = args.track_thresh

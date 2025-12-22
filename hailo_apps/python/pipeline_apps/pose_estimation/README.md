@@ -43,7 +43,7 @@ hailo-pose --help
 
 #### Running as Python script
 
-For examples: 
+For examples:
 ```bash
 python pose_estimation.py --input usb
 ```
@@ -69,8 +69,8 @@ The callback function retrieves pose estimation metadata from the network output
    - If the buffer is invalid (`None`), the function exits early.
 
 2. **Frame Counting**:
-   - Increments the frame count using `user_data.increment()`.
-   - Prints the current frame count for debugging purposes.
+   - Frame counting is handled automatically by the framework wrapper before the callback is invoked.
+   - The current frame count is retrieved using `user_data.get_count()` for debugging purposes.
 
 3. **Extract Video Frame Properties**:
    - Retrieves the video format, width, and height from the pad using `get_caps_from_pad(pad)`.

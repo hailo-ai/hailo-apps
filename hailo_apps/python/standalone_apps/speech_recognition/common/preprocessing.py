@@ -1,12 +1,14 @@
 """Preprocessing functions for Whisper audio data."""
 
 try:
-    from hailo_apps.python.standalone_apps.speech_recognition.common import audio_utils as common_audio_utils
+    from hailo_apps.python.standalone_apps.speech_recognition.common import audio_utils
 except ImportError:
+    from pathlib import Path
     import sys
-    import os
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-    import common.audio_utils as common_audio_utils
+
+    speech_root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(speech_root))
+    import common.audio_utils as audio_utils
 import numpy as np
 import logging
 
@@ -23,7 +25,7 @@ def preprocess(audio, is_nhwc=False, chunk_length = 10, chunk_offset=0, max_dura
     - overlap: Overlap between chunks. This is useful for continuous audio processing. Add some overlap (e.g. 0.2) when processing an audio longer than 10 seonds.
     """
     # Limit the audio duration
-    sample_rate = common_audio_utils.SAMPLE_RATE
+    sample_rate = audio_utils.SAMPLE_RATE
     max_samples = max_duration * sample_rate
     offset = int(chunk_offset * sample_rate)
 
@@ -42,10 +44,10 @@ def preprocess(audio, is_nhwc=False, chunk_length = 10, chunk_offset=0, max_dura
         chunk = audio[start:end]
 
         # Ensure the chunk is 10s long (Whisper requires this)
-        chunk = common_audio_utils.pad_or_trim(chunk, int(segment_duration * sample_rate))
+        chunk = audio_utils.pad_or_trim(chunk, int(segment_duration * sample_rate))
 
         # Convert to Mel spectrogram
-        mel = common_audio_utils.log_mel_spectrogram(chunk).to("cpu")
+        mel = audio_utils.log_mel_spectrogram(chunk).to("cpu")
         # Run the encoder
 
         mel = np.expand_dims(mel, axis=0)  # Add new axis to match shape (1, 80, 1, 1000)
@@ -91,7 +93,7 @@ def improve_input_audio(audio, vad=True, low_audio_gain = True):
 
     start_time = 0
     if vad:
-        start_time = detect_first_speech(audio, common_audio_utils.SAMPLE_RATE, threshold=0.2, frame_duration=0.2)
+        start_time = detect_first_speech(audio, audio_utils.SAMPLE_RATE, threshold=0.2, frame_duration=0.2)
         if start_time is not None:
             logging.info(f"Speech detected at {start_time:.2f} seconds.")
         else:

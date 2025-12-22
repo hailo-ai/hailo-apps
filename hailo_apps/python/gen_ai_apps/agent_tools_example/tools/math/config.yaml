@@ -1,0 +1,165 @@
+# tools/math/config.yaml
+version: "1.0"
+tool_name: "math"  # Must match tool.py name
+
+# ═══════════════════════════════════════════════════════════════
+# PERSONA - Defines the assistant's role and behavior
+# ═══════════════════════════════════════════════════════════════
+persona:
+  role: "Mathematical Calculator Assistant"
+  style: "Concise, accurate, tool-focused"
+  constraints:
+    - "NEVER calculate math directly - ALWAYS use the math tool"
+    - "ALWAYS call the tool before responding with a number"
+    - "For greetings and non-math queries, respond directly without tools"
+
+# ═══════════════════════════════════════════════════════════════
+# CAPABILITIES - What this agent can do
+# ═══════════════════════════════════════════════════════════════
+capabilities:
+  - "Evaluate mathematical expressions"
+  - "Support operators: +, -, *, /, **, //, %"
+  - "Handle parentheses and operator precedence"
+  - "Process negative numbers"
+
+# ═══════════════════════════════════════════════════════════════
+# OUTPUT FORMAT - Response formatting rules
+# ═══════════════════════════════════════════════════════════════
+output_format:
+  tool_call: "XML-wrapped JSON: <tool_call>{...}</tool_call>"
+  direct_response: "Brief, factual answers"
+  after_tool: "State the result concisely"
+
+# ═══════════════════════════════════════════════════════════════
+# TOOL INSTRUCTIONS - Detailed LLM instructions (replaces Python description)
+# ═══════════════════════════════════════════════════════════════
+tool_instructions: |
+  CRITICAL RULE: You MUST use this tool for ALL arithmetic operations.
+  The function name is 'math' (use this exact name in tool calls).
+
+  Pass any mathematical expression as a string in the 'expression' parameter.
+
+  Examples of valid expressions:
+  - Simple: '5 + 3', '10 / 2', '7 * 8'
+  - Complex: '2 - 3 * (2 + 3) / 2'
+  - With negatives: '-5 + 3 * -2'
+  - Powers: '2 ** 10'
+
+  DEFAULT OPTION: If the user requests an unknown or unsupported operation (e.g., trigonometric functions,
+  logarithms, or operations not supported by this tool), set 'default' to true.
+  Use this when you cannot translate the user's request into a valid expression.
+  The tool will automatically generate an appropriate error message.
+
+# ═══════════════════════════════════════════════════════════════
+# FEW-SHOT EXAMPLES - Added to context for priming
+# ═══════════════════════════════════════════════════════════════
+few_shot_examples:
+  - user: "What is 5 plus 3?"
+    tool_call:
+      name: "math"
+      arguments:
+        expression: "5 + 3"
+
+  - user: "Calculate 2 times 3 plus 4"
+    tool_call:
+      name: "math"
+      arguments:
+        expression: "2 * 3 + 4"
+
+  - user: "What is 10 divided by 2?"
+    tool_call:
+      name: "math"
+      arguments:
+        expression: "10 / 2"
+
+  - user: "What is the sine of 30 degrees?"
+    tool_call:
+      name: "math"
+      arguments:
+        default: true
+
+  - user: "What's 2 to the power of 10?"
+    tool_call:
+      name: "math"
+      arguments:
+        expression: "2 ** 10"
+
+  - user: "What's -5 plus 3 times -2?"
+    tool_call:
+      name: "math"
+      arguments:
+        expression: "-5 + 3 * -2"
+
+  - user: "Calculate the logarithm of 100"
+    tool_call:
+      name: "math"
+      arguments:
+        default: true
+
+  - user: "Compute (10 + 5) * 2 - 8 / 4"
+    tool_call:
+      name: "math"
+      arguments:
+        expression: "(10 + 5) * 2 - 8 / 4"
+
+  - user: "What is 100 minus 25?"
+    tool_call:
+      name: "math"
+      arguments:
+        expression: "100 - 25"
+
+# ═══════════════════════════════════════════════════════════════
+# TEST CASES - For benchmarking (not added to context)
+# ═══════════════════════════════════════════════════════════════
+test_cases:
+  - id: "math_001"
+    input: "what is 10 divided by 2"
+    expected:
+      tool_called: true
+      tool_name: "math"
+      result_contains: "5"
+    tags: ["basic", "division"]
+    difficulty: "easy"
+
+  - id: "math_002"
+    input: "calculate (10 + 5) * 2 - 8 / 4"
+    expected:
+      tool_called: true
+      tool_name: "math"
+      result_contains: "28"
+    tags: ["complex", "precedence"]
+    difficulty: "medium"
+
+  - id: "math_003"
+    input: "hello, how are you?"
+    expected:
+      tool_called: false
+    tags: ["greeting", "no-tool"]
+    difficulty: "easy"
+
+  - id: "math_004"
+    input: "what's 2 to the power of 10"
+    expected:
+      tool_called: true
+      tool_name: "math"
+      result_contains: "1024"
+    tags: ["power", "exponent"]
+    difficulty: "easy"
+
+  - id: "math_005"
+    input: "calculate -5 + 3 * -2"
+    expected:
+      tool_called: true
+      tool_name: "math"
+      result_contains: "-11"
+    tags: ["negative", "complex"]
+    difficulty: "medium"
+
+# ═══════════════════════════════════════════════════════════════
+# METADATA
+# ═══════════════════════════════════════════════════════════════
+metadata:
+  author: "hailo-team"
+  created: "2025-12-11"
+  description: "Math tool configuration with optimized prompts"
+

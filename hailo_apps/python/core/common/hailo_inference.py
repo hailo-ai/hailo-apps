@@ -1,4 +1,5 @@
 from typing import Tuple, Dict, List
+import os
 from typing import Callable, Optional
 from functools import partial
 import numpy as np
@@ -32,6 +33,7 @@ class HailoInfer:
         vDevice = VDevice(params)
 
         self.target = vDevice
+        hef_path = os.fspath(hef_path)
         self.hef = HEF(hef_path)
 
         self.infer_model = self.target.create_infer_model(hef_path)

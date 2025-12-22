@@ -3,8 +3,6 @@ import numpy as np
 import cv2
 from pathlib import Path
 import os
-from loguru import logger
-import argparse
 import sys
 from typing import List
 import threading
@@ -14,64 +12,99 @@ from functools import partial
 
 try:
     from hailo_apps.python.core.common.hailo_inference import HailoInfer
-    from hailo_apps.python.core.common.toolbox import  init_input_source, visualize, preprocess, FrameRateTracker
+    from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
+    from hailo_apps.python.core.common.toolbox import (
+        init_input_source,
+        preprocess,
+        visualize,
+        FrameRateTracker,
+        resolve_arch,
+        resolve_input_arg,
+        resolve_output_resolution_arg,
+        list_inputs,
+    )
+    from hailo_apps.python.core.common.core import handle_list_models_flag, resolve_hef_path
+    from hailo_apps.python.core.common.parser import get_standalone_parser
 except ImportError:
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'core')))
+    core_dir = Path(__file__).resolve().parents[2] / "core"
+    sys.path.insert(0, str(core_dir))
     from common.hailo_inference import HailoInfer
-    from common.toolbox import  init_input_source, visualize, preprocess, FrameRateTracker
+    from common.hailo_logger import get_logger, init_logging, level_from_args
+    from common.toolbox import (
+        init_input_source,
+        preprocess,
+        visualize,
+        FrameRateTracker,
+        resolve_arch,
+        resolve_input_arg,
+        resolve_output_resolution_arg,
+        list_inputs,
+    )
+    from common.core import handle_list_models_flag, resolve_hef_path
+    from common.parser import get_standalone_parser
 
-def parse_args() -> argparse.Namespace:
+APP_NAME = Path(__file__).stem
+logger = get_logger(__name__)
+
+
+def parse_args():
     """
     Initialize argument parser for the script.
 
     Returns:
         argparse.Namespace: Parsed arguments.
     """
-    parser = argparse.ArgumentParser(description="Super Resolution Example")
+    parser = get_standalone_parser()
+    parser.description = "Super Resolution using SRGAN or ESPCN models."
+
+    # App-specific arguments
     parser.add_argument(
-        "-n", "--net", 
-        help="Path for the network in HEF format.",
-        default="real_esrgan_x2.hef"
-    )
-    parser.add_argument(
-        "-i", "--input", default="ocr_img1.png",
-        help="Path to the input - either an image or a folder of images."
-    )
-    parser.add_argument(
-        "-b", "--batch_size", default=1, type=int, required=False,
-        help="Number of images in one batch"
-    )
-    parser.add_argument(
-        "-s", "--save_stream_output", action="store_true",
-        help="Save the output of the inference from a stream."
-    )
-    parser.add_argument(
-        "-o", "--output-dir", help="Directory to save the results.",
-        default=None
-    )
-    parser.add_argument(
-        "-r", "--resolution",
+        "--camera-resolution",
+        "-cr",
+        type=str,
         choices=["sd", "hd", "fhd"],
-        default="sd",
-        help="Camera only: Choose input resolution: 'sd' (640x480), 'hd' (1280x720), or 'fhd' (1920x1080). Default is 'sd'."
+        default=None,
+        help="(Camera only) Input resolution: 'sd' (640x480), 'hd' (1280x720), or 'fhd' (1920x1080).",
     )
 
     parser.add_argument(
-        "--show-fps",
-        action="store_true",
-        help="Enable FPS measurement and display."
+        "--output-resolution",
+        "-or",
+        nargs="+",
+        type=str,
+        default=None,
+        help=(
+            "Output resolution. Use: 'sd', 'hd', 'fhd', "
+            "or custom size like '--output-resolution 1920 1080'."
+        ),
     )
+
+    handle_list_models_flag(parser, APP_NAME)
 
     args = parser.parse_args()
 
-    # Validate paths
-    if not os.path.exists(args.net):
-        raise FileNotFoundError(f"Network file not found: {args.net}")
+    # Handle --list-inputs and exit
+    if args.list_inputs:
+        list_inputs(APP_NAME)
+        sys.exit(0)
 
+    # Resolve network and input paths
+    args.arch = resolve_arch(args.arch)
+    args.hef_path = resolve_hef_path(
+        hef_path=args.hef_path,
+        app_name=APP_NAME,
+        arch=args.arch,
+    )
+    if args.hef_path is None:
+        logger.error("Failed to resolve HEF path for %s", APP_NAME)
+        sys.exit(1)
+    args.input = resolve_input_arg(APP_NAME, args.input)
+    args.output_resolution = resolve_output_resolution_arg(args.output_resolution)
+
+    # Setup output directory
     if args.output_dir is None:
         args.output_dir = os.path.join(os.getcwd(), "output")
     os.makedirs(args.output_dir, exist_ok=True)
-
 
     return args
 
@@ -155,9 +188,11 @@ def run_inference_pipeline(
     input: str,
     batch_size: int,
     output_dir: str,
-    save_stream_output: bool,
-    resolution: str,
-    show_fps: bool
+    camera_resolution: str,
+    output_resolution: str,
+    frame_rate: float,
+    save_output: bool,
+    show_fps: bool,
 ) -> None:
     """
     Initialize queues, create HailoAsyncInference instance, and run the inference pipeline.
@@ -167,8 +202,10 @@ def run_inference_pipeline(
         input (str): Input source path (image directory, video file, or camera).
         batch_size (int): Number of frames to process per batch.
         output_dir (str): Directory path to save output visualizations.
-        save_stream_output (bool): Whether to save the processed stream to video/images.
-        resolution (str): Input resolution, e.g., 'sd', 'hd', or 'fhd'.
+        camera_resolution (str): Camera input resolution, e.g., 'sd', 'hd', or 'fhd'.
+        output_resolution (str): Output resolution for display/saving.
+        frame_rate (float): Target frame rate for processing.
+        save_output (bool): Whether to save the processed stream to video/images.
         show_fps (bool): Whether to print/log FPS (frames per second) information during execution.
 
     Returns:
@@ -177,7 +214,7 @@ def run_inference_pipeline(
 
     utils = None
     # Initialize input source from string: "camera", video file, or image folder.
-    cap, images = init_input_source(input, batch_size, resolution)
+    cap, images = init_input_source(input, batch_size, camera_resolution)
 
     input_queue = queue.Queue()
     output_queue = queue.Queue()
@@ -187,6 +224,9 @@ def run_inference_pipeline(
     if show_fps:
         fps_tracker = FrameRateTracker()
 
+    # Convert net_path to string if it's a Path object
+    net_path = str(net_path)
+    
     if 'espcn' in net_path:
         utils = Espcnx4Utils()
         hailo_inference = HailoInfer(net_path, batch_size, input_type="FLOAT32", output_type="FLOAT32")
@@ -201,11 +241,11 @@ def run_inference_pipeline(
     )
 
     preprocess_thread = threading.Thread(
-        target=preprocess, args=(images, cap, batch_size, input_queue, width, height)
+        target=preprocess, args=(images, cap, frame_rate, batch_size, input_queue, width, height)
     )
     postprocess_thread = threading.Thread(
-        target=visualize, args=(output_queue, cap, save_stream_output,
-                                output_dir, post_process_callback_fn, fps_tracker, True)
+        target=visualize, args=(output_queue, cap, save_output,
+                                output_dir, post_process_callback_fn, fps_tracker, output_resolution, frame_rate, True)
     )
     infer_thread = threading.Thread(
         target=infer, args=(hailo_inference, input_queue, output_queue)
@@ -227,9 +267,9 @@ def run_inference_pipeline(
     if show_fps:
         logger.debug(fps_tracker.frame_rate_summary())
 
-
-    logger.info('Inference was successful!')
-
+    logger.info("Inference was successful!")
+    if save_output or input.lower() != "camera":
+        logger.info(f"Results have been saved in {output_dir}")
 
 
 def main() -> None:
@@ -238,9 +278,19 @@ def main() -> None:
     """
     # Parse command line arguments
     args = parse_args()
+    init_logging(level=level_from_args(args))
 
     # Start the inference
-    run_inference_pipeline(args.net, args.input, args.batch_size, args.output_dir,
-          args.save_stream_output, args.resolution, args.show_fps)
+    run_inference_pipeline(
+        args.hef_path,
+        args.input,
+        args.batch_size,
+        args.output_dir,
+        args.camera_resolution,
+        args.output_resolution,
+        args.frame_rate,
+        args.save_output,
+        args.show_fps,
+    )
 if __name__ == "__main__":
     main()

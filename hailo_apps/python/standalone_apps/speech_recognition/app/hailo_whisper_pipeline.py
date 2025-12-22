@@ -7,9 +7,11 @@ from threading import Thread
 try:
     from hailo_apps.python.standalone_apps.speech_recognition.common.postprocessing import apply_repetition_penalty
 except ImportError:
+    from pathlib import Path
     import sys
-    import os
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+    speech_root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(speech_root))
     from common.postprocessing import apply_repetition_penalty
 
 
@@ -31,7 +33,7 @@ class HailoWhisperPipeline:
         self.timeout_ms = 100000000
         self.variant = variant
 
-        self.decoding_sequence_length = 32 if ("tiny" in self.variant) else 24
+        self.decoding_sequence_length = None  # set automatically based on HEF details
         self.host = host  # not used in this version
         self.multi_process_service = multi_process_service
 
@@ -41,6 +43,9 @@ class HailoWhisperPipeline:
 
         self.constant_output_0 = np.array([1])  # Unsqueeze axis
         self._load_tokenizer()
+
+        encoder_hef = HEF(self.encoder_model_path)  # load HEF to get input length
+        self.input_audio_length = int((encoder_hef.get_input_vstream_infos()[0].shape[1]) / 100)  # in seconds
 
         self.data_queue = Queue()
         self.results_queue = Queue()
@@ -72,7 +77,7 @@ class HailoWhisperPipeline:
         """
         self.tokenizer = AutoTokenizer.from_pretrained(f"openai/whisper-{self.variant}")
 
-    def _tokenization(self, decoder_input_ids):
+    def _tokenization(self, decoder_input_ids, add_embed=True):
         """
         Perform tokenization operations.
 
@@ -81,14 +86,19 @@ class HailoWhisperPipeline:
         """
         # embedding lookup
         gather_output = self.token_embedding_weight[decoder_input_ids]  # Shape: (len(decoder_input_ids), 384)
-        # Add bias
-        add_output = gather_output + self.onnx_add_input  # Broadcasting with shape (32, 384)
-        # insert dimension at axis=1
-        unsqueeze_output = np.expand_dims(add_output, axis=int(self.constant_output_0[0]))  # Shape: (32, 1, 384)
-        # Transpose (0, 3, 2, 1) + turn into NHWC (0, 2, 3, 1)
-        transpose_output = np.transpose(unsqueeze_output, (0, 2, 1, 3))
 
-        return transpose_output
+        if add_embed:
+            # Add bias
+            add_output = gather_output + self.onnx_add_input  # Broadcasting with shape (32, 384)
+            # insert dimension at axis=1
+            unsqueeze_output = np.expand_dims(add_output, axis=int(self.constant_output_0[0]))  # Shape: (32, 1, 384)
+            # Transpose (0, 3, 2, 1) + turn into NHWC (0, 2, 3, 1)
+            transpose_output = np.transpose(unsqueeze_output, (0, 2, 1, 3))
+            return transpose_output
+        else:
+            # insert dimension at axis=1
+            unsqueeze_output = np.expand_dims(gather_output, axis=0)
+            return unsqueeze_output
 
     def _inference_loop(self):
         """
@@ -105,6 +115,7 @@ class HailoWhisperPipeline:
         decoder_hef = HEF(self.decoder_model_path)
         sorted_output_names = decoder_hef.get_sorted_output_names()
         decoder_model_name = decoder_hef.get_network_group_names()[0]
+        self.decoding_sequence_length = decoder_hef.get_output_vstream_infos()[0].shape[1]
 
         with VDevice(params) as vdevice:
             encoder_infer_model = vdevice.create_infer_model(self.encoder_model_path)
@@ -117,6 +128,11 @@ class HailoWhisperPipeline:
             # model's outputs will be concatenated on the host
             for output_name in sorted_output_names:
                 decoder_infer_model.output(output_name).set_format_type(FormatType.FLOAT32)
+
+            useful_outputs = []
+            for output_name in sorted_output_names:
+               if "conv" in output_name:
+                   useful_outputs.append(output_name)
 
 
             with encoder_infer_model.configure() as encoder_configured_infer_model:
@@ -151,7 +167,7 @@ class HailoWhisperPipeline:
                             decoder_outputs = None
                             # Run Decoder Iteratively
                             for i in range(self.decoding_sequence_length - 1):
-                                tokenized_ids = self._tokenization(decoder_input_ids)
+                                tokenized_ids = self._tokenization(decoder_input_ids, add_embed=False)
 
                                 decoder_bindings.input(f"{decoder_model_name}/input_layer1").set_buffer(encoded_features)
                                 decoder_bindings.input(f"{decoder_model_name}/input_layer2").set_buffer(tokenized_ids)
@@ -166,7 +182,7 @@ class HailoWhisperPipeline:
                                 decoder_configured_infer_model.run([decoder_bindings], self.timeout_ms)  # run decoder
 
                                 decoder_outputs = np.concatenate(
-                                    [decoder_bindings.output(name).get_buffer() for name in sorted_output_names], axis=2
+                                    [decoder_bindings.output(name).get_buffer() for name in useful_outputs], axis=2
                                 )
                                 
 
@@ -192,6 +208,15 @@ class HailoWhisperPipeline:
                         except Empty:
                             pass  # No data yet, continue looping
 
+    def get_model_input_audio_length(self):
+        """
+        Get the expected input audio length for the encoder.
+
+        :return: Input audio length.
+        """
+
+        return self.input_audio_length
+
     def send_data(self, data):
         """
         Send new data to the queue.
@@ -214,4 +239,3 @@ class HailoWhisperPipeline:
         """
         self.running = False
         self.thread.join()
-

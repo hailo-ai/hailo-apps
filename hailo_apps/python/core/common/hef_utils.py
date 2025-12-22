@@ -2,8 +2,11 @@
 
 from pathlib import Path
 from typing import Tuple
+import re
 
 from .hailo_logger import get_logger
+from .core import get_resource_path
+from .defines import RESOURCES_JSON_DIR_NAME
 
 hailo_logger = get_logger(__name__)
 
@@ -140,3 +143,47 @@ def get_hef_input_shape(hef_path: str) -> Tuple[int, ...]:
             raise
         raise ValueError(f"Failed to parse HEF file {hef_path}: {str(e)}") from e
 
+
+def get_hef_labels_json(hef_path: str) -> str:
+    """
+    Get the labels JSON from a HEF file.
+    This function will parse the HEF name and return a labels JSON file path using the regular expression.
+    It is not a generic function and only works for specific HEF files used in the project.
+    Available labels JSON files:
+    - hailo_4_classes.json
+    - barcode_labels.json
+    - visdrone.json
+
+    Args:
+        hef_path: Path to the HEF file
+
+    Returns:
+        str: The labels JSON file path or None if not found
+    """
+    hef_name = Path(hef_path).name
+
+    if re.search(r"4_classes", hef_name):
+        return get_resource_path(
+            pipeline_name=None,
+            resource_type=RESOURCES_JSON_DIR_NAME,
+            arch=None,
+            model="hailo_4_classes.json"
+        )
+
+    if re.search(r"barcode", hef_name):
+        return get_resource_path(
+            pipeline_name=None,
+            resource_type=RESOURCES_JSON_DIR_NAME,
+            arch=None,
+            model="barcode_labels.json"
+        )
+
+    if re.search(r"visdrone", hef_name):
+        return get_resource_path(
+            pipeline_name=None,
+            resource_type=RESOURCES_JSON_DIR_NAME,
+            arch=None,
+            model="visdrone.json"
+        )
+
+    return None

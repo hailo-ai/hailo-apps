@@ -1,27 +1,76 @@
 """Main app for Hailo Whisper"""
 
 import time
-import argparse
 import os
 import sys
+
+
+def check_whisper_dependencies():
+    """
+    Check if all required Whisper dependencies are installed.
+    
+    Exits the program with installation instructions if any dependencies are missing.
+    """
+    missing_deps = []
+    for dep_name in ["transformers", "sounddevice", "torch", "streamlit"]:
+        try:
+            __import__(dep_name)
+        except ImportError:
+            missing_deps.append(dep_name)
+
+    if missing_deps:
+        print("\n" + "="*70)
+        print("❌ MISSING REQUIRED DEPENDENCIES")
+        print("="*70)
+        print("\nThe following dependencies are required but not installed:")
+        for dep in missing_deps:
+            print(f"  • {dep}")
+        print("\n" + "-"*70)
+        print("INSTALLATION INSTRUCTIONS:")
+        print("-"*70)
+        print("\nTo install all dependencies (recommended):")
+        print("  1. Navigate to the repository root directory")
+        print("  2. Run: pip install -e \".[speech-rec]\"")
+        print("\n" + "="*70)
+        sys.exit(1)
+
+
+# Check dependencies before importing modules that depend on them
+check_whisper_dependencies()
+
 try:
-    from hailo_apps.python.standalone_apps.speech_recognition.app.hailo_whisper_pipeline import HailoWhisperPipeline
+    from hailo_apps.python.standalone_apps.speech_recognition.app.hailo_whisper_pipeline import (
+        HailoWhisperPipeline,
+    )
     from hailo_apps.python.standalone_apps.speech_recognition.common.audio_utils import load_audio
-    from hailo_apps.python.standalone_apps.speech_recognition.common.preprocessing import preprocess, improve_input_audio
-    from hailo_apps.python.standalone_apps.speech_recognition.common.postprocessing import clean_transcription
+    from hailo_apps.python.standalone_apps.speech_recognition.common.preprocessing import (
+        preprocess,
+        improve_input_audio,
+    )
+    from hailo_apps.python.standalone_apps.speech_recognition.common.postprocessing import (
+        clean_transcription,
+    )
     from hailo_apps.python.standalone_apps.speech_recognition.common.record_utils import record_audio
-    from hailo_apps.python.standalone_apps.speech_recognition.app.whisper_hef_registry import HEF_REGISTRY
+    from hailo_apps.python.standalone_apps.speech_recognition.app.whisper_hef_registry import (
+        HEF_REGISTRY,
+    )
+    from hailo_apps.python.core.common.parser import get_standalone_parser
+    from hailo_apps.python.core.common.toolbox import resolve_arch
 except ImportError:
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    from pathlib import Path
+
+    speech_root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(speech_root))
+    core_dir = Path(__file__).resolve().parents[3] / "core"
+    sys.path.insert(0, str(core_dir))
     from app.hailo_whisper_pipeline import HailoWhisperPipeline
     from common.audio_utils import load_audio
     from common.preprocessing import preprocess, improve_input_audio
     from common.postprocessing import clean_transcription
     from common.record_utils import record_audio
     from app.whisper_hef_registry import HEF_REGISTRY
-
-
-DURATION = 5  # recording duration in seconds
+    from common.parser import get_standalone_parser
+    from common.toolbox import resolve_arch
 
 
 def get_args():
@@ -31,7 +80,9 @@ def get_args():
     Return:
         argparse.Namespace: Parsed arguments.
     """
-    parser = argparse.ArgumentParser(description="Whisper Hailo Pipeline")
+    parser = get_standalone_parser()
+    parser.description = "Whisper Hailo Pipeline"
+    # Don't set a default here - let resolve_arch() handle auto-detection
     parser.add_argument(
         "--reuse-audio", 
         action="store_true", 
@@ -39,10 +90,11 @@ def get_args():
     )
     parser.add_argument(
         "--hw-arch",
+        dest="arch",
         type=str,
-        default="hailo8",
         choices=["hailo8", "hailo8l", "hailo10h"],
-        help="Hardware architecture to use (default: hailo8)"
+        default=None,
+        help="Hardware architecture to use (alias for --arch, will auto-detect if not specified)"
     )
     parser.add_argument(
         "--variant",
@@ -56,7 +108,16 @@ def get_args():
         action="store_true", 
         help="Enable multi-process service to run other models in addition to Whisper"
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--duration",
+        type=int,
+        default=10,
+        help="Recording duration in seconds (default: 10 seconds)"
+    )
+    args = parser.parse_args()
+    # Preserve backwards compatibility with previous flag naming
+    args.hw_arch = args.arch
+    return args
 
 
 def get_hef_path(model_variant: str, hw_arch: str, component: str) -> str:
@@ -79,7 +140,13 @@ def get_hef_path(model_variant: str, hw_arch: str, component: str) -> str:
         ) from e
 
     if not os.path.exists(hef_path):
-        raise FileNotFoundError(f"HEF file not found at: {hef_path}\nIf not done yet, please run python3 ./download_resources.py --hw-arch {hw_arch} from the app/ folder to download the required HEF files.")
+        from pathlib import Path
+        download_script = Path(__file__).parent / "download_resources.py"
+        raise FileNotFoundError(
+            f"HEF file not found at: {hef_path}\n\n"
+            f"To download the required HEF files, run:\n"
+            f"  python3 {download_script} --hw-arch {hw_arch}"
+        )
     return hef_path
 
 
@@ -89,18 +156,23 @@ def main():
     """
     # Get command line arguments
     args = get_args()
+    
+    # Resolve architecture (auto-detect if not specified)
+    args.arch = resolve_arch(args.arch)
+    args.hw_arch = args.arch
 
     variant = args.variant
     print(f"Selected variant: Whisper {variant}")
-    encoder_path = get_hef_path(variant, args.hw_arch, "encoder")
-    decoder_path = get_hef_path(variant, args.hw_arch, "decoder")
+    print(f"Using hardware architecture: {args.arch}")
+    encoder_path = get_hef_path(variant, args.arch, "encoder")
+    decoder_path = get_hef_path(variant, args.arch, "decoder")
 
     whisper_hailo = HailoWhisperPipeline(encoder_path, decoder_path, variant, multi_process_service=args.multi_process_service)
     print("Hailo Whisper pipeline initialized.")
     audio_path = "sampled_audio.wav"
     is_nhwc = True
 
-    chunk_length = 10 if "tiny" in variant else 5
+    chunk_length = whisper_hailo.get_model_input_audio_length()
 
     while True:
         if args.reuse_audio:
@@ -113,12 +185,15 @@ def main():
             if user_input.lower() == "q":
                 break
             # Record audio
-            sampled_audio = record_audio(DURATION, audio_path=audio_path)
+            sampled_audio = record_audio(args.duration, audio_path=audio_path)
 
         # Process audio
         sampled_audio = load_audio(audio_path)
 
         sampled_audio, start_time = improve_input_audio(sampled_audio, vad=True)
+        if start_time is None:
+            print("No speech detected in the audio. Please try recording again with clearer audio.")
+            continue
         chunk_offset = start_time - 0.2
         if chunk_offset < 0:
             chunk_offset = 0

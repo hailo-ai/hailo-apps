@@ -19,6 +19,14 @@ local_resources/piper_models/*.onnx.json
 *.tmp
 *.dot
 
+# Audio files (debug recordings, test files, etc.)
+*.wav
+*.mp3
+*.ogg
+
+# User-specific audio device preferences
+local_resources/audio_device_preferences.json
+
 # Packages and dependencies
 *.egg-info/
 
@@ -45,3 +53,7 @@ venv_hailo_apps/
 
 resources/
 resources
+
+# IDE configuration files (user-specific)
+.vscode/launch.json
+.cursor/

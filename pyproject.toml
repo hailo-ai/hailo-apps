@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hailo-apps"
-version = "25.10.0"
+version = "25.12.0"
 description = "Hailo AI applications and pipelines package"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,13 +22,9 @@ dependencies = [
     "opencv-python",
     "python-dotenv",
     "pyyaml",
-    "lancedb",
     "Pillow",
-    "ruff>=0.5.7",
-    "pre-commit>=3.7.0",
-    "PyAudio",
-    "piper-tts",
-    # Dependencies from hace-internal
+    "lancedb",
+    # Dependencies from hace-internal (tracker, etc.)
     "loguru",
     "scipy>=1.9.3",
     "lap",
@@ -37,17 +33,43 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Development tools - install with: pip install -e ".[dev]"
+dev = [
+    "ruff>=0.5.7",
+    "pre-commit>=3.7.0",
+    "pytest>=7.0.0",
+    "pytest-timeout>=2.0.0",
+]
+
+# Gen-AI dependencies (voice assistant, LLM, embeddings) - install with: pip install -e ".[gen-ai]"
+gen-ai = [
+    "PyAudio",
+    "piper-tts",
+    "sounddevice==0.5.1",
+]
+
+# OCR dependencies - install with: pip install -e ".[ocr]"
 ocr = [
     "paddlepaddle",
     "shapely",
     "pyclipper",
     "symspellpy",
 ]
+
+# Speech recognition (Whisper) dependencies - install with: pip install -e ".[speech-rec]"
 speech-rec = [
     "transformers==4.50.1",
     "sounddevice==0.5.1",
     "torch==2.6.0",
+    "torchvision==0.21.0",
     "streamlit",
+]
+
+# CLIP dependencies - install with: pip install -e ".[clip]"
+clip = [
+    "openai-clip",
+    "torch==2.6.0",
+    "torchvision==0.21.0"
 ]
 
 [project.scripts]
@@ -65,7 +87,9 @@ hailo-face-recon =          "hailo_apps.python.pipeline_apps.face_recognition.fa
 hailo-tiling =              "hailo_apps.python.pipeline_apps.tiling.tiling:main"
 hailo-multisource =         "hailo_apps.python.pipeline_apps.multisource.multisource:main"
 hailo-reid =                "hailo_apps.python.pipeline_apps.reid_multisource.reid_multisource:main"
-hailo-clip =                "hailo_apps.python.pipeline_apps.clip.clip_app:main"
+hailo-clip =                "hailo_apps.python.pipeline_apps.clip.clip:main"
+hailo-ocr  =                "hailo_apps.python.pipeline_apps.paddle_ocr.paddle_ocr:main"
+hailo-audio-troubleshoot =  "hailo_apps.python.gen_ai_apps.gen_ai_utils.voice_processing.audio_troubleshoot:main"
 
 [tool.setuptools.packages.find]
 include = ["hailo_apps*"]

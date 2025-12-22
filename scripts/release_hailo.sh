@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # kill_first_hailo.sh — find the first /dev/hailo* and kill any process using it
 
+set -uo pipefail
+
 # Find all hailo devices, pick the first one
 hailo_dev=$(ls /dev/hailo* 2>/dev/null | head -n1)
 if [[ -z "$hailo_dev" ]]; then

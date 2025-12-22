@@ -17,37 +17,6 @@ Ensure your system matches the following requirements before proceeding:
   ```
 - **Python 3.10 or 3.11** installed.
 
-## Installation - Inference only
-
-Follow these steps to set up the environment and install dependencies for inference:
-
-1. Clone this repository:
-
-   ```sh
-   git clone https://github.com/hailo-ai/Hailo-Application-Code-Examples.git
-   cd Hailo-Application-Code-Examples/runtime/hailo-8/python/speech_recognition
-   ```
-   If you have any authentication issues, add your SSH key or download the zip.
-
-2. Run the setup script to install dependencies:  
-
-   ```sh
-   python3 setup.py
-   ```
-
-3. Activate the virtual environment from the repository root folder:
-
-   ```sh
-   source whisper_env/bin/activate
-   ```
-
-4. Install PyHailoRT inside the virtual environment (must be downloaded from the Hailo Developer Zone), for example:
-   ```sh
-   pip install hailort-4.20.0-cp310-cp310-linux_x86_64.whl
-   ```
-   The PyHailoRT version must match the installed HailoRT version.
-   **_NOTE:_** This step is not necessary for Raspberry Pi 5 users who installed the *hailo-all* package, since the *venv* will inherit the system package.
-
 ## Before running the app
 
 - Make sure you have a microphone connected to your system. If you have multiple microphones connected, please make sure the proper one is selected in the system configuration, and that the input volume is set to a medium/high level.  
@@ -55,26 +24,64 @@ Follow these steps to set up the environment and install dependencies for infere
 - The application allows the user to acquire and process an audio sample up to 5 seconds long. The duration can be modified in the application code.
 - The current pipeline supports **English language only**.
 
-## Usage from CLI
-1. Activate the virtual environment from the repository root folder:
+## Installation and Usage
 
-   ```sh
-   source whisper_env/bin/activate
-   ```
-2. Run the command line app (from the root folder)
-   ```sh
-   python3 -m app.app_hailo_whisper
-   ```
-   The app uses Hailo-8 models as default. If you have an Hailo-8L device, run the following command instead:
-   ```sh
-   python3 -m app.app_hailo_whisper --hw-arch hailo8l
-   ```
-   If you want to select a specific Whisper model, use the *--variant* argument:
-   ```sh
-   python3 -m app.app_hailo_whisper --variant base
-   python3 -m app.app_hailo_whisper --variant tiny
-   ```
-   
+Run this app in one of two ways:
+1. Standalone installation in a clean virtual environment (no TAPPAS required) — see [Option 1](#option-1-standalone-installation)
+2. From an installed `hailo-apps` repository — see [Option 2](#option-2-inside-an-installed-hailo-apps-repository)
+
+## Option 1: Standalone Installation
+
+To avoid compatibility issues, it's recommended to use a clean virtual environment.
+
+0. Clone the repository and install Python dependencies:
+    ```shell script
+    git clone https://github.com/hailo-ai/hailo-apps.git
+    cd hailo-apps
+    pip install -e ".[speech-rec]"
+    ```
+
+1. Download resources:
+    ```shell script
+    python3 hailo_apps/python/standalone_apps/speech_recognition/app/download_resources.py --hw-arch <hailo device type>
+    ```
+
+## Option 2: Inside an Installed hailo-apps Repository
+If you installed the full repository:
+```shell script
+git clone https://github.com/hailo-ai/hailo-apps.git
+cd hailo-apps
+sudo ./install.sh
+source setup_env.sh
+```
+Then the app is already ready for usage:
+```shell script
+cd hailo_apps/python/standalone_apps/speech_recognition/app
+```
+
+## Run
+
+Run from the application folder.
+
+CLI:
+```shell script
+python3 -m app.app_hailo_whisper [--hw-arch hailo8l] [--variant base|tiny]
+```
+
+Script:
+```shell script
+python3 app_hailo_whisper.py [--hw-arch hailo8l] [--variant base|tiny]
+```
+
+GUI:
+```shell script
+streamlit run gui/gui.py -- [--hw-arch hailo8l] [--variant base|tiny]
+```
+
+To see all possible arguments:
+```shell script
+python3 app_hailo_whisper.py --help
+```
 
 ### Command line arguments
 Use the `python3 -m app.app_hailo_whisper --help` command to print the helper.

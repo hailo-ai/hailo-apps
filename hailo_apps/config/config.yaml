@@ -1,10 +1,102 @@
-hailort_version: "auto" # Options: "auto" (detect from device), "latest" (latest version), or specific version
-tappas_version: "auto" # Version of the Tappas model to use, set to "auto" to detect automatically
-model_zoo_version: "v2.17.0" # Version of the model zoo to use , v2.17 for hailo8 , v5.1.0 for hailo10h
-host_arch: "auto" # Options: "rpi" (Raspberry Pi), "x86" (desktop/server), "arm" (generic ARM board) or "auto" (detect from device)
-hailo_arch: "auto" # Options: "hailo8", "hailo8l", "hailo10h" or "auto" (detect from device)
-resources_path: "resources" # Path to the resources directory, relative to the current working directory
-virtual_env_name: "venv_hailo_apps" # Name of the virtual environment to be created
-server_url: "http://dev-public.hailo.ai/2025_10" # URL of the server to download models from , This is static
-tappas_postproc_path: "auto" # Path to the post-processing script for Tappas, relative to the current working directory. If set to "auto", it will be detected automatically.
-log_level: "warning" # Options: "debug", "info", "warning", "error", "critical"
+#===============================================================================
+# Hailo Apps Infrastructure Configuration
+#===============================================================================
+# This is the main configuration file for installation and runtime settings.
+# Most values support "auto" for automatic detection during installation.
+#===============================================================================
+
+#-------------------------------------------------------------------------------
+# Environment Detection
+#-------------------------------------------------------------------------------
+# These values are auto-detected during installation and written to .env file.
+# Set to "auto" for automatic detection, or specify a fixed value.
+
+hailort_version: "auto"       # Options: "auto", "4.23.0", "5.1.1"
+tappas_version: "auto"        # Options: "auto", "5.1.0"
+tappas_postproc_path: "auto"  # Path to TAPPAS postprocess libs (auto from pkg-config)
+model_zoo_version: "auto"     # Options: "auto", "v2.17.0" (H8), "v5.1.1" (H10)
+host_arch: "auto"             # Options: "auto", "x86", "rpi", "arm"
+hailo_arch: "auto"            # Options: "auto", "hailo8", "hailo8l", "hailo10h"
+
+#-------------------------------------------------------------------------------
+# Version Validation
+#-------------------------------------------------------------------------------
+# Valid versions for installation validation. The installer will warn if
+# detected versions don't match these values.
+
+valid_versions:
+  hailort:
+    - "4.23.0"
+    - "5.1.1"
+  tappas:
+    - "5.1.0"
+  hailo_arch:
+    - "hailo8"
+    - "hailo8l"
+    - "hailo10h"
+  host_arch:
+    - "x86"
+    - "rpi"
+    - "arm"
+
+#-------------------------------------------------------------------------------
+# Model Zoo Version Mapping
+#-------------------------------------------------------------------------------
+# Maps Hailo architecture to the appropriate Model Zoo version for downloads.
+
+model_zoo_mapping:
+  hailo8: "v2.17.0"
+  hailo8l: "v2.17.0"
+  hailo10h: "v5.1.0"
+
+# Valid Model Zoo versions by architecture family
+valid_model_zoo_versions:
+  h8:   # Applies to hailo8 and hailo8l
+    - "v2.17.0"
+  h10:  # Applies to hailo10h
+    - "v5.1.0"
+
+#-------------------------------------------------------------------------------
+# Virtual Environment
+#-------------------------------------------------------------------------------
+venv:
+  name: "venv_hailo_apps"
+  use_system_site_packages: true
+
+#-------------------------------------------------------------------------------
+# Resources
+#-------------------------------------------------------------------------------
+resources:
+  # Path to resources symlink (relative to repo root)
+  path: "resources"
+  # Absolute path to resources root (where files are actually stored)
+  root: "/usr/local/hailo/resources"
+  # Path to .env file
+  env_file: "/usr/local/hailo/resources/.env"
+  # Default download group: "default", "extra", "all", or specific app name
+  download_group: "default"
+  # Directory structure to create in resources root
+  dirs:
+    - "models/hailo8"
+    - "models/hailo8l"
+    - "models/hailo10h"
+    - "videos"
+    - "images"
+    - "json"
+    - "so"
+    - "packages"
+
+#-------------------------------------------------------------------------------
+# System Packages (installed via apt)
+#-------------------------------------------------------------------------------
+system_packages:
+  - "meson"
+  - "ninja-build"
+  - "portaudio19-dev"
+  - "python3-gi"
+  - "python3-gi-cairo"
+
+#-------------------------------------------------------------------------------
+# Logging
+#-------------------------------------------------------------------------------
+log_level: "INFO"  # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"

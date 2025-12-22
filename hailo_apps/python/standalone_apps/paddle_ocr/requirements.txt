@@ -1,7 +1,6 @@
 loguru
 opencv-python
 numpy<2.0
-paddlepaddle
 shapely
 pyclipper
 symspellpy

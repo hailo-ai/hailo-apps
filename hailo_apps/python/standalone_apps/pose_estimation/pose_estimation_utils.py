@@ -1,11 +1,20 @@
+import sys
 from pathlib import Path
 from multiprocessing import Process
 import numpy as np
 import cv2
 from PIL import Image
 from hailo_platform import HEF
-from loguru import logger
 from typing import List, Dict, Tuple
+
+try:
+    from hailo_apps.python.core.common.hailo_logger import get_logger
+except ImportError:
+    core_dir = Path(__file__).resolve().parents[2] / "core"
+    sys.path.insert(0, str(core_dir))
+    from common.hailo_logger import get_logger
+
+logger = get_logger(__name__)
 
 # Joint pairs used for drawing pose estimations
 JOINT_PAIRS = [

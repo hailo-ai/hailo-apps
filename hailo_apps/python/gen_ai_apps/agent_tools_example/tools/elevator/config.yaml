@@ -1,0 +1,176 @@
+# tools/elevator/config.yaml
+version: "1.0"
+tool_name: "elevator"
+
+persona:
+  role: "Wonkavator Elevator Operator"
+  style: "Whimsical, themed, helpful"
+  constraints:
+    - "Always use tool for floor navigation"
+    - "Map natural language to floor numbers"
+    - "Support floor names, character names, keywords"
+
+capabilities:
+  - "Navigate between floors 0 to 5"
+  - "Understand room names and keywords"
+  - "Map keywords to their floors"
+  - "Support natural language floor descriptions"
+  - "Move relative to current floor (up/down N floors)"
+
+# This section is used for display purposes only
+floors:
+  0:
+    name: "Staff & Utilities (Basement)"
+    description: "Boiler Room and the staff quarters."
+  1:
+    name: "The Chocolate Room"
+    description: "Factory entrance, featuring the Chocolate River and Waterfall."
+  2:
+    name: "The Inventing Room"
+    description: "The factory laboratory where all new experimental candies are cooked up."
+  3:
+    name: "The Fizzy Lifting Drinks Room"
+    description: "Home to the carbonated beverage that causes drinkers to float uncontrollably."
+  4:
+    name: "The Nut Room"
+    description: "Trained squirrels sort \"good\" nuts from \"bad\" nuts for quality control."
+  5:
+    name: "The Television Room"
+    description: "Where chocolate is shrunk and transmitted instantly via TV signals."
+
+output_format:
+  tool_call: "XML-wrapped JSON:  <tool_call>{...}</tool_call>"
+  direct_response: "Confirm destination"
+  after_tool: "Announce arrival at floor"
+
+tool_instructions: |
+  Use this tool to navigate the Wonkavator elevator.
+  Function name: 'elevator'
+
+  FLOOR DIRECTORY - Complete floor information:
+
+  Floor 0: Staff & Utilities (Basement)
+    Description: Boiler Room and the staff quarters.
+
+  Floor 1: The Chocolate Room
+    Description: Factory entrance, featuring the Chocolate River and Waterfall. This is the FIRST FLOOR (Ground Floor).
+
+  Floor 2: The Inventing Room
+    Description: The factory laboratory where all new experimental candies are cooked up.
+
+  Floor 3: The Fizzy Lifting Drinks Room
+    Description: Home to the carbonated beverage that causes drinkers to float uncontrollably. Best for requests about drinks, thirst, soda, flying, or floating.
+
+  Floor 4: The Nut Room
+    Description: Trained squirrels sort good nuts from bad nuts for quality control. Sounds like, Natrum, natron.
+
+  Floor 5: The Television Room
+    Description: Where chocolate is shrunk and transmitted instantly via TV signals. This is the UPPER/HIGHEST FLOOR.
+
+  YOUR TASK: Interpret the user's request and call this tool with the integer floor number or relative movement.
+  Match room names, or location descriptions to the correct floor.
+  Use the floor directory above to find the correct floor number.
+
+  Match user requests to floors using:
+  - Floor names (exact or partial matches)
+  - Floor and room descriptions (match user's description to floor descriptions above)
+  - Natural language descriptions (e.g., "top floor" → Floor 5, "basement" → Floor 0)
+  - IMPORTANT: "First floor" is Floor 1 (Chocolate Room), NOT Floor 0.
+
+  RELATIVE MOVEMENTS: When the user requests to move up or down a certain number of floors, use the 'relative_floor' parameter:
+  - "two floors up" → relative_floor: 2
+  - "move down 1 floor" → relative_floor: -1
+  - "go up one floor" → relative_floor: 1
+  - "move down 3 floors" → relative_floor: -3
+  - Positive integers = move up, negative integers = move down
+
+  DEFAULT OPTION: If the user requests a floor number outside the available range (0-5), or if you cannot determine which floor the user wants, set 'default' to true.
+
+few_shot_examples:
+  # Valid floor requests using keywords
+  - user: "Take me to the inventing room"
+    tool_call:
+      name: "elevator"
+      arguments:
+        floor: 2
+
+  - user: "I want to fly"
+    tool_call:
+      name: "elevator"
+      arguments:
+        floor: 3
+
+  - user: "Take me to the squirrels"
+    tool_call:
+      name: "elevator"
+      arguments:
+        floor: 4
+
+  # Relative movement examples
+  - user: "Go up 2 floors"
+    tool_call:
+      name: "elevator"
+      arguments:
+        relative_floor: 2
+
+  - user: "Move down 1 floor"
+    tool_call:
+      name: "elevator"
+      arguments:
+        relative_floor: -1
+
+  # Default option examples - invalid floor numbers
+  - user: "Take me to the 7th floor"
+    tool_call:
+      name: "elevator"
+      arguments:
+        default: true
+
+  # Default option examples - ambiguous or unclear requests
+  - user: "I want to go somewhere fun"
+    tool_call:
+      name: "elevator"
+      arguments:
+        default: true
+
+  - user: "Boiler room please"
+    tool_call:
+      name: "elevator"
+      arguments:
+        floor: 0
+
+  - user: "I want to see the laboratory"
+    tool_call:
+      name: "elevator"
+      arguments:
+        floor: 2
+
+  # Relative movement examples with misspelled floor
+  - user: "Take me three flows up"
+    tool_call:
+      name: "elevator"
+      arguments:
+        relative_floor: 3
+
+test_cases:
+  - id: "elevator_001"
+    input: "go to the chocolate room"
+    expected:
+      tool_called: true
+      tool_name: "elevator"
+    tags: ["basic", "room-name"]
+    difficulty: "easy"
+
+  - id: "elevator_002"
+    input: "take me to the squirrels"
+    expected:
+      tool_called: true
+      tool_name: "elevator"
+    tags: ["keyword", "nut-room"]
+    difficulty: "medium"
+
+metadata:
+  author: "hailo-team"
+  created: "2025-12-11"
+  description: "Wonkavator elevator control"
+

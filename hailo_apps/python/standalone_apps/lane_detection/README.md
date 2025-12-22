@@ -1,15 +1,18 @@
 Lane Detection
-================
+===============================
 
-This example performs lane detection using a **Hailo8** or **Hailo10H** device.  
+> ⚠️ **Beta:** This application is currently in beta. Features and APIs may change.
+
+This example demonstrates lane detection using a **Hailo8** or **Hailo10H** device.  
 It receives an input video and annotates it with the lane detection coordinates.
 
 ![output GIF example](lane_det_output.gif)
 
 Requirements
 ------------
-
-- hailo_platform==4.22.0
+- hailo_platform:
+    - 4.23.0 (for Hailo-8 devices)
+    - 5.1.1 (for Hailo-10H devices)
 - loguru
 - tqdm
 - opencv-python
@@ -20,8 +23,15 @@ Supported Models
 ----------------
 - ufld_v2_tu
 
-Usage
------
+## Installation and Usage
+
+Run this app in one of two ways:
+1. Standalone installation in a clean virtual environment (no TAPPAS required) — see [Option 1](#option-1-standalone-installation)
+2. From an installed `hailo-apps` repository — see [Option 2](#option-2-inside-an-installed-hailo-apps-repository)
+
+## Option 1: Standalone Installation
+
+To avoid compatibility issues, it's recommended to use a clean virtual environment.
 
 0. Install PyHailoRT
     - Download the HailoRT whl from the Hailo website - make sure to select the correct Python version. 
@@ -32,9 +42,8 @@ Usage
 
 1. Clone the repository:
     ```shell script
-    git clone <https://github.com/hailo-ai/Hailo-Application-Code-Examples.git>
-        
-    cd Hailo-Application-Code-Examples/runtime/hailo-8/python/lane_detection
+    git clone https://github.com/hailo-ai/hailo-apps.git
+    cd hailo-apps/python/standalone_apps/lane_detection
     ```
 
 2. Install dependencies:
@@ -42,26 +51,39 @@ Usage
     pip install -r requirements.txt
     ```
 
-3. Download example files:
+## Option 2: Inside an Installed hailo-apps Repository
+If you installed the full repository:
+```bash
+git clone https://github.com/hailo-ai/hailo-apps.git
+cd hailo-apps
+sudo ./install.sh
+source setup_env.sh
+```
+Then the app is already ready for usage:
+```bash
+cd hailo-apps/python/standalone_apps/lane_detection
+```
 
-   The script supports both Hailo-8 and Hailo-10 files.  
-   Use the `--arch` flag to specify your target hardware:
-   ```shell
-   ./download_resources.sh --arch 8     # For Hailo-8
-   ./download_resources.sh --arch 10    # For Hailo-10
-    ```
-
-4. Run the script:
-    ```shell script
-    ./lane_detection -n <model_path> -i <input_video_path> -o <output_path>
-    ```
+## Run
+After completing either installation option, run from the application folder:
+```shell script
+./lane_detection.py -n <model_path> -i <input_video_path> -o <output_path>
+```
 
 Arguments
 ---------
 
-- ``-n, --net``: Path to the pre-trained model file (HEF).
-- ``-i, --input``: Path to the input video on which lane detection will be performed.
-- ``-o, --output``: Path to save the output video with annotated lanes.
+- `-n, --net`: 
+    - A **model name** (e.g., `ufld_v2_tu`) → the script will automatically download and resolve the correct HEF for your device.
+    - A **file path** to a local HEF → the script will use the specified network directly.
+- `-i, --input`:
+  - An **input source** such as an image (`bus.jpg`), a video (`video.mp4`), a directory of images, or `camera` to use the system camera.
+  - A **predefined input name** from `inputs.json` (e.g., `bus`, `street`).
+    - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
+  - Use `--list-inputs` to display all available predefined inputs.
+- `-o, --output`: Path to save the output video with annotated lanes.
+- `--list-nets` Print all supported networks for this application (from `networks.json`) and exit.
+- `--list-inputs`: Print the available predefined input resources (videos) defined in `inputs.json` for this application, then exit.
 
 For more information:
 ```shell script
@@ -69,7 +91,18 @@ For more information:
 ```
 Example 
 -------
-**Command**
+
+**List supported networks**
+```shell script
+./lane_detection.py --list-nets
+```
+
+**List available input resources**
+```shell script
+./lane_detection.py --list-inputs
+```
+
+**Inference**
 ```shell script
 ./lane_detection.py -n ./ufld_v2_tu.hef -i input_video.mp4
 ```
@@ -77,8 +110,12 @@ Example
 Additional Notes
 ----------------
 
-- The example was only tested with ``HailoRT v4.22.0``
+- The example was only tested with:
+    - 4.23.0 (for Hailo-8 devices)
+    - 5.1.1 (for Hailo-10H devices) 
 - The postprocessed video will be saved as **output_video.mp4**.  
+- The list of supported detection models is defined in `networks.json`.
+- For any issues, open a post on the [Hailo Community](https://community.hailo.ai)
 
 Disclaimer
 ----------

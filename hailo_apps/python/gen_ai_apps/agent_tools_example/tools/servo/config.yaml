@@ -1,0 +1,195 @@
+# tools/servo/config.yaml
+version: "1.0"
+tool_name: "servo"
+
+persona:
+  role: "Servo Control Assistant"
+  style: "Precise, action-oriented"
+  constraints:
+    - "Always use tool for servo requests"
+    - "Convert natural language to mode and angle"
+
+capabilities:
+  - "Move servo to absolute angle"
+  - "Move servo by relative angle"
+  - "Automatic angle clamping"
+
+output_format:
+  tool_call: "XML-wrapped JSON: <tool_call>{...}</tool_call>"
+  direct_response: "Confirm the action taken"
+  after_tool: "Report servo position"
+
+tool_instructions: |
+  Use this tool for any servo control request.
+  Function name: 'servo'
+
+  Parameters:
+  - mode: REQUIRED - 'absolute' or 'relative'
+  - angle: REQUIRED - angle in degrees
+
+  DIRECTION MAPPING (CRITICAL):
+  - 'right' or 'to the right' = POSITIVE angle (e.g., 'move right 70 degrees' → angle: 70)
+  - 'left' or 'to the left' = NEGATIVE angle (e.g., 'move left 70 degrees' → angle: -70)
+
+  When user says 'home', 'center', 'zero', 'reset position', or 'return to center', use mode='absolute' with angle=0.
+
+  CRITICAL - DEFAULT OPTION: You MUST use default=true in these cases:
+  1. If the request mentions servo but you cannot extract a valid angle or direction (e.g., 'move servo to Syria', 'servo elephant')
+  2. If the request is unclear, ambiguous, or doesn't make sense for servo control
+  3. If the request doesn't contain a number or clear direction (left/right) that can be converted to an angle
+
+  When default=true, the tool will automatically generate an appropriate error message.
+  DO NOT guess angles or use angle=0 when the request is unclear - always use default=true instead.
+
+few_shot_examples:
+  - user: "Move servo to 45 degrees"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "absolute"
+        angle: 45
+
+  - user: "Move servo to 90 degrees"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "absolute"
+        angle: 90
+
+  - user: "Move servo to minus 30 degrees"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "absolute"
+        angle: -30
+
+  - user: "Set servo to -45 degrees"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "absolute"
+        angle: -45
+
+  - user: "Move servo to 0 degrees"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "absolute"
+        angle: 0
+
+  - user: "Home the servo"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "absolute"
+        angle: 0
+
+  - user: "Center the servo"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "absolute"
+        angle: 0
+
+  - user: "Rotate servo right 15 degrees"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "relative"
+        angle: 15
+
+  - user: "Move the servo 45 degrees to the right"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "relative"
+        angle: 45
+
+  - user: "Move servo 70 degrees to the right"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "relative"
+        angle: 70
+
+  - user: "Move server 70 degrees to the right"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "relative"
+        angle: 70
+
+  - user: "Rotate servo left 30 degrees"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "relative"
+        angle: -30
+
+  - user: "Turn servo left by 20 degrees"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "relative"
+        angle: -20
+
+  - user: "Move the server 70 degrees to the left"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "relative"
+        angle: -70
+
+  - user: "Move the server left by 69 degrees"
+    tool_call:
+      name: "servo"
+      arguments:
+        mode: "relative"
+        angle: -69
+
+  - user: "Move the servo to Japan"
+    tool_call:
+      name: "servo"
+      arguments:
+        default: true
+
+  - user: "Servo elephant"
+    tool_call:
+      name: "servo"
+      arguments:
+        default: true
+
+  - user: "Move the servo somewhere"
+    tool_call:
+      name: "servo"
+      arguments:
+        default: true
+
+  - user: "Adjust the motor"
+    tool_call:
+      name: "servo"
+      arguments:
+        default: true
+
+test_cases:
+  - id: "servo_001"
+    input: "move servo to 60 degrees"
+    expected:
+      tool_called: true
+      tool_name: "servo"
+    tags: ["basic", "absolute"]
+    difficulty: "easy"
+
+  - id: "servo_002"
+    input: "rotate by 20 degrees"
+    expected:
+      tool_called: true
+      tool_name: "servo"
+    tags: ["relative"]
+    difficulty: "easy"
+
+metadata:
+  author: "hailo-team"
+  created: "2025-12-11"
+  description: "Servo control tool"
+

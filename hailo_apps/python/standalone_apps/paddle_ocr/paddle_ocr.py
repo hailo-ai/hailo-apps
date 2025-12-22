@@ -1,94 +1,177 @@
 #!/usr/bin/env python3
-import argparse
 import os
 import sys
-from loguru import logger
 import queue
 import threading
 from functools import partial
-import time
-from paddle_ocr_utils import det_postprocess, resize_with_padding, inference_result_handler, OcrCorrector, map_bbox_to_original_image
+from pathlib import Path
+
 try:
-    from hailo_apps.python.core.common.hailo_inference import HailoInfer
-    from hailo_apps.python.core.common.toolbox import init_input_source, preprocess, visualize, FrameRateTracker
+    from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
 except ImportError:
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'core')))
-    from common.hailo_inference import HailoInfer
-    from common.toolbox import init_input_source, preprocess, visualize, FrameRateTracker
+    core_dir = Path(__file__).resolve().parents[2] / "core"
+    sys.path.insert(0, str(core_dir))
+    from common.hailo_logger import get_logger, init_logging, level_from_args
+
+# Check OCR dependencies before importing OCR-specific modules
+def check_ocr_dependencies():
+    """
+    Check if all required OCR dependencies are installed.
+    
+    Exits the program with installation instructions if any dependencies are missing.
+    """
+    missing_deps = []
+    # Map package names to their import names
+    ocr_deps = {
+        "paddlepaddle": "paddle",  # pip install paddlepaddle, but import paddle
+        "shapely": "shapely",
+        "pyclipper": "pyclipper",
+        "symspellpy": "symspellpy",
+    }
+    
+    for package_name, import_name in ocr_deps.items():
+        try:
+            __import__(import_name)
+        except ImportError:
+            missing_deps.append(package_name)
+
+    if missing_deps:
+        print("\n" + "="*70)
+        print("❌ MISSING REQUIRED DEPENDENCIES")
+        print("="*70)
+        print("\nThe following dependencies are required but not installed:")
+        for dep in missing_deps:
+            print(f"  • {dep}")
+        print("\n" + "-"*70)
+        print("INSTALLATION INSTRUCTIONS:")
+        print("-"*70)
+        print("\nTo install all dependencies (recommended):")
+        print("  1. Navigate to the repository root directory")
+        print("  2. Run: pip install -e \".[ocr]\"")
+        print("\n" + "="*70)
+        sys.exit(1)
+
+# Check dependencies early
+check_ocr_dependencies()
+from paddle_ocr_utils import det_postprocess, resize_with_padding, inference_result_handler, OcrCorrector, map_bbox_to_original_image
 import uuid
 from collections import defaultdict
 
+try:
+    from hailo_apps.python.core.common.hailo_inference import HailoInfer
+    from hailo_apps.python.core.common.toolbox import (
+        init_input_source,
+        preprocess,
+        visualize,
+        FrameRateTracker,
+        resolve_arch,
+        resolve_input_arg,
+        resolve_output_resolution_arg,
+        list_inputs,
+    )
+    from hailo_apps.python.core.common.core import (
+        configure_multi_model_hef_path,
+        handle_list_models_flag,
+        resolve_hef_paths,
+    )
+    from hailo_apps.python.core.common.parser import get_standalone_parser
+except ImportError:
+    core_dir = Path(__file__).resolve().parents[2] / "core"
+    sys.path.insert(0, str(core_dir))
+    from common.hailo_inference import HailoInfer
+    from common.toolbox import (
+        init_input_source,
+        preprocess,
+        visualize,
+        FrameRateTracker,
+        resolve_arch,
+        resolve_input_arg,
+        resolve_output_resolution_arg,
+        list_inputs,
+    )
+    from common.core import (
+        configure_multi_model_hef_path,
+        handle_list_models_flag,
+        resolve_hef_paths,
+    )
+    from common.parser import get_standalone_parser
+
+APP_NAME = Path(__file__).stem
+logger = get_logger(__name__)
 # A dictionary that accumulates all OCR crops and their results for a single frame.
 ocr_results_dict = defaultdict(lambda: {"frame": None, "results": [], "boxes": [], "count": 0})
 ocr_expected_counts = {}
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args():
     """
     Initialize argument parser for the script.
     Returns:
         argparse.Namespace: Parsed arguments.
     """
-    parser = argparse.ArgumentParser(description="Paddle OCR Example with detection + OCR networks")
+    parser = get_standalone_parser()
+    parser.description = "Paddle OCR Example with detection + OCR networks."
+    configure_multi_model_hef_path(parser)
 
+    # App-specific arguments
     parser.add_argument(
-        "-n", "--net",
-        help="Space-separated paths for the networks in HEF format, e.g.: ocr_det.hef ocr.hef",
-        nargs="+",
-        required=True
-    )
-    parser.add_argument(
-        "-i", "--input", default="ocr_img1.png",
-        help="Path to the input - either an image or a folder of images."
-    )
-    parser.add_argument(
-        "-b", "--batch_size", default=1, type=int, required=False,
-        help="Number of images in one batch"
-    )
-    parser.add_argument(
-        "-s", "--save_stream_output", action="store_true",
-        help="Save the output of the inference from a stream."
-    )
-    parser.add_argument(
-        "-o", "--output-dir", help="Directory to save the results.",
-        default=None
-    )
-    parser.add_argument(
-        "-r", "--resolution",
+        "--camera-resolution",
+        "-cr",
+        type=str,
         choices=["sd", "hd", "fhd"],
-        default="sd",
-        help="Camera only: Choose input resolution: 'sd' (640x480), 'hd' (1280x720), or 'fhd' (1920x1080). Default is 'sd'."
-    )
-    parser.add_argument(
-        "--show-fps", action="store_true",
-        help="Enable FPS performance measurement."
+        default=None,
+        help="(Camera only) Input resolution: 'sd' (640x480), 'hd' (1280x720), or 'fhd' (1920x1080).",
     )
 
     parser.add_argument(
-        "--use-corrector", action="store_true",
-        help="Enable text correction after OCR (e.g., for spelling or formatting)."
+        "--output-resolution",
+        "-or",
+        nargs="+",
+        type=str,
+        default=None,
+        help=(
+            "Output resolution. Use: 'sd', 'hd', 'fhd', "
+            "or custom size like '--output-resolution 1920 1080'."
+        ),
     )
+
+    parser.add_argument(
+        "--use-corrector",
+        action="store_true",
+        help="Enable text correction after OCR (e.g., for spelling or formatting).",
+    )
+
+    handle_list_models_flag(parser, APP_NAME)
 
     args = parser.parse_args()
 
-    if len(args.net) != 2:
-        raise ValueError("Please provide exactly two HEF files: det_net hef and ocr_net hef")
+    # Handle --list-inputs and exit
+    if args.list_inputs:
+        list_inputs(APP_NAME)
+        sys.exit(0)
 
-    args.det_net, args.ocr_net = args.net
+    # Resolve the two networks
+    args.arch = resolve_arch(args.arch)
+    try:
+        models = resolve_hef_paths(
+            hef_paths=args.hef_path,
+            app_name=APP_NAME,
+            arch=args.arch,
+        )
+    except Exception as exc:
+        logger.error("Failed to resolve HEF paths for %s: %s", APP_NAME, exc)
+        sys.exit(1)
 
-    # Validate HEF paths
-    if not os.path.exists(args.det_net):
-        raise FileNotFoundError(f"Detector HEF file not found: {args.det_net}")
-    if not os.path.exists(args.ocr_net):
-        raise FileNotFoundError(f"OCR HEF file not found: {args.ocr_net}")
+    args.det_net, args.ocr_net = [model.path for model in models]
+    args.input = resolve_input_arg(APP_NAME, args.input)
+    args.output_resolution = resolve_output_resolution_arg(args.output_resolution)
 
-    # Setup output dir
+    # Setup output directory
     if args.output_dir is None:
         args.output_dir = os.path.join(os.getcwd(), "output")
     os.makedirs(args.output_dir, exist_ok=True)
 
     return args
-
 
 
 def detector_hailo_infer(hailo_inference, input_queue, output_queue):
@@ -171,8 +254,19 @@ def ocr_hailo_infer(hailo_inference, input_queue, output_queue):
     hailo_inference.close()
 
 
-def run_inference_pipeline(det_net, ocr_net, input, batch_size, output_dir,
-          save_stream_output=False, resolution="sd", show_fps=False, use_corrector=False) -> None:
+def run_inference_pipeline(
+    det_net,
+    ocr_net,
+    input,
+    batch_size,
+    output_dir,
+    camera_resolution,
+    output_resolution,
+    frame_rate,
+    save_output=False,
+    show_fps=False,
+    use_corrector=False,
+) -> None:
     """
     Run full detector + OCR inference pipeline with multi-threading and streaming.
 
@@ -182,8 +276,10 @@ def run_inference_pipeline(det_net, ocr_net, input, batch_size, output_dir,
         input (str): Input source — 'camera', image directory, or video file path.
         batch_size (int): Number of frames to process in each batch.
         output_dir (str): Directory where output images or videos will be saved.
-        save_stream_output (bool): Whether to save the output stream. Defaults to False.
-        resolution (str): Input resolution format (e.g., 'sd', 'hd'). Defaults to 'sd'.
+        camera_resolution (str): Camera input resolution (e.g., 'sd', 'hd', 'fhd').
+        output_resolution (str): Output resolution for display/saving.
+        frame_rate (float): Target frame rate for processing.
+        save_output (bool): Whether to save the output stream. Defaults to False.
         show_fps (bool): Whether to display frames-per-second performance. Defaults to False.
         use_corrector (bool): Whether to enable text spell correction. Defaults to False.
 
@@ -191,7 +287,7 @@ def run_inference_pipeline(det_net, ocr_net, input, batch_size, output_dir,
         None
     """
     # Initialize capture handle for video/camera or load image folder
-    cap, images = init_input_source(input, batch_size, resolution)
+    cap, images = init_input_source(input, batch_size, camera_resolution)
 
     # Queues for passing data between threads
     det_input_queue = queue.Queue()
@@ -246,7 +342,7 @@ def run_inference_pipeline(det_net, ocr_net, input, batch_size, output_dir,
 
     # input postprocess
     preprocess_thread = threading.Thread(
-        target=preprocess, args=(images, cap, batch_size, det_input_queue, width, height)
+        target=preprocess, args=(images, cap, frame_rate, batch_size, det_input_queue, width, height)
     )
 
     # detector output postprocess
@@ -263,8 +359,9 @@ def run_inference_pipeline(det_net, ocr_net, input, batch_size, output_dir,
 
     # visualisation postprocess
     vis_postprocess_thread = threading.Thread(
-        target=visualize, args=(vis_output_queue, cap, save_stream_output,
-                                output_dir, post_process_callback_fn, fps_tracker, True)
+        target=visualize,
+        args=(vis_output_queue, cap, save_output, output_dir,
+              post_process_callback_fn, fps_tracker, output_resolution, frame_rate, True)
     )
 
     det_thread = threading.Thread(
@@ -473,8 +570,20 @@ def main() -> None:
     Main function to run the script.
     """
     args = parse_args()
-    run_inference_pipeline(args.det_net, args.ocr_net, args.input, args.batch_size,
-          args.output_dir, args.save_stream_output, args.resolution, args.show_fps, args.use_corrector)
+    init_logging(level=level_from_args(args))
+    run_inference_pipeline(
+        args.det_net,
+        args.ocr_net,
+        args.input,
+        args.batch_size,
+        args.output_dir,
+        args.camera_resolution,
+        args.output_resolution,
+        args.frame_rate,
+        args.save_output,
+        args.show_fps,
+        args.use_corrector,
+    )
 
 
 if __name__ == "__main__":

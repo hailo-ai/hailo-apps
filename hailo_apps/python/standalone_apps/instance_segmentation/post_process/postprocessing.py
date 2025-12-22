@@ -2,10 +2,13 @@ import cv2, sys, os
 import numpy as np
 from .cython_nms import nms as cnms
 try:
-    from hailo_apps.python.core.common.toolbox import  id_to_color
+    from hailo_apps.python.core.common.toolbox import id_to_color
 except ImportError:
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'core')))
-    from common.toolbox import  id_to_color
+    from pathlib import Path
+
+    core_dir = Path(__file__).resolve().parents[3] / "core"
+    sys.path.insert(0, str(core_dir))
+    from common.toolbox import id_to_color
 from scipy.special import expit
 from concurrent.futures import ThreadPoolExecutor
 
@@ -389,7 +392,7 @@ def yolov8_seg_postprocess(endnodes, device_pre_post_layers=None, **kwargs):
     return outputs
 
 
-def inference_result_handler(frame, infer_results, config_data, arch, labels, tracker=None, nms_postprocess_enabled=False):
+def inference_result_handler(frame, infer_results, config_data, model_type, labels, tracker=None, nms_postprocess_enabled=False):
     """
     This function performs post-processing on the raw model output to extract
     detection results (bounding boxes, masks, classes, scores), applies tracking
@@ -401,18 +404,21 @@ def inference_result_handler(frame, infer_results, config_data, arch, labels, tr
         infer_results: The raw output tensors from the model inference.
         tracker: An instance of BYTETracker used for object tracking across frames.
         config_data: A dictionary containing model-specific configuration parameters.
-        arch: A string identifier for the model architecture (e.g., "v5", "v8", "fast").
+        model_type: A string identifier for the model architecture (e.g., "v5", "v8", "fast").
 
     Returns:
         np.ndarray: The frame with visualized detection, segmentation, and tracking overlays.
     """
     if nms_postprocess_enabled:
+        if not infer_results:
+            return frame
+
         detections = extract_detections(frame, infer_results, config_data)
         return draw_detections(detections, frame, labels, tracker=tracker)
 
     else:
-        decoded_detections = decode_and_postprocess(infer_results, config_data, arch)
-        return draw_detections_no_nms(decoded_detections, np.expand_dims(np.array(frame), axis=0), config_data, labels, arch, tracker=tracker)
+        decoded_detections = decode_and_postprocess(infer_results, config_data, model_type)
+        return draw_detections_no_nms(decoded_detections, np.expand_dims(np.array(frame), axis=0), config_data, labels, model_type, tracker=tracker)
 
 def resize_mask_to_unpadded_box(mask_1d, box_on_input_image, box_on_padded_image):
     """

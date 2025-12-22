@@ -12,7 +12,6 @@ from gi.repository import Gst
 
 from hailo_apps.python.pipeline_apps.depth.depth_pipeline import GStreamerDepthApp
 
-# Logger
 from hailo_apps.python.core.common.hailo_logger import (
     get_logger,
 )
@@ -28,9 +27,7 @@ class user_app_callback_class(app_callback_class):
         super().__init__()
 
     def calculate_average_depth(self, depth_mat):
-        depth_values = np.array(
-            depth_mat
-        ).flatten()  # Flatten the array and filter out outlier pixels
+        depth_values = np.array(depth_mat).flatten()
         try:
             m_depth_values = depth_values[
                 depth_values <= np.percentile(depth_values, 95)
@@ -39,24 +36,22 @@ class user_app_callback_class(app_callback_class):
             hailo_logger.exception("Percentile computation failed; treating as empty depth set.")
             m_depth_values = np.array([])
         if len(m_depth_values) > 0:
-            average_depth = np.mean(m_depth_values)  # Calculate the average depth of the pixels
+            average_depth = np.mean(m_depth_values)
         else:
             average_depth = 0  # Default value if no valid pixels are found
         return average_depth
 
 
 # User-defined callback function: This is the callback function that will be called when data is available from the pipeline
-def app_callback(pad, info, user_data):
-    user_data.increment()  # Using the user_data to count the number of frames
+def app_callback(element, buffer, user_data):
+    # Note: Frame counting is handled automatically by the framework wrapper
     string_to_print = f"Frame count: {user_data.get_count()}\n"
-    buffer = info.get_buffer()  # Get the GstBuffer from the probe info
-    if buffer is None:  # Check if the buffer is valid
+    if buffer is None:
         hailo_logger.warning("Received None buffer at frame=%s", user_data.get_count())
-        return Gst.PadProbeReturn.OK
+        return
 
     roi = hailo.get_roi_from_buffer(buffer)
     depth_mat = roi.get_objects_typed(hailo.HAILO_DEPTH_MASK)
-    hailo_logger.debug("Frame=%s | depth_masks=%d", user_data.get_count(), len(depth_mat))
 
     if len(depth_mat) > 0:
         detection_average_depth = user_data.calculate_average_depth(depth_mat[0].get_data())
@@ -65,13 +60,12 @@ def app_callback(pad, info, user_data):
 
     string_to_print += f"average depth: {detection_average_depth:.2f}\n"
     print(string_to_print)
-    hailo_logger.info(string_to_print.strip())
 
-    return Gst.PadProbeReturn.OK
+    return
 
 
 def main():
-    hailo_logger.info("Starting Depth callback runner...")
+    hailo_logger.info("Starting Depth App.")
     user_data = user_app_callback_class()
     app = GStreamerDepthApp(app_callback, user_data)
     app.run()
