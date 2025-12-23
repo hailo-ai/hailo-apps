@@ -274,6 +274,9 @@ TARGET_SR = 16000  # Target sample rate for audio recording (in Hz)
 TARGET_PLAYBACK_SR = 48000  # Target sample rate for playback (standard for hardware compatibility)
 CHUNK_SIZE = 1024  # Number of frames per buffer
 
+VOICE_ASSISTANT_APP = "voice_assistant"
+VOICE_ASSISTANT_MODEL_NAME = "Qwen2.5-1.5B-Instruct"
+
 # Piper TTS defaults
 TTS_MODEL_NAME = "en_US-amy-low"
 TTS_MODELS_DIR = str(REPO_ROOT / "local_resources" / "piper_models")
