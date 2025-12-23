@@ -20,8 +20,8 @@ set -euo pipefail
 
 # --- Configurable Variables ---
 
-# Base URL of the deb server
-BASE_URL="http://dev-public.hailo.ai/2025_10"
+# Base URL of the deb server (will be set based on hardware architecture)
+BASE_URL=""
 declare -a DOWNLOADED_URLS=()
 
 
@@ -120,6 +120,13 @@ if [[ -z "$HW_ARCHITECTURE" ]]; then
     echo
     usage
     exit 1
+fi
+
+# Set BASE_URL based on hardware architecture
+if [[ "$HW_ARCHITECTURE" == "hailo8" ]]; then
+    BASE_URL="http://dev-public.hailo.ai/2025_10"
+elif [[ "$HW_ARCHITECTURE" == "hailo10h" ]]; then
+    BASE_URL="http://dev-public.hailo.ai/2025_12"
 fi
 
 # Ensure versions are set (either from --hw-arch or manually via --hailort-version/--tappas-core-version)
