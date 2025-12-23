@@ -10,8 +10,8 @@ set -euo pipefail
 # Script root (repo root) – used to locate config.yaml if present
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Base URL of the deb server
-BASE_URL="http://dev-public.hailo.ai/2025_10"
+# Base URL of the deb server (will be set based on hardware architecture)
+BASE_URL=""
 
 # Default version numbers for packages (if using --version, you can adjust these)
 
@@ -207,6 +207,15 @@ if [[ -z "$HW_ARCHITECTURE" ]]; then
   exit 1
 fi
 
+# Set BASE_URL based on hardware architecture (unless overridden by --base-url)
+if [[ -z "$BASE_URL" ]]; then
+  if [[ "$HW_ARCHITECTURE" == "hailo8" ]]; then
+    BASE_URL="http://dev-public.hailo.ai/2025_10"
+  elif [[ "$HW_ARCHITECTURE" == "hailo10h" ]]; then
+    BASE_URL="http://dev-public.hailo.ai/2025_12"
+  fi
+fi
+
 # -------------------- Resolve desired versions --------------------
 # Prefer: user flag override; otherwise choose by architecture.
 if [[ -z ${HAILORT_VERSION+x} || -z "$HAILORT_VERSION" ]]; then
@@ -266,9 +275,9 @@ HW_FOLDER_NAME=""
 # Determine hardware name based on architecture
 if [[ "$HW_ARCHITECTURE" == "hailo8" ]]; then
   HW_FOLDER_NAME="Hailo8"
-  HW_FOLDER_SECONDARY="Hailo10H"
+  HW_FOLDER_SECONDARY="Hailo10"
 else
-  HW_FOLDER_NAME="Hailo10H"
+  HW_FOLDER_NAME="Hailo10"
   HW_FOLDER_SECONDARY="Hailo8"
 fi
 
@@ -420,9 +429,9 @@ HW_FOLDER_NAME=""
 # Determine hardware name based on architecture
 if [[ "$HW_ARCHITECTURE" == "hailo8" ]]; then
   HW_FOLDER_NAME="Hailo8"
-  HW_FOLDER_SECONDARY="Hailo10H"
+  HW_FOLDER_SECONDARY="Hailo10"
 else
-  HW_FOLDER_NAME="Hailo10H"
+  HW_FOLDER_NAME="Hailo10"
   HW_FOLDER_SECONDARY="Hailo8"
 fi
 
