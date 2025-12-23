@@ -6,8 +6,8 @@ from contextlib import redirect_stderr
 from hailo_platform import VDevice
 from hailo_platform.genai import LLM
 
-from hailo_apps.python.core.common.defines import LLM_PROMPT_PREFIX, SHARED_VDEVICE_GROUP_ID, RESOURCES_MODELS_DIR_NAME, LLM_MODEL_NAME_H10
-from hailo_apps.python.core.common.core import get_resource_path
+from hailo_apps.python.core.common.defines import LLM_PROMPT_PREFIX, SHARED_VDEVICE_GROUP_ID, HAILO10H_ARCH
+from hailo_apps.python.core.common.core import resolve_hef_path
 from hailo_apps.python.core.common.hailo_logger import add_logging_cli_args, init_logging, level_from_args
 from hailo_apps.python.gen_ai_apps.gen_ai_utils.voice_processing.interaction import VoiceInteractionManager
 from hailo_apps.python.gen_ai_apps.gen_ai_utils.voice_processing.speech_to_text import SpeechToTextProcessor
@@ -43,19 +43,13 @@ class VoiceAssistantApp:
 
             # 3. LLM
             # USER CONFIGURATION: You can change the LLM model here.
-            # By default, it uses the model defined in LLM_MODEL_NAME_H10.
+            # By default, it uses the default model for voice_assistant app.
             # To use a custom HEF, provide the absolute path to your .hef file.
-            model_path = str(
-                get_resource_path(
-                    pipeline_name=None,
-                    resource_type=RESOURCES_MODELS_DIR_NAME,
-                    model=LLM_MODEL_NAME_H10,
-                )
-            )
-            # Example of using a custom path:
-            # model_path = "/path/to/your/custom_model.hef"
+            model_path = resolve_hef_path(None, app_name="voice_assistant", arch=HAILO10H_ARCH)
+            if model_path is None:
+                raise RuntimeError("Failed to resolve HEF path for LLM model. Please ensure the model is available.")
 
-            self.llm = LLM(self.vdevice, model_path)
+            self.llm = LLM(self.vdevice, str(model_path))
 
             # 4. TTS
             self.tts = None
