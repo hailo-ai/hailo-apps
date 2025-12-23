@@ -1,7 +1,5 @@
 # Tiling Application
 
-> ⚠️ **Beta:** This application is currently in beta. Features and APIs may change.
-
 ![Tiling Example](../../../../local_resources/tiling.gif)
 
 ## Overview

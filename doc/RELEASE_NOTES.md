@@ -79,7 +79,7 @@ Transform spoken words into text with a clean GUI.
 * Audio level visualization
 * Save transcripts to file
 
-### Paddle OCR
+### Paddle OCR (Beta version)
 
 Extract text from images and documents with high accuracy.
 
@@ -90,7 +90,7 @@ Extract text from images and documents with high accuracy.
 * Rotated text handling
 * Structured output
 
-### Lane Detection (Beta)
+### Lane Detection (Beta version)
 
 Real-time road lane detection for automotive applications.
 
@@ -112,7 +112,7 @@ Enhance image quality and upscale resolution using AI.
 * Configurable upscaling factors
 * Minimal artifacts
 
-## ⚡ Native C++ Applications
+## ⚡ Native C++ Applications (Beta version)
 
 For performance-critical or embedded systems, we now provide complete C++ implementations.
 

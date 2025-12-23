@@ -35,7 +35,7 @@ Welcome to the complete documentation for the Hailo Applications repository. Thi
 *   **[Face Recognition](../hailo_apps/python/pipeline_apps/face_recognition/README.md)**
 *   **[Instance Segmentation](../hailo_apps/python/pipeline_apps/instance_segmentation/README.md)**
 *   **[Multisource](../hailo_apps/python/pipeline_apps/multisource/README.md)**
-*   **[Paddle OCR](../hailo_apps/python/pipeline_apps/paddle_ocr/README.md)** (BETA)
+*   **[Paddle OCR](../hailo_apps/python/pipeline_apps/paddle_ocr/README.md)**
 *   **[Pose Estimation](../hailo_apps/python/pipeline_apps/pose_estimation/README.md)**
 *   **[REID Multisource](../hailo_apps/python/pipeline_apps/reid_multisource/README.md)**
 *   **[Tiling](../hailo_apps/python/pipeline_apps/tiling/README.md)**
