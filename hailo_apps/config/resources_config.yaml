@@ -85,15 +85,7 @@ videos:
     source: s3
     tag:
       - license_plate_recognition
-  - name: lpr_video1.mp4
-    source: s3
-    tag:
-      - license_plate_recognition
-  - name: lpr_video2.mp4
-    source: s3
-    tag:
-      - license_plate_recognition
-  - name: lpr.mp4
+  - name: lpr_video.mp4
     source: s3
     tag:
       - license_plate_recognition
