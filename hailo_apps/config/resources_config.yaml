@@ -162,14 +162,11 @@ json:
     source: s3
     tag:
       - detection
-  - name: yolov5m_vehicles.json
+  - name: yolov5m_vehicle.json
     source: s3
     tag:
       - license_plate_recognition
-  - name: vehicles.json
-    source: s3
-    tag:
-      - license_plate_recognition
+
 
 
 
