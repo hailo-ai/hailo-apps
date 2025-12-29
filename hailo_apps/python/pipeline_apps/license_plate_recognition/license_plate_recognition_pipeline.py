@@ -4,6 +4,7 @@ gi.require_version("Gst", "1.0")
 from gi.repository import Gst
 
 from pathlib import Path
+import os
 
 import setproctitle
 
@@ -16,6 +17,8 @@ from hailo_apps.python.core.common.defines import (
     RESOURCES_MODELS_DIR_NAME,
     RESOURCES_SO_DIR_NAME,
     RESOURCES_VIDEOS_DIR_NAME,
+    TAPPAS_POSTPROC_PATH_KEY,
+    TAPPAS_POSTPROC_PATH_DEFAULT,
 )
 from hailo_apps.python.core.common.hailo_logger import get_logger
 from hailo_apps.python.core.gstreamer.gstreamer_app import (
@@ -70,8 +73,9 @@ class GStreamerLPRApp(GStreamerApp):
             parser = get_pipeline_parser()
         parser.add_argument(
             "--pipeline",
-            default="optimized_direct",
+            default="default",
             choices=[
+                "default",
                 "simple",
                 "complex",
                 "optimized",
@@ -330,6 +334,9 @@ class GStreamerLPRApp(GStreamerApp):
         )
 
     def get_pipeline_string(self):
+        if self.pipeline_type == "default":
+            print("Getting default pipeline string")
+            return self.get_pipeline_string_default()
         if self.pipeline_type == "simple":
             print("Getting simple pipeline string")
             return self.get_pipeline_string_simple()
@@ -1252,6 +1259,103 @@ class GStreamerLPRApp(GStreamerApp):
             f"qos=false ! "
             f"fakesink sync=false async=false"
         )
+        print(pipeline_string)
+        return pipeline_string
+
+    def get_pipeline_string_default(self):
+        """
+        Default optimized LPR pipeline with leaky downstream queues and optimized queue sizes.
+        Vehicle Detection → Tracking → Vehicle Cropper (with LP detection) → LP Cropper (with OCR) → Display + OCR Sink
+        """
+        # Resolve whole buffer SO path
+        tappas_post_process_dir = os.environ.get(TAPPAS_POSTPROC_PATH_KEY, TAPPAS_POSTPROC_PATH_DEFAULT)
+        whole_buffer_so = os.path.join(
+            tappas_post_process_dir, "cropping_algorithms/libwhole_buffer.so"
+        )
+
+        pipeline_string = (
+            f'filesrc location="{self.video_source}" name=source ! '
+            f"queue name=source_queue_decode leaky=no max-size-buffers=6 max-size-bytes=0 max-size-time=0 ! "
+            f"decodebin name=source_decodebin ! "
+            f"queue name=source_scale_q leaky=no max-size-buffers=6 max-size-bytes=0 max-size-time=0 ! "
+            f"videoscale name=source_videoscale n-threads=2 ! "
+            f"queue name=source_convert_q leaky=no max-size-buffers=6 max-size-bytes=0 max-size-time=0 ! "
+            f"videoconvert n-threads=3 name=source_convert qos=false ! "
+            f"video/x-raw, pixel-aspect-ratio=1/1, format=RGB, width={self.video_width}, height={self.video_height} ! "
+            f"videorate name=source_videorate drop-only=true ! "
+            f'capsfilter name=source_fps_caps caps="video/x-raw, framerate={self.frame_rate}/1" ! '
+            f"queue name=vehicle_detection_input_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"hailocropper name=vehicle_detection_crop so-path={whole_buffer_so} function-name=create_crops use-letterbox=true resize-method=inter-area internal-offset=true "
+            f"hailoaggregator name=vehicle_detection_agg "
+            f"vehicle_detection_crop. ! queue name=vehicle_detection_bypass_q leaky=downstream max-size-buffers=10 max-size-bytes=0 max-size-time=0 ! vehicle_detection_agg.sink_0 "
+            f"vehicle_detection_crop. ! queue name=vehicle_detection_scale_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"videoscale name=vehicle_detection_videoscale n-threads=2 qos=false ! "
+            f"queue name=vehicle_detection_convert_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"video/x-raw, pixel-aspect-ratio=1/1 ! "
+            f"videoconvert name=vehicle_detection_videoconvert n-threads=2 ! "
+            f"queue name=vehicle_detection_hailonet_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"hailonet name=vehicle_detection_hailonet hef-path={self.vehicle_hef_path} batch-size=2 scheduler-timeout-ms=100 vdevice-group-id=SHARED "
+            f"nms-score-threshold=0.3 nms-iou-threshold=0.45 output-format-type=HAILO_FORMAT_TYPE_FLOAT32 force-writable=true ! "
+            f"queue name=vehicle_detection_hailofilter_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"hailofilter name=vehicle_detection_hailofilter so-path={self.vehicle_post_process_so} config-path={self.vehicle_json} function-name={self.vehicle_post_function_name} qos=false ! "
+            f"queue name=vehicle_detection_to_agg_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"vehicle_detection_agg.sink_1 "
+            f"vehicle_detection_agg. ! queue name=vehicle_detection_agg_out_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"hailotracker name=vehicle_tracker class-id=-1 kalman-dist-thr=0.5 iou-thr=0.6 init-iou-thr=0.7 keep-tracked-frames=5 keep-lost-frames=3 keep-past-metadata=True qos=false ! "
+            f"queue name=vehicle_tracker_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"tee name=main_tee "
+            f"# ---------- DISPLAY BRANCH (never blocks the pipeline) ---------- "
+            f"main_tee. ! queue name=display_q leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! "
+            f"queue name=hailo_overlay_q leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! "
+            f"hailooverlay name=hailo_overlay ! "
+            f"queue name=hailo_display_videoconvert_q leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! "
+            f"videoconvert name=hailo_display_videoconvert n-threads=2 qos=false ! "
+            f"queue name=hailo_display_q leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! "
+            f"fpsdisplaysink name=hailo_display video-sink={self.video_sink} sync={'true' if self.sync else 'false'} text-overlay=false signal-fps-measurements=true "
+            f"# ---------- PROCESSING BRANCH (vehicle crop -> LP -> OCR) ---------- "
+            f"main_tee. ! queue name=processing_q leaky=downstream max-size-buffers=6 max-size-bytes=0 max-size-time=0 ! "
+            f"queue name=vehicle_cropper_input_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"hailocropper name=vehicle_cropper_cropper so-path={self.lpr_croppers_so} function-name={self.vehicle_cropper_function} "
+            f"use-letterbox=true no-scaling-bbox=true internal-offset=true resize-method=bilinear "
+            f"hailoaggregator name=vehicle_cropper_agg "
+            f"vehicle_cropper_cropper. ! queue name=vehicle_cropper_bypass_q leaky=downstream max-size-buffers=10 max-size-bytes=0 max-size-time=0 ! vehicle_cropper_agg.sink_0 "
+            f"vehicle_cropper_cropper. ! queue name=plate_detection_scale_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"videoscale name=plate_detection_videoscale n-threads=2 qos=false ! "
+            f"queue name=plate_detection_convert_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"video/x-raw, pixel-aspect-ratio=1/1 ! "
+            f"videoconvert name=plate_detection_videoconvert n-threads=2 ! "
+            f"queue name=plate_detection_hailonet_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"hailonet name=plate_detection_hailonet hef-path={self.license_det_hef_path} batch-size=4 scheduler-timeout-ms=100 vdevice-group-id=SHARED "
+            f"nms-score-threshold=0.3 nms-iou-threshold=0.45 output-format-type=HAILO_FORMAT_TYPE_FLOAT32 force-writable=true ! "
+            f"queue name=plate_detection_hailofilter_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"hailofilter name=plate_detection_hailofilter so-path={self.license_det_post_process_so} config-path={self.license_json} function-name={self.license_det_post_function_name} qos=false ! "
+            f"queue name=plate_detection_to_agg_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"vehicle_cropper_agg.sink_1 "
+            f"vehicle_cropper_agg. ! queue name=vehicle_cropper_out_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"queue name=pre_lp_crop_q leaky=downstream max-size-buffers=6 max-size-bytes=0 max-size-time=0 ! "
+            f"queue name=lp_cropper_input_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"hailocropper name=lp_cropper_cropper so-path={self.lpr_croppers_so} function-name={self.lpr_quality_est_function} "
+            f"use-letterbox=true no-scaling-bbox=true internal-offset=true resize-method=bilinear "
+            f"hailoaggregator name=lp_cropper_agg "
+            f"lp_cropper_cropper. ! queue name=lp_cropper_bypass_q leaky=downstream max-size-buffers=10 max-size-bytes=0 max-size-time=0 ! lp_cropper_agg.sink_0 "
+            f"lp_cropper_cropper. ! queue name=ocr_detection_scale_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"videoscale name=ocr_detection_videoscale n-threads=2 qos=false ! "
+            f"queue name=ocr_detection_convert_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"video/x-raw, pixel-aspect-ratio=1/1 ! "
+            f"videoconvert name=ocr_detection_videoconvert n-threads=2 ! "
+            f"queue name=ocr_detection_hailonet_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"hailonet name=ocr_detection_hailonet hef-path={self.ocr_hef_path} batch-size=4 scheduler-timeout-ms=100 vdevice-group-id=SHARED force-writable=true ! "
+            f"queue name=ocr_detection_hailofilter_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"hailofilter name=ocr_detection_hailofilter so-path={self.ocr_post_process_so} function-name={self.ocr_post_function_name} qos=false ! "
+            f"queue name=ocr_detection_to_agg_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"lp_cropper_agg.sink_1 "
+            f"lp_cropper_agg. ! queue name=lp_cropper_out_q leaky=downstream max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
+            f"queue name=post_ocr_q leaky=downstream max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! "
+            f"identity name=identity_callback ! "
+            f"hailofilter use-gst-buffer=true so-path={self.lpr_ocrsink_so} qos=false ! "
+            f"fakesink sync=false async=false"
+        )
+
         print(pipeline_string)
         return pipeline_string
 
