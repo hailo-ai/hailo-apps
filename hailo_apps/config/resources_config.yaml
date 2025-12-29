@@ -619,16 +619,16 @@ license_plate_recognition:
     hailo8:
       default:
         - name: yolov5m_vehicles
-          source: s3
-        - name: yolov8n_relu6_global_lp_det--640x640_quant_hailort_hailo8_1
+          source: mz
+        - name: yolov8n_relu6_global_lp_det
           source: s3
         - name: ocr
           source: s3
     hailo8l:
       default:
         - name: yolov5m_vehicles
-          source: s3
-        - name: yolov8n_relu6_global_lp_det--640x640_quant_hailort_multidevice_1
+          source: mz
+        - name: yolov8n_relu6_global_lp_det
           source: s3
         - name: ocr
           source: s3
