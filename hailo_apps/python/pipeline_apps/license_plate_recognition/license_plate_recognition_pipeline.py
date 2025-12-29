@@ -45,7 +45,7 @@ LPR_PIPELINE = "license_plate_recognition"
 
 # Default resources (override via CLI args). Keep defaults self-contained where possible.
 DEFAULT_VEHICLE_MODEL_NAME = "yolov5m_vehicles"
-DEFAULT_PLATE_MODEL_NAME = "yolov8n_relu6_global_lp_det--640x640_quant_hailort_hailo8_1"
+DEFAULT_PLATE_MODEL_NAME = "yolov8n_relu6_global_lp_det"
 
 DEFAULT_YOLO_POSTPROCESS_SO = "libyolo_hailortpp_postprocess.so"
 DEFAULT_VEHICLE_POSTPROCESS_FUNCTION = "yolov5m_vehicles"
@@ -718,7 +718,7 @@ class GStreamerLPRApp(GStreamerApp):
             "queue name=plate_detection_hailonet_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
             "hailonet name=plate_detection_hailonet "
             "hef-path=/usr/local/hailo/resources/models/hailo8/"
-            "yolov8n_relu6_global_lp_det--640x640_quant_hailort_hailo8_1.hef "
+            "yolov8n_relu6_global_lp_det.hef "
             "batch-size=2 vdevice-group-id=SHARED scheduler-timeout-ms=66 nms-score-threshold=0.3 "
             "nms-iou-threshold=0.45 output-format-type=HAILO_FORMAT_TYPE_FLOAT32 force-writable=true ! "
             "queue name=plate_detection_hailofilter_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
@@ -726,7 +726,7 @@ class GStreamerLPRApp(GStreamerApp):
             "so-path=/usr/local/hailo/resources/so/libyolo_hailortpp_postprocess.so "
             "config-path=/home/omria/hailo/hailo-apps-infra/hailo_apps/python/pipeline_apps/"
             "license_plate_recognition/configs/"
-            "yolov8n_relu6_global_lp_det--640x640_quant_hailort_hailo8_1.json "
+            "yolov8n_relu6_global_lp_det.json "
             "function-name=yolov8n_relu6_license_plate qos=false ! "
             "queue name=plate_detection_output_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! "
             "vehicle_cropper_agg.sink_1 "
