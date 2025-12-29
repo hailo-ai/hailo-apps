@@ -81,10 +81,6 @@ videos:
     tag:
       - depth
       - depth_estimation_mono
-  - name: lpr_video0.mp4
-    source: s3
-    tag:
-      - license_plate_recognition
   - name: lpr_video.mp4
     source: s3
     tag:
