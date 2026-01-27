@@ -73,7 +73,7 @@ def visualize_embeddings(db_handler):
                 sample = fo.Sample(
                     filepath=image_path,
                     global_id=record["global_id"],
-                    name=record["name"],
+                    name=record["label"],
                     classificaiton_confidence_threshold=str(
                         record["classificaiton_confidence_threshold"]
                     ),
@@ -130,8 +130,8 @@ def save_fiftyone_changes_to_lancedb(dataset, db_handler):
         db_handler.update_record_classificaiton_confidence_threshold(
             global_id, float(sample_data["classificaiton_confidence_threshold"])
         )
-        if db_handler.get_record_by_id(global_id)["name"] == "Unknown":
-            db_handler.update_record_label(global_id, sample_data["name"])
+        if db_handler.get_record_by_id(global_id)["label"] == "Unknown":
+            db_handler.update_record_label(global_id, sample_data["label"])
 
 
 if __name__ == "__main__":
@@ -140,7 +140,7 @@ if __name__ == "__main__":
         table_name="persons",
         schema=Record,
         threshold=0.35,
-        database_dir=os.path.join('../../pipeline_apps/', FACE_RECON_DATABASE_DIR_NAME),
-        samples_dir=os.path.join('../../pipeline_apps/', FACE_RECON_SAMPLES_DIR_NAME)
+        database_dir=os.path.join('../../pipeline_apps/face_recognition', FACE_RECON_DATABASE_DIR_NAME),
+        samples_dir=os.path.join('../../pipeline_apps/face_recognition', FACE_RECON_SAMPLES_DIR_NAME)
     )
     visualize_embeddings(db_handler)

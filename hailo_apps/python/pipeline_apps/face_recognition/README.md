@@ -86,6 +86,8 @@ python face_recognition.py --mode delete  # clear the DB
 
 ## Web Interface
 
+   Go to directory `hailo_apps/python/core/common` and run:
+
    ```bash
    python embedding_visualizer.py
    ```
