@@ -19,32 +19,31 @@ try:
         visualize,
         preprocess,
         FrameRateTracker,
-        resolve_arch,
-        resolve_input_arg,
-        list_inputs,
     )
-    from hailo_apps.python.core.common.core import handle_list_models_flag, resolve_hef_path
+    from hailo_apps.python.core.common.core import handle_and_resolve_args
     from hailo_apps.python.core.common.parser import get_standalone_parser
     from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
 except ImportError:
-    core_dir = Path(__file__).resolve().parents[2] / "core"
-    sys.path.insert(0, str(core_dir))
-    from tracker.byte_tracker import BYTETracker
-    from common.hailo_inference import HailoInfer
-    from common.toolbox import (
+    repo_root = None
+    for p in Path(__file__).resolve().parents:
+        if (p / "hailo_apps" / "config" / "config_manager.py").exists():
+            repo_root = p
+            break
+    if repo_root is not None:
+        sys.path.insert(0, str(repo_root))
+    from hailo_apps.python.core.tracker.byte_tracker import BYTETracker
+    from hailo_apps.python.core.common.hailo_inference import HailoInfer
+    from hailo_apps.python.core.common.toolbox import (
         init_input_source,
         load_json_file,
         get_labels,
         visualize,
         preprocess,
         FrameRateTracker,
-        resolve_arch,
-        resolve_input_arg,
-        list_inputs,
     )
-    from common.core import handle_list_models_flag, resolve_hef_path
-    from common.parser import get_standalone_parser
-    from common.hailo_logger import get_logger, init_logging, level_from_args
+    from hailo_apps.python.core.common.core import handle_and_resolve_args
+    from hailo_apps.python.core.common.parser import get_standalone_parser
+    from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
 
 APP_NAME = Path(__file__).stem
 logger = get_logger(__name__)
@@ -73,32 +72,30 @@ def parse_args():
         ),
     )
 
-    handle_list_models_flag(parser, APP_NAME)
+    parser.add_argument(
+        "--track",
+        action="store_true",
+        help=(
+            "Enable object tracking for detections. "
+            "When enabled, detected objects will be tracked across frames using a tracking algorithm "
+            "(e.g., ByteTrack). This assigns consistent IDs to objects over time, enabling temporal analysis, "
+            "trajectory visualization, and multi-frame association. Useful for video processing applications."
+        ),
+    )
+
+    parser.add_argument(
+        "--labels",
+        "-l",
+        type=str,
+        default=None,
+        help=(
+            "Path to a text file containing class labels, one per line. "
+            "Used for mapping model output indices to human-readable class names. "
+            "If not specified, default labels for the model will be used (e.g., COCO labels for detection models)."
+        ),
+    )
 
     args = parser.parse_args()
-
-    # Handle --list-inputs and exit
-    if args.list_inputs:
-        list_inputs(APP_NAME)
-        sys.exit(0)
-
-    # Resolve network and input paths
-    args.arch = resolve_arch(args.arch)
-    args.hef_path = resolve_hef_path(
-        hef_path=args.hef_path,
-        app_name=APP_NAME,
-        arch=args.arch,
-    )
-    if args.hef_path is None:
-        logger.error("Failed to resolve HEF path for %s", APP_NAME)
-        sys.exit(1)
-    args.input = resolve_input_arg(APP_NAME, args.input)
-
-    # Setup output directory
-    if args.output_dir is None:
-        args.output_dir = os.path.join(os.getcwd(), "output")
-    os.makedirs(args.output_dir, exist_ok=True)
-
     return args
 
 def inference_callback(
@@ -134,13 +131,15 @@ def inference_callback(
 
 def run_inference_pipeline(
     net,
-    input_path,
-    arch,
+    input_src,
+    model_type,
     batch_size,
     labels_file,
     output_dir,
-    save_stream_output=False,
-    resolution="sd",
+    camera_resolution,
+    output_resolution,
+    frame_rate,
+    save_output=False,
     enable_tracking=False,
     show_fps=False
 ) -> None:
@@ -151,7 +150,7 @@ def run_inference_pipeline(
     labels = get_labels(labels_file)
 
     # Initialize input source from string: "camera", video file, or image folder
-    cap, images = init_input_source(input_path, batch_size, resolution)
+    cap, images = init_input_source(input_src, batch_size, camera_resolution)
     tracker = None
     fps_tracker = None
 
@@ -175,7 +174,7 @@ def run_inference_pipeline(
         inference_result_handler,
         tracker=tracker,
         config_data=config_data,
-        model_type=arch,
+        model_type=model_type,
         labels=labels,
         nms_postprocess_enabled=hailo_inference.is_nms_postprocess_enabled()
     )
@@ -184,12 +183,13 @@ def run_inference_pipeline(
 
     preprocess_thread = threading.Thread(
         target=preprocess,
-        args=(images, cap, None, batch_size, input_queue, width, height)
+        args=(images, cap, frame_rate, batch_size, input_queue, width, height)
     )
 
     postprocess_thread = threading.Thread(
         target=visualize,
-        args=(output_queue, cap, save_stream_output, output_dir, post_process_callback_fn, fps_tracker, None, None)
+        args=(output_queue, cap, save_output, output_dir,
+               post_process_callback_fn, fps_tracker, output_resolution, frame_rate)
     )
 
     infer_thread = threading.Thread(
@@ -209,9 +209,11 @@ def run_inference_pipeline(
     postprocess_thread.join()
 
     if show_fps:
-        logger.debug(fps_tracker.frame_rate_summary())
+        logger.info(fps_tracker.frame_rate_summary())
 
-    logger.info('Inference was successful!')
+    logger.success("Inference was successful!")
+    if save_output or input_src.lower() not in ("usb", "rpi"):
+        logger.info(f"Results have been saved in {output_dir}")
 
 
 
@@ -257,6 +259,7 @@ def infer(hailo_inference, input_queue, output_queue):
 def main() -> None:
     args = parse_args()
     init_logging(level=level_from_args(args))
+    handle_and_resolve_args(args, APP_NAME)
     run_inference_pipeline(
         args.hef_path,
         args.input,
@@ -264,11 +267,14 @@ def main() -> None:
         args.batch_size,
         args.labels,
         args.output_dir,
+        args.camera_resolution,
+        args.output_resolution,
+        args.frame_rate,
         args.save_output,
-        args.resolution,
         args.track,
         args.show_fps
     )
+
 
 
 if __name__ == "__main__":

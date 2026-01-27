@@ -1,4 +1,5 @@
-loguru
 opencv-python<=4.10.0.84
 numpy<2.0
 pillow
+python-dotenv
+PyYAML

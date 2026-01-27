@@ -5,38 +5,350 @@ import time
 import queue
 from pathlib import Path
 from typing import Dict, Generator, List, Optional, Tuple, Callable, Any
-
+import subprocess
 import cv2
 import numpy as np
+import re
+import threading
 
 try:
     from hailo_apps.python.core.common.defines import (
         HAILO_ARCH_KEY,
-        RESOURCES_PHOTOS_DIR_NAME,
-        RESOURCES_VIDEOS_DIR_NAME,
-        DEFAULT_COCO_LABELS_PATH
+        DEFAULT_COCO_LABELS_PATH,
+        IMAGE_EXTENSIONS,
+        CAMERA_RESOLUTION_MAP,
+        VIDEO_SUFFIXES
     )
-    from hailo_apps.python.core.common.core import get_resource_path
     from hailo_apps.python.core.common.hailo_logger import get_logger
+    from hailo_apps.python.core.common.installation_utils import is_raspberry_pi
 except ImportError:
     from .defines import (
         HAILO_ARCH_KEY,
-        RESOURCES_PHOTOS_DIR_NAME,
-        RESOURCES_VIDEOS_DIR_NAME,
-        DEFAULT_COCO_LABELS_PATH
+        DEFAULT_COCO_LABELS_PATH,
+        IMAGE_EXTENSIONS,
+        CAMERA_RESOLUTION_MAP,
+        VIDEO_SUFFIXES
     )
-    from .core import get_resource_path
     from .hailo_logger import get_logger
+    from .camera_utils import is_rpi_camera_available
+    from .installation_utils import is_raspberry_pi
 
 logger = get_logger(__name__)
 
-IMAGE_EXTENSIONS: Tuple[str, ...] = ('.jpg', '.png', '.bmp', '.jpeg')
-CAMERA_RESOLUTION_MAP = {
-    "sd": (640, 480),
-    "hd": (1280, 720),
-    "fhd": (1920, 1080)
-}
-CAMERA_INDEX = int(os.environ.get('CAMERA_INDEX', '0'))
+
+
+class PiCamera2CaptureAdapter:
+    """
+    Adapter that makes Picamera2 behave like cv2.VideoCapture.
+
+    Goals:
+    - Provide read(), isOpened(), get(), release() APIs compatible with OpenCV code
+    - Avoid deadlocks when release() is called while another thread is reading
+    - Ensure stop()/close() never race with capture_array()
+    """
+
+    def __init__(self, picam2):
+        self.picam2 = picam2
+        self._opened = True
+        self._io_lock = threading.Lock()
+
+    def isOpened(self):
+        return self._opened
+
+    def read(self):
+        if not self._opened:
+            return False, None
+
+        # prevent stop/close while capturing
+        with self._io_lock:
+            if not self._opened: # re-check after taking lock
+                return False, None
+            frame = self.picam2.capture_array()
+
+        if frame is None:
+            return False, None
+        return True, frame
+
+    def get(self, prop_id: int) -> float:
+        if prop_id in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT):
+            try:
+                cfg = self.picam2.camera_configuration()
+                size = cfg.get("main", {}).get("size", None)
+                if size and len(size) == 2:
+                    w, h = int(size[0]), int(size[1])
+                    return float(w if prop_id == cv2.CAP_PROP_FRAME_WIDTH else h)
+            except Exception:
+                pass
+            return 0.0
+        if prop_id == cv2.CAP_PROP_FPS:
+            return 30.0
+        return None
+
+    def release(self):
+        # stop new reads ASAP
+        self._opened = False
+
+        # wait if a read() is currently inside capture_array()
+        with self._io_lock:
+            try:
+                self.picam2.stop()
+            except Exception:
+                pass
+            try:
+                self.picam2.close()
+            except Exception:
+                pass
+
+
+def get_usb_video_devices() -> dict[int, str]:
+    """
+    Return {video_index: device_header} for USB-backed V4L2 devices only.
+
+    Works with v4l2-ctl output styles like:
+      - "Camera Name (046d:0825):"
+      - "Camera Name (usb-xhci-hcd.1-1):"
+    """
+    try:
+        out = subprocess.check_output(
+            ["v4l2-ctl", "--list-devices"],
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+    except Exception as e:
+        logger.error(f"Failed to run v4l2-ctl --list-devices: {e}")
+        return {}
+
+    usb_devices: dict[int, str] = {}
+    current_header: str = ""
+    is_usb_section = False
+
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+
+        # Header lines are not tab-indented
+        if not line.startswith("\t"):
+            current_header = line.strip().rstrip(":")
+            lower = current_header.lower()
+
+            # USB detection: either VID:PID OR "(usb-...)" style
+            has_vid_pid = bool(re.search(r"\([0-9a-f]{4}:[0-9a-f]{4}\)", current_header, re.I))
+            has_usb_bus = ("(usb-" in lower) or (" usb-" in lower) or ("(usb:" in lower)
+
+            is_usb_section = has_vid_pid or has_usb_bus
+            continue
+
+        # Device node lines (tab-indented)
+        if is_usb_section and "/dev/video" in line:
+            # line looks like "\t/dev/video8"
+            m = re.search(r"/dev/video(\d+)", line)
+            if m:
+                idx = int(m.group(1))
+                usb_devices[idx] = current_header
+
+    return usb_devices
+
+
+def open_usb_camera(resolution: Optional[str]):
+    """
+    USB camera open .
+
+    Behavior:
+      - Detect REAL USB cameras via v4l2-ctl
+      - If CAMERA_INDEX env var exists -> use it
+      - Else -> auto-pick FIRST USB camera
+      - Ignore CSI/RPi cameras completely
+      - Apply resolution if requested
+      - Ensure camera actually streams frames
+    """
+    usb_devices = get_usb_video_devices()
+    if not usb_devices:
+        logger.error("USB mode requested, but NO USB cameras detected.")
+        logger.error("Run: v4l2-ctl --list-devices")
+        sys.exit(1)
+
+    # --------------------------------------------
+    # Select camera index (env override OR auto)
+    # --------------------------------------------
+    env_val = os.environ.get("CAMERA_INDEX")
+    if env_val is None:
+        camera_index = sorted(usb_devices.keys())[0]
+        logger.debug(
+                f"No CAMERA_INDEX provided. "
+                f"Auto-selected USB camera index {camera_index} "
+                f"({usb_devices[camera_index]})"
+            )
+    else:
+        try:
+            camera_index = int(env_val)
+        except ValueError:
+            logger.error(f"Invalid CAMERA_INDEX value: {env_val}")
+            sys.exit(1)
+
+        if camera_index not in usb_devices:
+            logger.error(
+                f"CAMERA_INDEX={camera_index} is NOT a USB camera.\n"
+                f"Available USB camera indices: {sorted(usb_devices.keys())}"
+            )
+            sys.exit(1)
+
+    # --------------------------------------------
+    # Open camera
+    # --------------------------------------------
+    cap = cv2.VideoCapture(camera_index)
+    if not cap.isOpened():
+        logger.error(f"Failed to open USB camera index {camera_index}")
+        sys.exit(1)
+
+    # --------------------------------------------
+    # Apply resolution (USB only)
+    # --------------------------------------------
+    if resolution in CAMERA_RESOLUTION_MAP:
+        w, h = CAMERA_RESOLUTION_MAP[resolution]
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+        logger.debug(f"USB camera resolution forced to {w}x{h}")
+
+    # --------------------------------------------
+    # Validate stream (real camera test)
+    # --------------------------------------------
+    ok, frame = cap.read()
+    if not ok or frame is None:
+        cap.release()
+        logger.error("USB camera opened but produced no frames.")
+        sys.exit(1)
+
+    return cap
+
+
+def open_rpi_camera():
+    try:
+        from picamera2 import Picamera2
+    except Exception as e:
+        logger.error(f"Picamera2 not available: {e}")
+        return None
+
+    try:
+        picam2 = Picamera2()
+        main = {"size": (800, 600), "format": "RGB888"}
+        config = picam2.create_video_configuration(main=main, controls={"FrameRate": 30})
+
+        picam2.configure(config)
+        picam2.start()
+        return PiCamera2CaptureAdapter(picam2)
+
+    except Exception as e:
+        logger.error(f"Failed to open RPi camera: {e}")
+        try:
+            picam2.stop()
+        except Exception:
+            pass
+        try:
+            picam2.close()
+        except Exception:
+            pass
+        return None
+
+
+def is_stream_url(input_arg: str) -> bool:
+    return input_arg.startswith(("http://", "https://", "rtsp://"))
+
+
+# -------------------------------------------------------------------
+# Main entry: init_input_source
+# -------------------------------------------------------------------
+def init_input_source(input_src: str, batch_size: int, resolution: Optional[str]):
+    """
+    Initialize input source based on user-provided `input`.
+
+    Supported values:
+      - "usb" : Open a USB/UVC camera using OpenCV (cv2.VideoCapture).
+              `resolution` applies here (sd/hd/fhd) or native if None.
+      - "rpi" : Open Raspberry Pi camera using Picamera2 (fixed 1280x720).
+              `resolution` is ignored by design.
+      - http(s):// or rtsp://: Network stream.
+      - Video file path (.mp4/.avi/.mov/.mkv) : Open as cv2.VideoCapture(file).
+      - Directory path : Load images from the directory.
+
+    Returns:
+        (cap, images)
+          cap: cv2.VideoCapture OR PiCamera2CaptureAdapter OR None
+          images: List[np.ndarray] for image-dir mode, else None
+    """
+    src = input_src.strip()
+
+    # ------------------------------------------------
+    # 1) USB camera
+    # ------------------------------------------------
+    if src == "usb":
+        cap = open_usb_camera(resolution)
+        logger.info("Using USB camera")
+        return cap, None
+
+    # ------------------------------------------------
+    # 2) Raspberry Pi camera
+    # ------------------------------------------------
+    if src == "rpi":
+        if not is_raspberry_pi():
+            logger.error("RPi camera requested, but this is not a Raspberry Pi system.")
+            sys.exit(1)
+        cap = open_rpi_camera()
+        if cap is None:
+            sys.exit(1)
+
+        logger.info("Using Raspberry Pi camera at 800x600")
+        return cap, None
+
+    # ------------------------------------------------
+    # 3) Network stream (RTSP / HTTP / HTTPS)
+    # ------------------------------------------------
+    if is_stream_url(src):
+        cap = cv2.VideoCapture(src)
+        if not cap.isOpened():
+            logger.error(f"Failed to open stream URL: {src}")
+            sys.exit(1)
+
+        logger.info(f"Using stream input: {src}")
+        return cap, None
+
+    # ------------------------------------------------
+    # 4) Video file
+    # ------------------------------------------------
+    if any(src.endswith(suffix) for suffix in VIDEO_SUFFIXES):
+        if not os.path.exists(input_src):
+            logger.error(f"File not found: {input_src}")
+            sys.exit(1)
+
+        cap = cv2.VideoCapture(src)
+        if not cap.isOpened():
+            logger.error(f"Failed to open video file: {src}")
+            sys.exit(1)
+
+        logger.info(f"Using video file input: {src}")
+        return cap, None
+
+    # ------------------------------------------------
+    # 5) Image directory / Image file
+    # ------------------------------------------------
+    if not os.path.exists(src):
+        logger.error(
+            f"Invalid input '{src}'. Expected one of:\n"
+            "  - 'usb'\n"
+            "  - 'rpi'\n"
+            "  - http(s):// or rtsp:// stream\n"
+            "  - video file path\n"
+            "  - image directory / image file"
+        )
+        sys.exit(1)
+
+    images = load_images_opencv(src)
+    try:
+        validate_images(images, batch_size)
+    except ValueError as e:
+        logger.error(e)
+        sys.exit(1)
+
+    return None, images
 
 
 def load_json_file(path: str) -> Dict[str, Any]:
@@ -64,97 +376,6 @@ def load_json_file(path: str) -> Dict[str, Any]:
             raise json.JSONDecodeError(f"Invalid JSON format in file '{path}': {e.msg}", e.doc, e.pos)
 
     return data
-
-
-def is_valid_camera_index(index):
-    """
-    Check if a camera index is available and can be opened.
-
-    Args:
-        index (int): Camera index to test.
-
-    Returns:
-        bool: True if the camera can be opened, else False.
-    """
-    cap = cv2.VideoCapture(index)
-    valid = cap.isOpened()
-    cap.release()
-    return valid
-
-
-def list_available_cameras(max_index=5):
-    """
-    List all available camera indices up to a maximum index.
-
-    Args:
-        max_index (int): Highest camera index to test.
-
-    Returns:
-        list[int]: List of available camera indices.
-    """
-    available = []
-    for i in range(max_index + 1):
-        cap = cv2.VideoCapture(i)
-        if cap.isOpened():
-            available.append(i)
-            cap.release()
-    return available
-
-
-def init_input_source(input_path, batch_size, resolution):
-    """
-    Initialize input source from camera, video file, or image directory.
-
-    Args:
-        input_path (str): "camera", video file path, or image directory.
-        batch_size (int): Number of images to validate against.
-        resolution (str or None): One of ['sd', 'hd', 'fhd'], or None to use native camera resolution.
-
-    Returns:
-        Tuple[Optional[cv2.VideoCapture], Optional[List[np.ndarray]]]
-    """
-    cap = None
-    images = None
-
-    def get_camera_native_resolution():
-        cap = cv2.VideoCapture(CAMERA_INDEX)
-        res = (int(cap.get(3)), int(cap.get(4))) if cap.isOpened() else (640, 480)
-        cap.release()
-        return res
-
-
-    if input_path == "camera":
-
-        if not is_valid_camera_index(CAMERA_INDEX):
-            logger.error(f"CAMERA_INDEX {CAMERA_INDEX} not found.")
-            available = list_available_cameras()
-            logger.warning(f"Available camera indices: {available}")
-            exit(1)
-
-        if not resolution:
-            CAMERA_CAP_WIDTH, CAMERA_CAP_HEIGHT = get_camera_native_resolution()
-        else:
-            CAMERA_CAP_WIDTH, CAMERA_CAP_HEIGHT = CAMERA_RESOLUTION_MAP.get(resolution, (640, 480))  # fallback to SD
-
-        cap = cv2.VideoCapture(CAMERA_INDEX)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_CAP_WIDTH)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_CAP_HEIGHT)
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'YUYV'))
-
-    elif any(input_path.lower().endswith(suffix) for suffix in ['.mp4', '.avi', '.mov', '.mkv']):
-        if not os.path.exists(input_path):
-            logger.error(f"File not found: {input_path}")
-            sys.exit(1)
-        cap = cv2.VideoCapture(input_path)
-    else:
-        images = load_images_opencv(input_path)
-        try:
-            validate_images(images, batch_size)
-        except ValueError as e:
-            logger.error(e)
-            sys.exit(1)
-
-    return cap, images
 
 
 def load_images_opencv(images_path: str) -> List[np.ndarray]:
@@ -320,7 +541,7 @@ def preprocess(images: List[np.ndarray], cap: cv2.VideoCapture, framerate: float
     input_queue.put(None)  #Add sentinel value to signal end of input
 
 
-def preprocess_from_cap(cap: cv2.VideoCapture,
+def preprocess_from_cap(cap: Any,
                         batch_size: int,
                         input_queue: queue.Queue,
                         width: int,
@@ -328,17 +549,11 @@ def preprocess_from_cap(cap: cv2.VideoCapture,
                         preprocess_fn: Callable[[np.ndarray, int, int], np.ndarray],
                         framerate: Optional[float] = None) -> None:
     """
-    Process frames from the camera stream and enqueue them.
-
-    If `framerate` is provided, we *skip frames* so that only approximately
-    `framerate` frames per second are processed and displayed.
-
-    The camera can still run at its native FPS (e.g. 30 FPS), but we only
-    use every N-th frame. This gives the effect of 1 FPS / 5 FPS / 10 FPS
-    in the live view without adding artificial lag.
+    Read frames from a capture source, optionally limit how often frames are
+    allowed into the pipeline, preprocess them, and enqueue them in batches.
 
     Args:
-        cap (cv2.VideoCapture): VideoCapture object.
+        cap: VideoCapture object.
         batch_size (int): Number of images per batch.
         input_queue (queue.Queue): Queue for input images.
         width (int): Model input width.
@@ -466,7 +681,7 @@ def resize_frame_for_output(frame: np.ndarray,
 
 def visualize(
     output_queue: queue.Queue,
-    cap: Optional[cv2.VideoCapture],
+    cap: Optional[Any],
     save_stream_output: bool,
     output_dir: str,
     callback: Callable[[Any, Any], None],
@@ -631,85 +846,13 @@ class FrameRateTracker:
             str: e.g. "Processed 200 frames at 29.81 FPS"
         """
         return f"Processed {self.count} frames at {self.fps:.2f} FPS"
+    
+
+
 
 ####################################################################
 # Resource Resolution Functions (for HACE compatibility)
 ####################################################################
-
-def resolve_output_resolution_arg(res_arg: Optional[list[str]]) -> Optional[Tuple[int, int]]:
-    """
-    Parse --output-resolution argument.
-
-    Supported:
-      --output-resolution sd|hd|fhd
-      --output-resolution 1920 1080
-    """
-    if res_arg is None:
-        return None
-
-    # Single token: preset name (sd/hd/fhd)
-    if len(res_arg) == 1:
-        key = res_arg[0]
-        if key in CAMERA_RESOLUTION_MAP:
-            return CAMERA_RESOLUTION_MAP[key]
-        raise ValueError(
-            f"Invalid --output-resolution value '{key}'. "
-            "Use 'sd', 'hd', 'fhd' or two integers, e.g. '--output-resolution 1920 1080'."
-        )
-
-    # Two tokens: custom width/height
-    if len(res_arg) == 2 and all(x.isdigit() for x in res_arg):
-        w, h = map(int, res_arg)
-        if w <= 0 or h <= 0:
-            raise ValueError("Custom --output-resolution width/height must be positive integers.")
-        return (w, h)
-
-    raise ValueError(
-        f"Invalid --output-resolution value: {res_arg}. "
-        "Use 'sd', 'hd', 'fhd' or two integers, e.g. '--output-resolution 1920 1080'."
-    )
-
-
-def list_networks(app: str) -> None:
-    """
-    Print the supported networks for a given application.
-
-    Note: This is a stub implementation for HACE compatibility.
-    In hailo-apps, use config_manager.get_model_names() instead.
-    """
-    logger.warning(
-        f"list_networks() called for app '{app}'. "
-        "This is a compatibility stub. "
-        "For full functionality, use hailo_apps.config.config_manager.get_model_names()"
-    )
-    try:
-        from hailo_apps.config.config_manager import get_model_names
-
-        arch = resolve_arch(None)
-        models = get_model_names(app, arch, tier="all")
-        if models:
-            logger.info(f"Available models for {app} ({arch}):")
-            for model in models:
-                logger.info(f"  - {model}")
-        else:
-            logger.info(f"No models found for {app} ({arch})")
-    except ImportError:
-        logger.error("Could not import config_manager. Please ensure hailo-apps is properly installed.")
-
-
-def list_inputs(app: str) -> None:
-    """
-    List predefined inputs for a given application.
-
-    Note: This is a stub implementation for HACE compatibility.
-    """
-    logger.warning(
-        f"list_inputs() called for app '{app}'. "
-        "This is a compatibility stub. "
-        "Inputs should be specified as file paths or 'camera'."
-    )
-
-
 def resolve_arch(arch: str | None) -> str:
     """
     Resolve the target Hailo architecture using CLI, environment, or auto-detection.
@@ -743,147 +886,4 @@ def resolve_arch(arch: str | None) -> str:
         "Could not determine Hailo architecture. "
         "Please specify --arch or set the environment variable 'hailo_arch'."
     )
-    sys.exit(1)
-
-
-def resolve_net_arg(app: str, net_arg: str | None, dest_dir: str = "hefs", arch: str | None = None) -> str:
-    """
-    Resolve the --net argument into a concrete HEF path.
-
-    Note: This is a compatibility function for HACE apps.
-    In hailo-apps, prefer using core.resolve_hef_path() directly.
-    """
-    if net_arg is None:
-        logger.error("No --net was provided.")
-        list_networks(app)
-        sys.exit(1)
-
-    dest_path = Path(dest_dir)
-    dest_path.mkdir(parents=True, exist_ok=True)
-
-    candidate = Path(net_arg)
-
-    # If it's an existing HEF file, use it
-    if candidate.exists() and candidate.is_file() and candidate.suffix == ".hef":
-        logger.info(f"Using local HEF file: {candidate.resolve()}")
-        return str(candidate.resolve())
-
-    # If it has .hef extension but doesn't exist, error
-    if candidate.suffix == ".hef":
-        logger.error(f"HEF file not found: {net_arg}")
-        list_networks(app)
-        sys.exit(1)
-
-    # Treat as model name - try to resolve using hailo-apps mechanism
-    model_name = net_arg
-    existing_hef = dest_path / f"{model_name}.hef"
-
-    if existing_hef.exists():
-        logger.info(f"Using existing HEF: {existing_hef.resolve()}")
-        return str(existing_hef.resolve())
-
-    # Try to resolve using hailo-apps's config system
-    resolved_arch = resolve_arch(arch)
-    try:
-        from hailo_apps.python.core.common.core import resolve_hef_path
-        resolved = resolve_hef_path(model_name, app, resolved_arch)
-        if resolved and resolved.exists():
-            logger.info(f"Resolved model '{model_name}' to: {resolved} (arch={resolved_arch})")
-            return str(resolved)
-    except Exception as e:
-        logger.debug(f"Could not resolve via config system: {e}")
-
-    # Fallback: error and suggest listing networks
-    logger.error(f"Model '{model_name}' not found locally and could not be resolved.")
-    logger.info("Please provide a full path to a .hef file, or use --list-nets to see available models.")
-    list_networks(app)
-    sys.exit(1)
-
-
-def resolve_input_arg(app: str, input_arg: str | None) -> str:
-    """
-    Resolve the --input argument into a concrete input source.
-
-    Note: This is a compatibility function for HACE apps.
-    """
-    # Map standalone app names to their base resource tag names
-    APP_NAME_MAPPING = {
-        "object_detection": "detection",
-        "simple_detection": "simple_detection",
-        "instance_segmentation": "instance_segmentation",
-        "super_resolution": "super_resolution",
-    }
-
-    def resolve_tagged_resource(app_name: str, preferred_name: str | None = None) -> str | None:
-        """Resolve a resource listed in resources_config.yaml for this app."""
-        try:
-            from hailo_apps.config.config_manager import get_inputs_for_app
-        except Exception:
-            return None
-
-        # Map app name to base resource tag if needed
-        resource_app_name = APP_NAME_MAPPING.get(app_name, app_name)
-        inputs = get_inputs_for_app(resource_app_name, is_standalone=True)
-
-        def pick(section: str) -> str | None:
-            for entry in inputs.get(section, []):
-                name = entry.get("name")
-                if preferred_name and preferred_name != name:
-                    continue
-                resource_type = RESOURCES_PHOTOS_DIR_NAME if section == "images" else RESOURCES_VIDEOS_DIR_NAME
-                resolved = get_resource_path(
-                    pipeline_name=None,
-                    resource_type=resource_type,
-                    arch=None,
-                    model=name,
-                )
-                if resolved and resolved.exists():
-                    return str(resolved)
-            return None
-
-        # Prefer images first, then videos
-        resolved = pick("images")
-        if resolved:
-            return resolved
-        return pick("videos")
-
-    if input_arg is None:
-        resolved = resolve_tagged_resource(app)
-        if resolved:
-            logger.info("No input provided; using default bundled resource for %s: %s", app, resolved)
-            return resolved
-
-        logger.error(
-            "No --input was provided and no bundled resource was found. "
-            "Please specify -i/--input with a file path, directory, or 'camera'."
-        )
-        sys.exit(1)
-
-    # "camera" stays as is
-    if input_arg == "camera":
-        return input_arg
-
-    path_candidate = Path(input_arg)
-
-    # If it already exists (file or dir), just use it as-is
-    if path_candidate.exists():
-        return str(path_candidate)
-
-    resource_path = resolve_tagged_resource(app, path_candidate.name)
-    if resource_path:
-        logger.info("Resolved input '%s' to bundled resource: %s", input_arg, resource_path)
-        return resource_path
-
-    # If it has an extension but does NOT exist -> error
-    if path_candidate.suffix:
-        logger.error(f"Input file not found: {input_arg}")
-        logger.info("Please provide a valid file path, directory, or 'camera'.")
-        sys.exit(1)
-
-    # No extension and path does not exist -> treat as logical ID
-    logger.warning(
-        f"Input '{input_arg}' does not exist as a local file or directory. "
-        "Treating as logical input ID, but download functionality is not implemented in this compatibility stub."
-    )
-    logger.info("Please provide a full file path, directory path, or 'camera'.")
     sys.exit(1)

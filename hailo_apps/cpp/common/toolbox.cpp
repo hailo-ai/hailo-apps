@@ -2,7 +2,9 @@
 #include "hailo_infer.hpp"
 #include <chrono>
 #include <thread>
-
+#include <filesystem>
+#include <fstream>
+#include <string>
 
 namespace hailo_utils {
 
@@ -12,6 +14,33 @@ const std::unordered_map<std::string, std::pair<int,int>> RESOLUTION_MAP = {
     {"hd",  {1280, 720}},
     {"fhd", {1920, 1080}}
 };
+
+static std::string make_rpi_gst_pipeline(int w, int h, int fps)
+{
+    return "libcamerasrc ! "
+           "video/x-raw,format=NV12,width=" + std::to_string(w) +
+           ",height=" + std::to_string(h) +
+           ",framerate=" + std::to_string(fps) + "/1 ! "
+           "videoconvert ! "
+           "video/x-raw,format=BGR ! "
+           "appsink max-buffers=1 drop=true sync=false";
+}
+
+
+static bool is_raspberry_pi()
+{
+    const std::string RPI_POSSIBLE_NAME = "Raspberry Pi";
+
+    std::ifstream f("/proc/device-tree/model");
+    if (!f.is_open()) {
+        return false;
+    }
+
+    std::string model;
+    std::getline(f, model);
+
+    return model.find(RPI_POSSIBLE_NAME) != std::string::npos;
+}
 
 static fs::path executable_dir()
 {
@@ -224,7 +253,6 @@ std::string getCmdOptionWithShortFlag(int argc, char *argv[], const std::string 
 
 CommandLineArgs parse_command_line_arguments(int argc, char** argv) {
 
-
     std::string batch_str = getCmdOptionWithShortFlag(argc, argv, "--batch-size", "-b");
     std::string fps_str = getCmdOptionWithShortFlag(argc, argv, "--framerate", "-f");
 
@@ -261,6 +289,37 @@ void post_parse_args(const std::string &app, CommandLineArgs &args, int argc, ch
     args.input = resolve_input_arg(app, args.input);
 }
 
+static std::string find_usb_camera()
+{
+    namespace fs = std::filesystem;
+
+    const fs::path v4l_path("/sys/class/video4linux");
+
+    if (!fs::exists(v4l_path)) {
+        return "";
+    }
+
+    for (const auto &entry : fs::directory_iterator(v4l_path)) {
+        const std::string video_name = entry.path().filename(); // videoX
+        const fs::path dev_path = entry.path() / "device";
+
+        if (!fs::exists(dev_path)) {
+            continue;
+        }
+
+        // Resolve symlink
+        fs::path resolved = fs::canonical(dev_path);
+
+        // USB devices contain "usb" in their sysfs path
+        if (resolved.string().find("usb") != std::string::npos) {
+            return "/dev/" + video_name;
+        }
+    }
+
+    return ""; // none found
+}
+
+
 InputType determine_input_type(const std::string& input_path,
                                cv::VideoCapture &capture,
                                double &org_height,
@@ -270,6 +329,7 @@ InputType determine_input_type(const std::string& input_path,
                                const std::string &camera_resolution)
 {
     InputType input_type;
+
     if (is_directory_of_images(input_path, frame_count, batch_size)) {
         input_type.is_directory = true;
 
@@ -278,16 +338,32 @@ InputType determine_input_type(const std::string& input_path,
         frame_count = 1; // Single image
 
     } else if (is_video(input_path)) {
-        std::cout << "-I- Detected video file input: " << input_path << "\n";
+        std::cout << "Detected video file input: " << input_path << "\n";
         input_type.is_video = true;
-        capture = open_video_capture(input_path, std::ref(capture), std::ref(org_height), std::ref(org_width), std::ref(frame_count), false);
-    } else if (input_path == "camera") { // default to /dev/video0
+        capture = open_video_capture(input_path, capture, org_height, org_width, frame_count, false);
+
+    } else if (input_path == "usb") {
         input_type.is_camera = true;
-        capture = open_video_capture("/dev/video0", std::ref(capture), std::ref(org_height), std::ref(org_width), std::ref(frame_count), true, std::ref(camera_resolution));
+        std::string video_device = "/dev/video0";
+        if (is_raspberry_pi()) {
+            video_device = find_usb_camera();
+            if (video_device.empty()) {
+                throw std::runtime_error("No USB camera detected");
+            }
+        }
+        std::cout << "Using USB camera: " << video_device << "\n";
+        capture = open_video_capture(video_device, capture, org_height, org_width, frame_count, true, camera_resolution);
+
     } else if (input_path.rfind("/dev/video", 0) == 0) { // user gave explicit device like /dev/video1
         input_type.is_camera = true;
-        capture = open_video_capture(input_path, std::ref(capture), std::ref(org_height), std::ref(org_width), std::ref(frame_count), true, std::ref(camera_resolution));
-    } else {
+        capture = open_video_capture(input_path, capture, org_height, org_width, frame_count, true, camera_resolution);
+
+    } else if (input_path == "rpi") {
+        input_type.is_camera = true;
+        std::cout << "Using RPI camera"<< "\n";
+        capture = open_video_capture(input_path, capture, org_height, org_width, frame_count, true, camera_resolution);
+    }
+    else {
         throw std::runtime_error("Unsupported input type: " + input_path);
     }
 
@@ -636,8 +712,7 @@ std::string resolve_input_arg(const std::string &app,
         std::exit(1);
     }
 
-    // Camera is passed as-is
-    if (input_arg_in == "camera") {
+    if (input_arg_in == "usb" || input_arg_in == "rpi") {
         return input_arg_in;
     }
 
@@ -777,34 +852,57 @@ cv::VideoCapture open_video_capture(const std::string &input_path,
     bool is_camera,
     const std::string &camera_resolution) 
     {
-
-    capture.open(input_path, cv::CAP_ANY); 
-    if (!capture.isOpened()) {
-        throw std::runtime_error("Unable to read input file");
+    const bool is_rpi_input = (input_path == "rpi");
+    // Validate platform
+    if (is_rpi_input && !is_raspberry_pi()) {
+        throw std::runtime_error(
+            "You requested '-i rpi', but this system is not a Raspberry Pi.\n"
+            "Use '-i usb' or a video file instead."
+        );
     }
 
-    // If this is a camera and user requested a resolution, apply it
+    // Default camera resolution
+    int width  = 640;
+    int height = 480;
+    int fps    = 30;
+
+    // Apply user camera resolution
     if (is_camera && !camera_resolution.empty()) {
         auto it = RESOLUTION_MAP.find(camera_resolution);
         if (it == RESOLUTION_MAP.end()) {
             std::cerr << "-W- Unknown camera resolution \"" << camera_resolution
-                      << "\". Supported values are: sd, hd, fhd.\n";
+                      << "\". Supported values: sd, hd, fhd\n";
         } else {
-            int width  = it->second.first;
-            int height = it->second.second;
-            capture.set(cv::CAP_PROP_FRAME_WIDTH,  width);
-            capture.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+            width  = it->second.first;
+            height = it->second.second;
         }
     }
-    // Query back the actual resolution 
-    org_height = capture.get(cv::CAP_PROP_FRAME_HEIGHT);
-    org_width = capture.get(cv::CAP_PROP_FRAME_WIDTH);
-    
-    if (is_camera) {
-        frame_count = 0;   // cameras have no known frame count
+
+    if (is_rpi_input) {
+        org_width  = width  = 800;
+        org_height = height = 600;
+        std::string pipeline = make_rpi_gst_pipeline(width, height, fps);
+        capture.open(pipeline, cv::CAP_GSTREAMER);
     } else {
-        frame_count = static_cast<size_t>(capture.get(cv::CAP_PROP_FRAME_COUNT));
+        capture.open(input_path, cv::CAP_ANY);
+
+        if (is_camera) { //usb camera
+            capture.set(cv::CAP_PROP_FRAME_WIDTH,  width);
+            capture.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+            capture.set(cv::CAP_PROP_FPS, fps);
+        }
     }
+
+    if (!capture.isOpened()) {
+        throw std::runtime_error("Unable to open input file / camera");
+    }
+
+    if (!is_rpi_input) {
+        org_width  = capture.get(cv::CAP_PROP_FRAME_WIDTH);
+        org_height = capture.get(cv::CAP_PROP_FRAME_HEIGHT);
+    }
+
+    frame_count = is_camera ? 0 : static_cast<size_t>(capture.get(cv::CAP_PROP_FRAME_COUNT));
     return capture;
 }
 
@@ -1235,9 +1333,12 @@ void release_resources(cv::VideoCapture &capture, cv::VideoWriter &video, InputT
                       std::shared_ptr<BoundedTSQueue<InferenceResult>> results_queue) {
     if (input_type.is_video) {
         video.release();
+        capture.release();
+        cv::destroyAllWindows();
     }
     if (input_type.is_camera) {
         capture.release();
+        video.release();
         cv::destroyAllWindows();
     }
     if (preprocessed_batch_queue) {

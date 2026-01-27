@@ -26,7 +26,15 @@
         }
       ]
     },
-
+    "oriented_object_detection": {
+      "images": [
+        {
+          "name": "dota_image",
+          "description": "Aerial image from DOTA dataset",
+          "path": "https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/images/dota_image.png"
+        }
+      ]
+    },
     "lane_detection": {
       "videos": [
         {

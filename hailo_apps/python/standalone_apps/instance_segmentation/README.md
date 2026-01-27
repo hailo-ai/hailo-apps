@@ -11,7 +11,6 @@ Requirements
 - hailo_platform:
     - 4.23.0 (for Hailo-8 devices)
     - 5.1.1 (for Hailo-10H devices)
-- loguru
 - opencv-python
 - scipy
 - lap
@@ -63,6 +62,9 @@ cd hailo-apps
 sudo ./install.sh
 source setup_env.sh
 ```
+⚠️ **Note (Python 3.10 / 3.11)**: If you encounter `ModuleNotFoundError: distutils.msvccompiler`,
+run `export SETUPTOOLS_USE_DISTUTILS=stdlib` **before** executing the application.
+
 
 Then the app is already ready for usage:
 ```shell script
@@ -72,37 +74,38 @@ cd hailo-apps/python/standalone_apps/instance_segmentation
 ## Run
 After completing either installation option, run from the application folder:
 ```shell script
-./instance_segmentation.py -n <model_path> -i <input_path> -t <model-type>
+./instance_segmentation.py -n <model_path> -i <input_path> -m <model-type>
 ```
 
 Arguments
 ---------
 
-- `-n, --net`: 
-    - A **model name** (e.g., `yolov8n`) → the script will automatically download and resolve the correct HEF for your device.
+- `--hef-path, -n`: 
+    - A **model name** (e.g., `yolov8m_seg`) → the script will automatically download and resolve the correct HEF for your device.
     - A **file path** to a local HEF → the script will use the specified network directly.
 - `-i, --input`:
-  - An **input source** such as an image (`bus.jpg`), a video (`video.mp4`), a directory of images, or `camera` to use the system camera.
-  - A **predefined input name** from `inputs.json` (e.g., `bus`, `street`).
+  - An **input source** such as an image (`bus.jpg`), a video (`video.mp4`), a directory of images, or `usb` to use the system camera.
+    - On Raspberry Pi, you can also use `rpi` to enable the Raspberry Pi camera.
+  - A **predefined input name** from `resources_config.yaml` (e.g., `bus`, `street`).
     - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
   - Use `--list-inputs` to display all available predefined inputs.
-- `-t, --model-type`: Specify the model family used by your HEF: v5 (YOLOv5), v8 (YOLOv8), fast (fast-seg).
+- `-m, --model-type`: Specify the model family used by your HEF: v5 (YOLOv5), v8 (YOLOv8), fast (fast-seg).
 - `-b, --batch-size`: [optional] Number of images in one batch. Defaults to 1.
 - `-l, --labels`: [optional] Path to a text file containing class labels. If not provided, default COCO labels are used.
 - `-s, --save_stream_output`: [optional] Save the output of the inference from a stream.
 - `-o, --output-dir`: [optional] Directory where output images/videos will be saved.
-- `--camera-resolution`: [optional][Camera only] Input resolution: `sd` (640x480), `hd` (1280x720), or `fhd` (1920x1080).
-- `--output-resolution`: [optional] Set output size using `sd|hd|fhd`, or pass custom width/height (e.g., `--output-resolution 1920 1080`).
+- `cr, --camera-resolution`: [optional][Camera only] Input resolution: `sd` (640x480), `hd` (1280x720), or `fhd` (1920x1080).
+- `or, --output-resolution`: [optional] Set output size using `sd|hd|fhd`, or pass custom width/height (e.g., `--output-resolution 1920 1080`).
 - `--track`: [optional] Enable object tracking across frames using BYTETracker.
 - `--show-fps`: [optional] Display FPS performance metrics for video/camera input.
-- `-f, --framerate`: [optional][Camera only] Override the camera input framerate.
-- `--list-nets`: [optional] Print all supported networks for this application (from `networks.json`) and exit.
-- `--list-inputs`: [optional] Print the available predefined input resources (images/videos) defined in `inputs.json` for this application, then exit.
+- `-f, --frame-rate`: [optional][Camera only] Override the camera input framerate.
+- `--list-models`: [optional] Print all supported models for this application (from `resources_config.yaml`) and exit.
+- `--list-inputs`: [optional] Print the available predefined input resources (images/videos) defined in `resources_config.yaml` for this application, then exit.
 
 
 ### Environment Variables
-- `CAMERA_INDEX`: [Camera input only] Select which camera index to use when -i camera is specified. Defaults to 0 if not set.
-    - Example: `CAMERA_INDEX=1 ./instance_segmentation.py -n model.hef -i camera`
+- `CAMERA_INDEX`: [Camera input only] Select which usb camera index to use when -i camera is specified. Defaults to 0 if not set.
+    - Example: `CAMERA_INDEX=1 ./instance_segmentation.py -n model.hef -i usb -m v5/v8/fast`
 
 For more information:
 ```shell script
@@ -121,24 +124,24 @@ Example
 ./instance_segmentation.py --list-inputs
 ```
 
-**Regular object detection on a camera stream**
+**Regular object detection on a usb camera stream**
 ```shell script
-./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i camera -t v5
+./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i usb -m v5
 ```
 
-**Object detection with tracking on a camera stream**
+**Object detection with tracking on a usb camera stream**
 ```shell script
-./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i camera -t v5 --track
+./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i usb -m v5 --track
 ```
 
 **Inference on an image**
 ```shell script
-./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i zidane.jpg -t v5
+./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i zidane.jpg -m v5
 ```
 
 **Inference on a folder of images**
 ```shell script
-./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i input_folder -t v5
+./instance_segmentation.py -n yolov5m_seg_with_nms.hef -i input_folder -m v5
 ```
 
 **Output**

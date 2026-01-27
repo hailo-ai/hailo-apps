@@ -63,7 +63,8 @@ Arguments
     - A **model name** (e.g., `yolov8n`) → the script will automatically download and resolve the correct HEF for your device.
     - A **file path** to a local HEF → the script will use the specified network directly.
 - `-i, --input`:
-  - An **input source** such as an image (`bus.jpg`), a video (`video.mp4`), a directory of images, or `camera` to use the system camera.
+  - An **input source** such as an image (`bus.jpg`), a video (`video.mp4`), a directory of images, or `usb` to use the system camera.
+    - On Raspberry Pi, you can also use `rpi` to enable the Raspberry Pi camera.
   - A **predefined input name** from `inputs.json` (e.g., `bus`, `street`).
     - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
 - `-b, --batch-size`: [optional] Number of images in one batch. Defaults to 1.

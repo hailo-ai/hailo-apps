@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
-import cv2
 from pathlib import Path
-import os
 import sys
-from typing import List
 import threading
 import queue
 from super_resolution_utils import SrganUtils, Espcnx4Utils, inference_result_handler
@@ -13,35 +10,34 @@ from functools import partial
 try:
     from hailo_apps.python.core.common.hailo_inference import HailoInfer
     from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
+    from hailo_apps.python.core.common.core import handle_and_resolve_args
+    from hailo_apps.python.core.common.parser import get_standalone_parser
     from hailo_apps.python.core.common.toolbox import (
         init_input_source,
         preprocess,
         visualize,
         FrameRateTracker,
-        resolve_arch,
-        resolve_input_arg,
-        resolve_output_resolution_arg,
-        list_inputs,
     )
-    from hailo_apps.python.core.common.core import handle_list_models_flag, resolve_hef_path
-    from hailo_apps.python.core.common.parser import get_standalone_parser
+
 except ImportError:
-    core_dir = Path(__file__).resolve().parents[2] / "core"
-    sys.path.insert(0, str(core_dir))
-    from common.hailo_inference import HailoInfer
-    from common.hailo_logger import get_logger, init_logging, level_from_args
-    from common.toolbox import (
+    repo_root = None
+    for p in Path(__file__).resolve().parents:
+        if (p / "hailo_apps" / "config" / "config_manager.py").exists():
+            repo_root = p
+            break
+    if repo_root is not None:
+        sys.path.insert(0, str(repo_root))
+    from hailo_apps.python.core.common.hailo_inference import HailoInfer
+    from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
+    from hailo_apps.python.core.common.core import handle_and_resolve_args
+    from hailo_apps.python.core.common.parser import get_standalone_parser
+    from hailo_apps.python.core.common.toolbox import (
         init_input_source,
         preprocess,
         visualize,
         FrameRateTracker,
-        resolve_arch,
-        resolve_input_arg,
-        resolve_output_resolution_arg,
-        list_inputs,
     )
-    from common.core import handle_list_models_flag, resolve_hef_path
-    from common.parser import get_standalone_parser
+
 
 APP_NAME = Path(__file__).stem
 logger = get_logger(__name__)
@@ -57,55 +53,7 @@ def parse_args():
     parser = get_standalone_parser()
     parser.description = "Super Resolution using SRGAN or ESPCN models."
 
-    # App-specific arguments
-    parser.add_argument(
-        "--camera-resolution",
-        "-cr",
-        type=str,
-        choices=["sd", "hd", "fhd"],
-        default=None,
-        help="(Camera only) Input resolution: 'sd' (640x480), 'hd' (1280x720), or 'fhd' (1920x1080).",
-    )
-
-    parser.add_argument(
-        "--output-resolution",
-        "-or",
-        nargs="+",
-        type=str,
-        default=None,
-        help=(
-            "Output resolution. Use: 'sd', 'hd', 'fhd', "
-            "or custom size like '--output-resolution 1920 1080'."
-        ),
-    )
-
-    handle_list_models_flag(parser, APP_NAME)
-
     args = parser.parse_args()
-
-    # Handle --list-inputs and exit
-    if args.list_inputs:
-        list_inputs(APP_NAME)
-        sys.exit(0)
-
-    # Resolve network and input paths
-    args.arch = resolve_arch(args.arch)
-    args.hef_path = resolve_hef_path(
-        hef_path=args.hef_path,
-        app_name=APP_NAME,
-        arch=args.arch,
-    )
-    if args.hef_path is None:
-        logger.error("Failed to resolve HEF path for %s", APP_NAME)
-        sys.exit(1)
-    args.input = resolve_input_arg(APP_NAME, args.input)
-    args.output_resolution = resolve_output_resolution_arg(args.output_resolution)
-
-    # Setup output directory
-    if args.output_dir is None:
-        args.output_dir = os.path.join(os.getcwd(), "output")
-    os.makedirs(args.output_dir, exist_ok=True)
-
     return args
 
 
@@ -185,7 +133,7 @@ def infer(hailo_inference, input_queue, output_queue):
 
 def run_inference_pipeline(
     net_path: str,
-    input: str,
+    input_src: str,
     batch_size: int,
     output_dir: str,
     camera_resolution: str,
@@ -199,7 +147,7 @@ def run_inference_pipeline(
 
     Args:
         net_path (str): Path to the HEF model file.
-        input (str): Input source path (image directory, video file, or camera).
+        input_src (str): Input source path (image directory, video file, or camera).
         batch_size (int): Number of frames to process per batch.
         output_dir (str): Directory path to save output visualizations.
         camera_resolution (str): Camera input resolution, e.g., 'sd', 'hd', or 'fhd'.
@@ -214,7 +162,7 @@ def run_inference_pipeline(
 
     utils = None
     # Initialize input source from string: "camera", video file, or image folder.
-    cap, images = init_input_source(input, batch_size, camera_resolution)
+    cap, images = init_input_source(input_src, batch_size, camera_resolution)
 
     input_queue = queue.Queue()
     output_queue = queue.Queue()
@@ -265,10 +213,10 @@ def run_inference_pipeline(
     postprocess_thread.join()
 
     if show_fps:
-        logger.debug(fps_tracker.frame_rate_summary())
+        logger.info(fps_tracker.frame_rate_summary())
 
-    logger.info("Inference was successful!")
-    if save_output or input.lower() != "camera":
+    logger.success("Inference was successful!")
+    if save_output or input_src.lower() not in ("usb", "rpi"):
         logger.info(f"Results have been saved in {output_dir}")
 
 
@@ -279,7 +227,7 @@ def main() -> None:
     # Parse command line arguments
     args = parse_args()
     init_logging(level=level_from_args(args))
-
+    handle_and_resolve_args(args, APP_NAME)
     # Start the inference
     run_inference_pipeline(
         args.hef_path,

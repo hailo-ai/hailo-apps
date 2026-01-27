@@ -84,6 +84,10 @@
       "yolov8s":  { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov8s.hef"], "description": "YOLOv8s" },
       "yolov8x":  { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov8x.hef"], "description": "YOLOv8x" },
       "yolov9c":  { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov9c.hef"], "description": "YOLOv9c" }
+    },
+
+    "oriented_object_detection": {
+      "yolo11s_obb": { "arch": ["hailo8","hailo8l","hailo10h"], "source": "cs", "hefs": ["yolo11s_obb.hef"], "description": "oriented_object_detection"}
     }
   }
 }

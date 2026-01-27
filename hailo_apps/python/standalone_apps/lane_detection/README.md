@@ -13,7 +13,6 @@ Requirements
 - hailo_platform:
     - 4.23.0 (for Hailo-8 devices)
     - 5.1.1 (for Hailo-10H devices)
-- loguru
 - tqdm
 - opencv-python
 
@@ -73,7 +72,7 @@ After completing either installation option, run from the application folder:
 Arguments
 ---------
 
-- `-n, --net`: 
+- `--hef-path, -n`: 
     - A **model name** (e.g., `ufld_v2_tu`) → the script will automatically download and resolve the correct HEF for your device.
     - A **file path** to a local HEF → the script will use the specified network directly.
 - `-i, --input`:
@@ -82,8 +81,8 @@ Arguments
     - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
   - Use `--list-inputs` to display all available predefined inputs.
 - `-o, --output`: Path to save the output video with annotated lanes.
-- `--list-nets` Print all supported networks for this application (from `networks.json`) and exit.
-- `--list-inputs`: Print the available predefined input resources (videos) defined in `inputs.json` for this application, then exit.
+- `--list-models`: [optional] Print all supported models for this application (from `resources_config.yaml`) and exit.
+- `--list-inputs`: [optional] Print the available predefined input resources (images/videos) defined in `resources_config.yaml` for this application, then exit.
 
 For more information:
 ```shell script

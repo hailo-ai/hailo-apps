@@ -20,16 +20,20 @@ except ImportError:
     from pathlib import Path
     import sys
 
-    speech_root = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(speech_root))
-    core_dir = Path(__file__).resolve().parents[3] / "core"
-    sys.path.insert(0, str(core_dir))
-    from common.preprocessing import preprocess, improve_input_audio
-    from common.audio_utils import load_audio
-    from common.postprocessing import clean_transcription
-    from app.hailo_whisper_pipeline import HailoWhisperPipeline
-    from app.whisper_hef_registry import HEF_REGISTRY
-    from common.parser import get_standalone_parser
+    repo_root = None
+    for p in Path(__file__).resolve().parents:
+        if (p / "hailo_apps" / "config" / "config_manager.py").exists():
+            repo_root = p
+            break
+    if repo_root is not None:
+        sys.path.insert(0, str(repo_root))
+
+    from hailo_apps.python.standalone_apps.speech_recognition.common.preprocessing import preprocess, improve_input_audio
+    from hailo_apps.python.standalone_apps.speech_recognition.common.audio_utils import load_audio
+    from hailo_apps.python.standalone_apps.speech_recognition.common.postprocessing import clean_transcription
+    from hailo_apps.python.standalone_apps.speech_recognition.app.hailo_whisper_pipeline import HailoWhisperPipeline
+    from hailo_apps.python.standalone_apps.speech_recognition.app.whisper_hef_registry import HEF_REGISTRY
+    from hailo_apps.python.core.common.parser import get_standalone_parser
 
 # --- Constants ---
 SAMPLE_RATE = 16000

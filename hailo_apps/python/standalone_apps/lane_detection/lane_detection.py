@@ -7,74 +7,93 @@ from pathlib import Path
 import numpy as np
 import cv2
 import threading
-from lane_detection_utils import (UFLDProcessing,
-                                  check_process_errors,
-                                  compute_scaled_radius)
+import argparse
+from lane_detection_utils import (UFLDProcessing, check_process_errors, compute_scaled_radius)
 
 try:
     from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
     from hailo_apps.python.core.common.hailo_inference import HailoInfer
-    from hailo_apps.python.core.common.toolbox import (
-        resolve_arch,
-        resolve_input_arg,
-        list_inputs,
-    )
-    from hailo_apps.python.core.common.core import handle_list_models_flag, resolve_hef_path
-    from hailo_apps.python.core.common.parser import get_standalone_parser
+    from hailo_apps.python.core.common.core import handle_and_resolve_args
+
 except ImportError:
-    core_dir = Path(__file__).resolve().parents[2] / "core"
-    sys.path.insert(0, str(core_dir))
-    from common.hailo_logger import get_logger, init_logging, level_from_args
-    from common.hailo_inference import HailoInfer
-    from common.toolbox import (
-        resolve_arch,
-        resolve_input_arg,
-        list_inputs,
-    )
-    from common.core import handle_list_models_flag, resolve_hef_path
-    from common.parser import get_standalone_parser
+    repo_root = None
+    for p in Path(__file__).resolve().parents:
+        if (p / "hailo_apps" / "config" / "config_manager.py").exists():
+            repo_root = p
+            break
+    if repo_root is not None:
+        sys.path.insert(0, str(repo_root))
+    from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
+    from hailo_apps.python.core.common.hailo_inference import HailoInfer
+    from hailo_apps.python.core.common.core import handle_and_resolve_args
 
 APP_NAME = Path(__file__).stem
 logger = get_logger(__name__)
 
 
-def parser_init():
-    """
-    Initialize and configure the argument parser for this script.
+def parser_init():    
     
-    Returns:
-        argparse.Namespace: Parsed arguments.
-    """
-    parser = get_standalone_parser()
-    parser.description = "UFLD_v2 lane detection inference."
-
-    handle_list_models_flag(parser, APP_NAME)
-
-    args = parser.parse_args()
-    init_logging(level=level_from_args(args))
-
-    # Handle --list-inputs and exit
-    if args.list_inputs:
-        list_inputs(APP_NAME)
-        sys.exit(0)
-
-    # Resolve network and input paths
-    args.arch = resolve_arch(args.arch)
-    args.hef_path = resolve_hef_path(
-        hef_path=args.hef_path,
-        app_name=APP_NAME,
-        arch=args.arch,
+    parser = argparse.ArgumentParser(description="UFLD_v2 inference",
+        formatter_class=argparse.RawTextHelpFormatter
     )
-    if args.hef_path is None:
-        logger.error("Failed to resolve HEF path for %s", APP_NAME)
-        sys.exit(1)
-    args.input = resolve_input_arg(APP_NAME, args.input)
+    parser.add_argument(
+        "--input",
+        "-i",
+        type=str,
+        default=None,
+        help=(
+            "Input source for processing. Can be a file path (image or video), "
+            "camera index (integer), folder path containing images, or RTSP URL. "
+            "For USB cameras, use 'usb' to auto-detect or '/dev/video<X>' for a specific device. "
+            "For Raspberry Pi camera, use 'rpi'. If not specified, defaults to application-specific source."
+        ),
+    )
 
-    # Setup output directory
-    if args.output_dir is None:
-        args.output_dir = os.path.join(os.getcwd(), "output")
-    os.makedirs(args.output_dir, exist_ok=True)
+    parser.add_argument(
+        "--hef-path",
+        "-n",
+        type=str,
+        default=None,
+        help=(
+            "Path or name of Hailo Executable Format (HEF) model file. "
+            "Can be: (1) full path to .hef file, (2) model name (will search in resources), "
+            "or (3) model name from available models (will auto-download if not found). "
+            "If not specified, uses the default model for this application."
+        ),
+    )
 
+    parser.add_argument(
+        "--list-models",
+        action="store_true",
+        help=(
+            "List all available models for this application and exit. "
+            "Shows default and extra models that can be used with --hef-path."
+        ),
+    )
+
+    parser.add_argument(
+        "--list-inputs",
+        action="store_true",
+        help=(
+            "List available demo inputs for this application and exit. "
+            "This uses the shared resources catalog (images/videos) defined in resources_config.yaml."
+        ),
+    )
+    
+    parser.add_argument(
+        "--output-dir",
+        "-o",
+        type=str,
+        default=None,
+        help=(
+            "Directory where output files will be saved. "
+            "When --save-output is enabled, processed images, videos, or result files will be "
+            "written to this directory. If not specified, outputs are saved to a default location "
+            "or the current working directory. The directory will be created if it does not exist."
+        ),
+    )
+
+    args = parser.parse_args()    
     return args
 
 
@@ -317,7 +336,7 @@ def run_inference_pipeline(
     output_queue.put(None)
     postprocess_thread.join()
 
-    logger.info(f"Inference was successful! Results saved in {output_dir}")
+    logger.success(f"Inference was successful! Results saved in {output_dir}")
 
 
 
@@ -325,6 +344,9 @@ if __name__ == "__main__":
 
     # Parse command-line arguments
     args = parser_init()
+    init_logging(level=level_from_args(args))
+    handle_and_resolve_args(args, APP_NAME)
+    print(args.input)
     try:
         original_frame_width, original_frame_height, total_frames = get_video_info(args.input)
     except ValueError as e:
@@ -345,7 +367,7 @@ if __name__ == "__main__":
     run_inference_pipeline(
         args.input,
         args.hef_path,
-        batch_size=args.batch_size,
+        batch_size=1,
         output_dir=args.output_dir,
         ufld_processing=ufld_processing,
     )

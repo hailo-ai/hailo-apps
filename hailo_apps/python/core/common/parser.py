@@ -256,7 +256,6 @@ def get_standalone_parser() -> argparse.ArgumentParser:
         "--camera-resolution",
         type=str,
         choices=["sd", "hd", "fhd"],
-        default="sd",
         help=(
             "Predefined resolution for camera input sources. "
             "Options: 'sd' (640x480, Standard Definition), 'hd' (1280x720, High Definition), "
