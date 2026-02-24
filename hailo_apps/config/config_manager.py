@@ -69,10 +69,12 @@ class ModelEntry:
         name: Model name (e.g., "yolov8m")
         source: Source type - "mz" (Model Zoo), "s3", or "gen-ai-mz"
         url: Optional explicit URL for download
+        app_type: List of supported app types - "pipeline", "standalone", or both
     """
     name: str
     source: str  # "mz" | "s3" | "gen-ai-mz"
     url: Optional[str] = None
+    app_type: tuple[str, ...] = ("pipeline", "standalone")  # Default: supports both
 
 
 @dataclass(frozen=True)
@@ -380,7 +382,7 @@ def get_supported_architectures(app_name: str) -> list[str]:
     return sorted(supported)
 
 
-def _extract_model_entries(entries: Any) -> list[ModelEntry]:
+def _extract_model_entries(entries: Any, app_type_filter: Optional[str] = None) -> list[ModelEntry]:
     """Extract ModelEntry objects from config entries.
     
     Handles various config formats:
@@ -390,6 +392,8 @@ def _extract_model_entries(entries: Any) -> list[ModelEntry]:
     
     Args:
         entries: Raw entries from config
+        app_type_filter: If provided, only return models supporting this app type
+                        ("pipeline" or "standalone"). If None, return all models.
         
     Returns:
         List of ModelEntry objects
@@ -406,25 +410,39 @@ def _extract_model_entries(entries: Any) -> list[ModelEntry]:
         if isinstance(entry, dict):
             name = entry.get("name")
             if name and not _is_none_value(name):
-                models.append(
-                    ModelEntry(
-                        name=name,
-                        source=entry.get("source", "mz"),
-                        url=entry.get("url"),
-                    )
+                # Parse app_type field - default to both if not specified
+                app_type_raw = entry.get("app_type", ["pipeline", "standalone"])
+                if isinstance(app_type_raw, str):
+                    app_type = (app_type_raw,)
+                else:
+                    app_type = tuple(app_type_raw) if app_type_raw else ("pipeline", "standalone")
+                
+                model = ModelEntry(
+                    name=name,
+                    source=entry.get("source", "mz"),
+                    url=entry.get("url"),
+                    app_type=app_type,
                 )
+                
+                # Filter by app_type if requested
+                if app_type_filter is None or app_type_filter in model.app_type:
+                    models.append(model)
         elif isinstance(entry, str) and not _is_none_value(entry):
-            models.append(ModelEntry(name=entry, source="mz"))
+            model = ModelEntry(name=entry, source="mz")
+            # String entries default to both types, so always include unless filtered out
+            if app_type_filter is None or app_type_filter in model.app_type:
+                models.append(model)
 
     return models
 
 
-def get_default_models(app_name: str, arch: str) -> list[ModelEntry]:
+def get_default_models(app_name: str, arch: str, app_type: Optional[str] = None) -> list[ModelEntry]:
     """Get default model entries for an app and architecture.
     
     Args:
         app_name: Application name (e.g., "detection")
         arch: Hailo architecture (e.g., "hailo8")
+        app_type: Filter by app type ("pipeline" or "standalone"). If None, return all.
         
     Returns:
         List of default ModelEntry objects
@@ -432,15 +450,16 @@ def get_default_models(app_name: str, arch: str) -> list[ModelEntry]:
     config = get_resources_config()
     app_config = config.get(app_name, {})
     arch_models = app_config.get("models", {}).get(arch, {})
-    return _extract_model_entries(arch_models.get("default"))
+    return _extract_model_entries(arch_models.get("default"), app_type_filter=app_type)
 
 
-def get_extra_models(app_name: str, arch: str) -> list[ModelEntry]:
+def get_extra_models(app_name: str, arch: str, app_type: Optional[str] = None) -> list[ModelEntry]:
     """Get extra model entries for an app and architecture.
     
     Args:
         app_name: Application name (e.g., "detection")
         arch: Hailo architecture (e.g., "hailo8")
+        app_type: Filter by app type ("pipeline" or "standalone"). If None, return all.
         
     Returns:
         List of extra ModelEntry objects
@@ -448,54 +467,57 @@ def get_extra_models(app_name: str, arch: str) -> list[ModelEntry]:
     config = get_resources_config()
     app_config = config.get(app_name, {})
     arch_models = app_config.get("models", {}).get(arch, {})
-    return _extract_model_entries(arch_models.get("extra"))
+    return _extract_model_entries(arch_models.get("extra"), app_type_filter=app_type)
 
 
-def get_all_models(app_name: str, arch: str) -> list[ModelEntry]:
+def get_all_models(app_name: str, arch: str, app_type: Optional[str] = None) -> list[ModelEntry]:
     """Get all model entries (default + extra) for an app and architecture.
     
     Args:
         app_name: Application name
         arch: Hailo architecture
+        app_type: Filter by app type ("pipeline" or "standalone"). If None, return all.
         
     Returns:
         Combined list of default and extra ModelEntry objects
     """
-    return get_default_models(app_name, arch) + get_extra_models(app_name, arch)
+    return get_default_models(app_name, arch, app_type) + get_extra_models(app_name, arch, app_type)
 
 
-def get_model_names(app_name: str, arch: str, tier: str = "all") -> list[str]:
+def get_model_names(app_name: str, arch: str, tier: str = "all", app_type: Optional[str] = None) -> list[str]:
     """Get model names for an app and architecture.
     
     Args:
         app_name: Application name
         arch: Hailo architecture
         tier: "default", "extra", or "all"
+        app_type: Filter by app type ("pipeline" or "standalone"). If None, return all.
         
     Returns:
         List of model name strings
     """
     if tier == "default":
-        models = get_default_models(app_name, arch)
+        models = get_default_models(app_name, arch, app_type)
     elif tier == "extra":
-        models = get_extra_models(app_name, arch)
+        models = get_extra_models(app_name, arch, app_type)
     else:
-        models = get_all_models(app_name, arch)
+        models = get_all_models(app_name, arch, app_type)
 
     return [m.name for m in models]
 
 
-def get_default_model_name(app_name: str, arch: str) -> Optional[str]:
+def get_default_model_name(app_name: str, arch: str, app_type: Optional[str] = None) -> Optional[str]:
     """Get the first default model name for an app and architecture.
     
     Args:
         app_name: Application name
         arch: Hailo architecture
+        app_type: Filter by app type ("pipeline" or "standalone"). If None, return all.
         
     Returns:
         Model name string or None if no default model
     """
-    models = get_default_models(app_name, arch)
+    models = get_default_models(app_name, arch, app_type)
     return models[0].name if models else None
 
 

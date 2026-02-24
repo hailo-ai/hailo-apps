@@ -89,7 +89,10 @@ class GStreamerInstanceSegmentationApp(GStreamerApp):
             app_name=INSTANCE_SEGMENTATION_PIPELINE,
             arch=self.arch
         )
-        self.hef_path = str(resolved_path) if resolved_path else None
+        if resolved_path is None:
+            hailo_logger.error("Failed to resolve HEF path. Use --list-models to see available models.")
+            raise SystemExit(1)
+        self.hef_path = str(resolved_path)
         hailo_logger.info("HEF path: %s", self.hef_path)
 
         # Determine which JSON config to use

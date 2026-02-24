@@ -1,6 +1,0 @@
-transformers==4.50.1
-sounddevice==0.5.1
-torch==2.6.0
-scipy==1.9.3
-python-dotenv
-PyYAML

@@ -16,9 +16,13 @@ try:
         init_input_source,
         preprocess,
         visualize,
+        select_cap_processing_mode,
         FrameRateTracker,
     )
-
+    from hailo_apps.python.core.common.defines import (
+        MAX_INPUT_QUEUE_SIZE,
+        MAX_OUTPUT_QUEUE_SIZE,
+    )
 except ImportError:
     repo_root = None
     for p in Path(__file__).resolve().parents:
@@ -35,9 +39,13 @@ except ImportError:
         init_input_source,
         preprocess,
         visualize,
+        select_cap_processing_mode,
         FrameRateTracker,
     )
-
+    from hailo_apps.python.core.common.defines import (
+        MAX_INPUT_QUEUE_SIZE,
+        MAX_OUTPUT_QUEUE_SIZE,
+    )
 
 APP_NAME = Path(__file__).stem
 logger = get_logger(__name__)
@@ -91,7 +99,7 @@ def inference_callback(
 
 
 
-def infer(hailo_inference, input_queue, output_queue):
+def infer(hailo_inference, input_queue, output_queue, stop_event):
     """
     Main inference loop that pulls data from the input queue, runs asynchronous
     inference, and pushes results to the output queue.
@@ -109,10 +117,14 @@ def infer(hailo_inference, input_queue, output_queue):
     Returns:
         None
     """
+
     while True:
         next_batch = input_queue.get()
         if not next_batch:
             break  # Stop signal received
+
+        if stop_event.is_set():
+            continue  # Skip processing if stop signal is set
 
         input_batch, preprocessed_batch = next_batch
 
@@ -123,12 +135,15 @@ def infer(hailo_inference, input_queue, output_queue):
             output_queue=output_queue
         )
 
+        if hailo_inference.last_infer_job is not None:
+            hailo_inference.last_infer_job.wait(10000)
+
         # Run async inference
         hailo_inference.run(preprocessed_batch, inference_callback_fn)
 
     # Release resources and context
     hailo_inference.close()
-
+    output_queue.put(None)
 
 
 def run_inference_pipeline(
@@ -161,11 +176,16 @@ def run_inference_pipeline(
     """
 
     utils = None
-    # Initialize input source from string: "camera", video file, or image folder.
-    cap, images = init_input_source(input_src, batch_size, camera_resolution)
+    # Initialize input source from string: "camera", video file, or image folder
+    cap, images, input_type = init_input_source(input_src, batch_size, camera_resolution)
+    cap_processing_mode = None
+    if cap is not None:
+        cap_processing_mode = select_cap_processing_mode(input_type, save_output, frame_rate)
 
-    input_queue = queue.Queue()
-    output_queue = queue.Queue()
+    stop_event = threading.Event()
+
+    input_queue = queue.Queue(MAX_INPUT_QUEUE_SIZE)
+    output_queue = queue.Queue(MAX_OUTPUT_QUEUE_SIZE)
 
 
     fps_tracker = None
@@ -189,14 +209,18 @@ def run_inference_pipeline(
     )
 
     preprocess_thread = threading.Thread(
-        target=preprocess, args=(images, cap, frame_rate, batch_size, input_queue, width, height)
+        target=preprocess,
+        args=(images, cap, frame_rate, batch_size, input_queue, width, height,
+               cap_processing_mode, None, stop_event)
     )
     postprocess_thread = threading.Thread(
-        target=visualize, args=(output_queue, cap, save_output,
-                                output_dir, post_process_callback_fn, fps_tracker, output_resolution, frame_rate, True)
+        target=visualize,
+        args=(output_queue, cap, save_output, output_dir, post_process_callback_fn,
+               fps_tracker, output_resolution, frame_rate, True, stop_event)
     )
     infer_thread = threading.Thread(
-        target=infer, args=(hailo_inference, input_queue, output_queue)
+        target=infer,
+        args=(hailo_inference, input_queue, output_queue, stop_event)
     )
 
     preprocess_thread.start()
@@ -209,7 +233,6 @@ def run_inference_pipeline(
 
     preprocess_thread.join()
     infer_thread.join()
-    output_queue.put(None)  # Signal process thread to exit
     postprocess_thread.join()
 
     if show_fps:

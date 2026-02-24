@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 import re
 import threading
+from enum import Enum
 
 try:
     from hailo_apps.python.core.common.defines import (
@@ -98,6 +99,20 @@ class PiCamera2CaptureAdapter:
                 self.picam2.close()
             except Exception:
                 pass
+
+
+class CapProcessingMode(str, Enum):
+    """
+    Capture processing modes.
+
+    Defines how frames are read from the source and fed into the pipeline,
+    based on source type and user options (saving output, target FPS, etc.).
+    """
+
+    CAMERA_NORMAL = "camera_normal"
+    CAMERA_FRAME_DROP = "camera_frame_drop"
+    VIDEO_NORMAL = "video_normal"
+    VIDEO_PACE = "video_pace"
 
 
 def get_usb_video_devices() -> dict[int, str]:
@@ -283,7 +298,7 @@ def init_input_source(input_src: str, batch_size: int, resolution: Optional[str]
     if src == "usb":
         cap = open_usb_camera(resolution)
         logger.info("Using USB camera")
-        return cap, None
+        return cap, None, "usb"
 
     # ------------------------------------------------
     # 2) Raspberry Pi camera
@@ -297,7 +312,7 @@ def init_input_source(input_src: str, batch_size: int, resolution: Optional[str]
             sys.exit(1)
 
         logger.info("Using Raspberry Pi camera at 800x600")
-        return cap, None
+        return cap, None, "rpi"
 
     # ------------------------------------------------
     # 3) Network stream (RTSP / HTTP / HTTPS)
@@ -309,7 +324,7 @@ def init_input_source(input_src: str, batch_size: int, resolution: Optional[str]
             sys.exit(1)
 
         logger.info(f"Using stream input: {src}")
-        return cap, None
+        return cap, None, "stream"
 
     # ------------------------------------------------
     # 4) Video file
@@ -325,7 +340,7 @@ def init_input_source(input_src: str, batch_size: int, resolution: Optional[str]
             sys.exit(1)
 
         logger.info(f"Using video file input: {src}")
-        return cap, None
+        return cap, None, "video"
 
     # ------------------------------------------------
     # 5) Image directory / Image file
@@ -348,7 +363,7 @@ def init_input_source(input_src: str, batch_size: int, resolution: Optional[str]
         logger.error(e)
         sys.exit(1)
 
-    return None, images
+    return None, images, "images"
 
 
 def load_json_file(path: str) -> Dict[str, Any]:
@@ -513,8 +528,9 @@ def id_to_color(idx):
 ####################################################################
 
 def preprocess(images: List[np.ndarray], cap: cv2.VideoCapture, framerate: float, batch_size: int,
-               input_queue: queue.Queue, width: int, height: int,
-               preprocess_fn: Optional[Callable[[np.ndarray, int, int], np.ndarray]] = None) -> None:
+               input_queue: queue.Queue, width: int, height: int, cap_processing_mode: Optional[CapProcessingMode],
+               preprocess_fn: Optional[Callable[[np.ndarray, int, int], np.ndarray]] = None,
+               stop_event: Optional[threading.Event] = None) -> None:
 
     """
     Preprocess and enqueue images or camera frames into the input queue as they are ready.
@@ -536,68 +552,141 @@ def preprocess(images: List[np.ndarray], cap: cv2.VideoCapture, framerate: float
     if cap is None:
         preprocess_images(images, batch_size, input_queue, width, height, preprocess_fn)
     else:
-        preprocess_from_cap(cap, batch_size, input_queue, width, height, preprocess_fn, framerate)
+        preprocess_from_cap(cap, batch_size, input_queue, width, height, cap_processing_mode, preprocess_fn, framerate, stop_event)
 
     input_queue.put(None)  #Add sentinel value to signal end of input
 
 
-def preprocess_from_cap(cap: Any,
-                        batch_size: int,
-                        input_queue: queue.Queue,
-                        width: int,
-                        height: int,
-                        preprocess_fn: Callable[[np.ndarray, int, int], np.ndarray],
-                        framerate: Optional[float] = None) -> None:
+def select_cap_processing_mode(input_type: str,
+                           save_output: bool,
+                           frame_rate: float | None) -> CapProcessingMode:
     """
-    Read frames from a capture source, optionally limit how often frames are
-    allowed into the pipeline, preprocess them, and enqueue them in batches.
+    Decide capture processing behavior.
 
-    Args:
-        cap: VideoCapture object.
-        batch_size (int): Number of images per batch.
-        input_queue (queue.Queue): Queue for input images.
-        width (int): Model input width.
-        height (int): Model input height.
-        preprocess_fn (Callable): Function to preprocess a single image (image, width, height) -> image.
-        framerate (float, optional): Target framerate for frame skipping.
+    Modes:
+        CAMERA_NORMAL       - realtime camera
+        CAMERA_FRAME_DROP   - camera frame dropping to target FPS
+        VIDEO_NORMAL        - fastest video processing
+        VIDEO_PACE          - realtime pacing (used when saving output)
     """
-    frames = []
-    processed_frames = []
 
-    # Estimate camera FPS
-    cam_fps = cap.get(cv2.CAP_PROP_FPS)
-    if not cam_fps or cam_fps <= 0:
-        cam_fps = 30.0  # sensible default
+    is_camera = input_type in ("usb", "rpi", "stream")
+    is_video  = input_type == "video"
 
-    # Decide how many frames to skip
-    if framerate is not None and framerate > 0:
-        # e.g. cam_fps=30, framerate=1  -> skip=30  (use every 30th frame)
-        #      cam_fps=30, framerate=10 -> skip=3   (use every 3rd frame)
-        skip = max(1, int(round(cam_fps / float(framerate))))
-    else:
-        skip = 1  # no frame skipping, use all frames
-    frame_idx = 0
+    has_target_fps = frame_rate is not None and frame_rate > 0
 
-    while True:
-        ret, frame = cap.read()
+    # CAMERA
+    if is_camera:
+        return (
+            CapProcessingMode.CAMERA_FRAME_DROP
+            if has_target_fps
+            else CapProcessingMode.CAMERA_NORMAL
+        )
+
+    # VIDEO
+    if is_video:
+        return (
+            CapProcessingMode.VIDEO_PACE
+            if save_output
+            else CapProcessingMode.VIDEO_NORMAL
+        )
+
+    # images / fallback
+    return None
+
+
+def preprocess_from_cap(
+    cap: Any,
+    batch_size: int,
+    input_queue: queue.Queue,
+    width: int,
+    height: int,
+    mode: CapProcessingMode,
+    preprocess_fn: Callable[[np.ndarray, int, int], np.ndarray],
+    target_fps: Optional[float] = None,
+    stop_event: Optional[threading.Event] = None,
+) -> None:
+
+    def should_stop() -> bool:
+        return stop_event is not None and stop_event.is_set()
+
+    # Validate
+    if mode == CapProcessingMode.CAMERA_FRAME_DROP:
+        if not target_fps or target_fps <= 0:
+            raise ValueError("CAMERA_FRAME_DROP requires a positive target_fps")
+
+    # Timing state
+    next_keep_ts = time.monotonic()
+    keep_period = (1.0 / float(target_fps)) if mode == CapProcessingMode.CAMERA_FRAME_DROP else None
+
+    video_t0_ms: Optional[float] = None
+    wall_t0: Optional[float] = None
+
+    frames: list[np.ndarray] = []
+    processed: list[np.ndarray] = []
+
+    frame_idx = 0  # DEBUG INDEX
+
+    while not should_stop():
+        ret, frame_bgr = cap.read()
         if not ret:
+            logger.debug("[READ] End of stream")
             break
 
         frame_idx += 1
+        logger.debug(f"[READ] frame={frame_idx}")
 
-        # Skip frames to achieve the desired effective FPS
-        if frame_idx % skip != 0:
-            continue
+        # VIDEO_PACE
+        if mode == CapProcessingMode.VIDEO_PACE:
+            # Current frame timestamp in milliseconds
+            pos_ms = float(cap.get(cv2.CAP_PROP_POS_MSEC) or 0.0)
 
-        # Process only the kept frames - convert to RGB and store
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frames.append(frame)
-        processed_frame = preprocess_fn(frame, width, height)
-        processed_frames.append(processed_frame)
+            # Initialize reference mapping: video time → wall-clock time
+            if video_t0_ms is None:
+                video_t0_ms = pos_ms
+                wall_t0 = time.monotonic()
 
-        if len(frames) == batch_size:
-            input_queue.put((frames, processed_frames))
-            processed_frames, frames = [], []
+            # desired wall time = wall_t0 + (pos_ms - video_t0_ms)
+            desired = wall_t0 + (pos_ms - video_t0_ms) / 1000.0
+            now = time.monotonic()
+
+            # Sleep only if ahead of schedule
+            if now < desired:
+                sleep_s = desired - now
+                logger.debug(
+                    f"[PACE] frame={frame_idx} sleep={sleep_s:.4f}s pos_ms={pos_ms:.1f}"
+                )
+                time.sleep(sleep_s)
+
+        # CAMERA_FRAME_DROP
+        if mode == CapProcessingMode.CAMERA_FRAME_DROP:
+            now = time.monotonic()
+
+            if now < next_keep_ts:
+                logger.debug(f"[DROP] frame={frame_idx}")
+                continue
+
+            logger.debug(f"[KEEP] frame={frame_idx}")
+            next_keep_ts += keep_period
+
+        # KEEP FRAME
+        if mode != CapProcessingMode.CAMERA_FRAME_DROP:
+            logger.debug(f"[KEEP] frame={frame_idx}")
+
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        frames.append(frame_rgb)
+        processed.append(preprocess_fn(frame_rgb, width, height))
+
+        if len(frames) >= batch_size:
+            logger.debug(f"[QUEUE] push batch size={len(frames)}")
+            input_queue.put((frames, processed))
+            frames, processed = [], []
+
+    # Flush last partial batch
+    if frames and not should_stop():
+        input_queue.put((frames, processed))
+
+    input_queue.put(None)
 
 
 def preprocess_images(images: List[np.ndarray], batch_size: int, input_queue: queue.Queue, width: int, height: int,
@@ -688,7 +777,8 @@ def visualize(
     fps_tracker: Optional["FrameRateTracker"] = None,
     output_resolution: Optional[Tuple[int, int]] = None,
     framerate: Optional[float] = None,
-    side_by_side: bool = False
+    side_by_side: bool = False,
+    stop_event: Optional[threading.Event] = None
 ) -> None:
     """
     Visualize inference results: draw detections, show them on screen,
@@ -739,51 +829,73 @@ def visualize(
                 (frame_width, frame_height),
             )
 
+    quitting = False
     # Main loop
     while True:
         result = output_queue.get()
-        if result is None:
-            output_queue.task_done()
-            break
 
-        original_frame, inference_result, *rest = result
+        try:
+            if result is None:
+                break
 
-        if isinstance(inference_result, list) and len(inference_result) == 1:
-            inference_result = inference_result[0]
+            # result format:
+            # (frame, inference_result)                     → standard pipelines
+            # (frame, inference_result, extra_metadata...)  → pipelines that attach additional context
+            original_frame, inference_result, *metadata = result
 
-        if rest:
-            frame_with_detections = callback(original_frame, inference_result, rest[0])
-        else:
-            frame_with_detections = callback(original_frame, inference_result)
+            # Quit mode:
+            # Frames may still arrive from other threads.
+            # We skip processing but keep draining the queue to prevent blocking.
+            if quitting:
+                continue
 
-        if fps_tracker is not None:
-            fps_tracker.increment()
+            # Some pipelines return [tensor] instead of tensor → normalize format
+            if isinstance(inference_result, list) and len(inference_result) == 1:
+                inference_result = inference_result[0]
 
-        # Convert RGB to BGR for OpenCV display/save
-        bgr_frame = cv2.cvtColor(frame_with_detections, cv2.COLOR_RGB2BGR)
-        frame_to_show = resize_frame_for_output(bgr_frame, output_resolution)
+            # Run visualization callback
+            # If extra metadata exists, pass it to the callback.
+            if metadata:
+                frame_with_detections = callback(original_frame, inference_result, metadata[0])
+            else:
+                frame_with_detections = callback(original_frame, inference_result)
 
-        if cap is not None:
-            cv2.imshow("Output", frame_to_show)
-            if save_stream_output and out is not None and frame_width and frame_height:
-                frame_to_save = cv2.resize(frame_to_show, (frame_width, frame_height))
-                out.write(frame_to_save)
-        else:
-            cv2.imwrite(os.path.join(output_dir, f"output_{image_id}.png"), frame_to_show)
+            if fps_tracker is not None:
+                fps_tracker.increment()
 
-        image_id += 1
-        output_queue.task_done()
+            # Convert RGB to BGR for OpenCV display/save
+            bgr_frame = cv2.cvtColor(frame_with_detections, cv2.COLOR_RGB2BGR)
+            frame_to_show = resize_frame_for_output(bgr_frame, output_resolution)
 
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            if save_stream_output and out is not None:
-                out.release()
+            # Display / Save
             if cap is not None:
-                cap.release()
-            cv2.destroyAllWindows()
-            break
+                cv2.imshow("Output", frame_to_show)
+                if save_stream_output and out is not None and frame_width and frame_height:
+                    out.write(cv2.resize(frame_to_show, (frame_width, frame_height)))
 
-    if cap is not None and save_stream_output and out is not None:
+                # User pressed 'q' → start shutdown:
+                # set stop_event for other threads and skip further processing.
+                if (cv2.waitKey(1) & 0xFF) == ord("q"):
+                    quitting = True
+                    if stop_event is not None:
+                        stop_event.set()
+                    continue
+            else:
+                cv2.imwrite(os.path.join(output_dir, f"output_{image_id}.png"), frame_to_show)
+
+            image_id += 1
+
+        finally:
+            output_queue.task_done()
+
+    # cleanup
+    if out is not None:
         out.release()
+
+    if cap is not None:
+        cap.release()
+
+    cv2.destroyAllWindows()
 
 
 
@@ -845,7 +957,7 @@ class FrameRateTracker:
         Returns:
             str: e.g. "Processed 200 frames at 29.81 FPS"
         """
-        return f"Processed {self.count} frames at {self.fps:.2f} FPS"
+        return f"Processed {self.count} frames at {self.fps:.2f} FPS, Total time: {self.elapsed:.2f} seconds"
     
 
 

@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 import yaml
 
@@ -13,6 +14,27 @@ from hailo_apps.python.core.common.defines import (
     SHARED_VDEVICE_GROUP_ID
 )
 from hailo_apps.python.core.common.installation_utils import detect_hailo_arch
+
+
+def is_v4l2loopback_device(device_path):
+    """Check if a /dev/videoN device is a v4l2loopback virtual camera (e.g. OBS Virtual Camera).
+
+    Args:
+        device_path (str): The device path, e.g. '/dev/video10'.
+
+    Returns:
+        bool: True if the device is a v4l2loopback device.
+    """
+    try:
+        result = subprocess.run(
+            ["v4l2-ctl", "-d", device_path, "--info"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0 and "v4l2 loopback" in result.stdout.lower():
+            return True
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    return False
 
 
 def get_source_type(input_source):
@@ -95,8 +117,9 @@ def SOURCE_PIPELINE(
     videoflip_str = f'videoflip name=videoflip_{name} video-direction=horiz ! ' if mirror_image else ''
 
     if source_type == "usb":
-        if no_webcam_compression:
-            # When using uncompressed format, only low resolution is supported
+        if no_webcam_compression or is_v4l2loopback_device(video_source):
+            # Use raw (uncompressed) format for v4l2loopback devices (e.g. OBS Virtual Camera)
+            # and when explicitly requested. v4l2loopback does not support JPEG output.
             source_element = (
                 f'v4l2src device={video_source} name={name} ! '
                 f'video/x-raw, width=640, height=480 ! '

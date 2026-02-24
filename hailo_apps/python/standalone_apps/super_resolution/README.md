@@ -126,7 +126,7 @@ Example
 
 **Inference on a usb camera stream with custom frame rate**
 ```shell script
-./super_resolution.py -n ./real_esrgan_x2.hef -i usb -f 20
+./super_resolution.py -n ./real_esrgan_x2.hef -i usb -f 1
 ```
 
 

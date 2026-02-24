@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=64.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -45,7 +45,7 @@ dev = [
 # Gen-AI dependencies (voice assistant, LLM, embeddings) - install with: pip install -e ".[gen-ai]"
 gen-ai = [
     "PyAudio",
-    "piper-tts",
+    "piper-tts<=1.3.0",
     "sounddevice==0.5.1",
     "webrtcvad-wheels",
 ]
@@ -58,14 +58,6 @@ ocr = [
     "symspellpy",
 ]
 
-# Speech recognition (Whisper) dependencies - install with: pip install -e ".[speech-rec]"
-speech-rec = [
-    "transformers==4.50.1",
-    "sounddevice==0.5.1",
-    "torch==2.6.0",
-    "torchvision==0.21.0",
-    "streamlit",
-]
 
 [project.scripts]
 get-usb-camera =            "hailo_apps.python.core.common.camera_utils:main"
@@ -73,6 +65,7 @@ hailo-post-install =        "hailo_apps.installation.post_install:main"
 hailo-compile-postprocess = "hailo_apps.installation.compile_cpp:main"
 hailo-set-env =             "hailo_apps.installation.set_env:main"
 hailo-download-resources =  "hailo_apps.installation.download_resources:main"
+hailo-install-python-bindings = "hailo_apps.installation.install_python_bindings:main"
 hailo-detect =              "hailo_apps.python.pipeline_apps.detection.detection:main"
 hailo-depth =               "hailo_apps.python.pipeline_apps.depth.depth:main"
 hailo-pose =                "hailo_apps.python.pipeline_apps.pose_estimation.pose_estimation:main"
@@ -86,8 +79,17 @@ hailo-clip =                "hailo_apps.python.pipeline_apps.clip.clip:main"
 hailo-ocr  =                "hailo_apps.python.pipeline_apps.paddle_ocr.paddle_ocr:main"
 hailo-audio-troubleshoot =  "hailo_apps.python.gen_ai_apps.gen_ai_utils.voice_processing.audio_troubleshoot:main"
 
+[tool.setuptools]
+include-package-data = true
+
 [tool.setuptools.packages.find]
-include = ["hailo_apps*"]
+include = ["hailo_apps*", "local_resources*"]
+
+[tool.setuptools.data-files]
+"share/hailo-apps/scripts" = [
+    "scripts/hailo_installer_python.sh",
+    "scripts/hailo_installer.sh",
+]
 
 [tool.setuptools.package-data]
 "hailo_apps.postprocess" = [
@@ -97,6 +99,10 @@ include = ["hailo_apps*"]
 ]
 "hailo_apps.config" = [
     "*.yaml",
+    "*.json",
+]
+"local_resources" = [
+    "**/*",
 ]
 
 [tool.ruff]

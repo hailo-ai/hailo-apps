@@ -68,16 +68,6 @@ The GUI lets you add and remove descriptions on the fly — perfect for explorin
 
 Sometimes you don’t need a full pipeline — you just need something that works. Our standalone applications are self-contained and easy to integrate.
 
-### Speech Recognition
-
-Transform spoken words into text with a clean GUI.
-
-**Features:**
-
-* Real-time transcription using Whisper
-* Automatic microphone detection
-* Audio level visualization
-* Save transcripts to file
 
 ### Paddle OCR (Beta version)
 

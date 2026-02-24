@@ -1,8 +1,8 @@
 # region imports
 # Standard library imports
 import setproctitle
-import json
 import os
+os.environ["GST_PLUGIN_FEATURE_RANK"] = "vaapidecodebin:NONE"
 
 # Third-party imports
 import gi

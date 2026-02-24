@@ -131,9 +131,9 @@ class HailoInfer:
                                               It receives `bindings_list` and additional context.
 
         Returns:
-            None
+            Async job handle returned by `run_async`, which can be used to wait for completion or check status.
         """
-        bindings_list = self.create_bindings(self.configured_model, input_batch)
+        bindings_list = self._create_bindings(self.configured_model, input_batch)
         self.configured_model.wait_for_async_ready(timeout_ms=10000)
 
         # Launch async inference and attach the result handler
@@ -141,8 +141,9 @@ class HailoInfer:
             bindings_list,
             partial(inference_callback_fn, bindings_list=bindings_list)
         )
+        return self.last_infer_job
 
-    def create_bindings(self, configured_model, input_batch):
+    def _create_bindings(self, configured_model, input_batch):
         """
         Create a list of input-output bindings for a batch of frames.
 
@@ -154,7 +155,7 @@ class HailoInfer:
             List[Bindings]: A list of bindings for each frame's input and output buffers.
         """
 
-        def frame_binding(frame: np.ndarray):
+        def _frame_binding(frame: np.ndarray):
             output_buffers = {
                 name: np.empty(
                     self.infer_model.output(name).shape,
@@ -167,7 +168,7 @@ class HailoInfer:
             binding.input().set_buffer(np.array(frame))
             return binding
 
-        return [frame_binding(frame) for frame in input_batch]
+        return [_frame_binding(frame) for frame in input_batch]
 
 
 
@@ -208,7 +209,6 @@ class HailoInfer:
 
 
     def close(self):
-
         # Wait for the final job to complete before exiting
         if self.last_infer_job is not None:
             self.last_infer_job.wait(10000)

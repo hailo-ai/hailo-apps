@@ -111,6 +111,26 @@ Example
     ```
     Output video is saved as processed_video.mp4
 
+
+Visualization Configuration
+-------------------------------------------
+TThe application supports a simple configuration for controlling how detections are displayed. You can adjust these values in the configuration file to filter low-confidence detections and limit the number of boxes drawn per frame.
+
+#### Example Configuration:
+```json
+"visualization_params": {
+    "score_thres": 0.42,
+    "max_boxes_to_draw": 30,
+}
+```
+
+#### Parameter Descriptions:
+
+- `score_thres`: Minimum confidence score required to display a detected object.
+- `max_boxes_to_draw`: Maximum number of detected objects to display per frame.
+
+
+
 Notes
 ----------------
 - The script assumes that the image is in one of the following formats: .jpg, .jpeg, .png or .bmp 

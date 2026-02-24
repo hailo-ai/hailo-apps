@@ -75,6 +75,23 @@ def _get_config_path(filename: str) -> str:
     return str(_get_repo_config_path(filename))
 
 
+def _get_local_resources_path() -> str:
+    """Get local_resources path: first check package location, then fall back to repo location.
+    
+    This function enables proper resource discovery when hailo-apps is installed via pip.
+    """
+    # First try package location (when installed via pip)
+    try:
+        import local_resources
+        package_path = Path(local_resources.__file__).parent
+        if package_path.exists():
+            return str(package_path)
+    except (ImportError, AttributeError):
+        pass
+    # Fall back to repo location (when running from source)
+    return str(REPO_ROOT / "local_resources")
+
+
 # Default config paths - checks package location first, then repo location
 DEFAULT_CONFIG_PATH = _get_config_path("config.yaml")
 DEFAULT_RESOURCES_CONFIG_PATH = _get_config_path("resources_config.yaml")
@@ -82,7 +99,7 @@ DEFAULT_RESOURCES_CONFIG_PATH = _get_config_path("resources_config.yaml")
 # Symlink, dotenv, local resources defaults
 DEFAULT_RESOURCES_SYMLINK_PATH = str(REPO_ROOT / "resources")  # e.g. created by post-install
 DEFAULT_DOTENV_PATH = "/usr/local/hailo/resources/.env"  # your env file lives here
-DEFAULT_LOCAL_RESOURCES_PATH = str(REPO_ROOT / "local_resources")  # bundled GIFs, JSON, etc.
+DEFAULT_LOCAL_RESOURCES_PATH = _get_local_resources_path()  # bundled GIFs, JSON, etc.
 
 # Supported config options (used for validation in config_utils.py)
 VALID_HAILORT_VERSION = [AUTO_DETECT, "4.23.0", "5.1.1", "5.2.0"]
@@ -248,6 +265,12 @@ TERM_TIMEOUT = 5  # seconds
 
 # USB device discovery
 UDEV_CMD = "udevadm"
+
+
+# Queue and async inference defaults
+MAX_INPUT_QUEUE_SIZE = 60
+MAX_OUTPUT_QUEUE_SIZE = 60
+MAX_ASYNC_INFER_JOBS = 20
 
 # Video format defaults
 HAILO_RGB_VIDEO_FORMAT = "RGB"

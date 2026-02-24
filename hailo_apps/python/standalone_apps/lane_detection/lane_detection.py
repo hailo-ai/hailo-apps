@@ -8,13 +8,18 @@ import numpy as np
 import cv2
 import threading
 import argparse
+import collections
 from lane_detection_utils import (UFLDProcessing, check_process_errors, compute_scaled_radius)
 
 try:
     from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
     from hailo_apps.python.core.common.hailo_inference import HailoInfer
     from hailo_apps.python.core.common.core import handle_and_resolve_args
-
+    from hailo_apps.python.core.common.defines import (
+        MAX_INPUT_QUEUE_SIZE,
+        MAX_OUTPUT_QUEUE_SIZE,
+        MAX_ASYNC_INFER_JOBS
+    )
 except ImportError:
     repo_root = None
     for p in Path(__file__).resolve().parents:
@@ -26,6 +31,11 @@ except ImportError:
     from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
     from hailo_apps.python.core.common.hailo_inference import HailoInfer
     from hailo_apps.python.core.common.core import handle_and_resolve_args
+    from hailo_apps.python.core.common.defines import (
+        MAX_INPUT_QUEUE_SIZE,
+        MAX_OUTPUT_QUEUE_SIZE,
+        MAX_ASYNC_INFER_JOBS
+    )
 
 APP_NAME = Path(__file__).stem
 logger = get_logger(__name__)
@@ -243,7 +253,6 @@ def inference_callback(
             output_queue.put((input_batch[i], result))
 
 
-
 def infer(hailo_inference, input_queue, output_queue):
     """
     Main inference loop that pulls data from the input queue, runs asynchronous
@@ -262,6 +271,9 @@ def infer(hailo_inference, input_queue, output_queue):
     Returns:
         None
     """
+    # Limit number of concurrent async inferences
+    pending_jobs = collections.deque()
+
     while True:
         next_batch = input_queue.get()
         if not next_batch:
@@ -276,11 +288,17 @@ def infer(hailo_inference, input_queue, output_queue):
             output_queue=output_queue
         )
 
+
+        while len(pending_jobs) >= MAX_ASYNC_INFER_JOBS:
+            pending_jobs.popleft().wait(10000)
+
         # Run async inference
-        hailo_inference.run(preprocessed_batch, inference_callback_fn)
+        job = hailo_inference.run(preprocessed_batch, inference_callback_fn)
+        pending_jobs.append(job)
 
     # Release resources and context
     hailo_inference.close()
+    output_queue.put(None)
 
 
 
@@ -302,8 +320,8 @@ def run_inference_pipeline(
         ufld_processing (UFLDProcessing): Lane detection processing class.
     """
 
-    input_queue = mp.Queue()
-    output_queue = mp.Queue()
+    input_queue = mp.Queue(MAX_INPUT_QUEUE_SIZE)
+    output_queue = mp.Queue(MAX_OUTPUT_QUEUE_SIZE)
     hailo_inference = HailoInfer(net_path, batch_size, output_type="FLOAT32")
 
 
@@ -331,9 +349,6 @@ def run_inference_pipeline(
 
     infer_thread.join()
     preprocess_thread.join()
-
-    # Signal to the postprocess to stop
-    output_queue.put(None)
     postprocess_thread.join()
 
     logger.success(f"Inference was successful! Results saved in {output_dir}")

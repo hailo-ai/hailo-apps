@@ -48,6 +48,8 @@ To close the application, press `Ctrl+C` or click the "Quit" button in the GUI.
 - Processes entire video frames
 - Ideal for scene classification
 
+ Note: `export DISPLAY=:0` is required when working headless.
+
 **With person detection:**
 ```bash
 hailo-clip --detector person

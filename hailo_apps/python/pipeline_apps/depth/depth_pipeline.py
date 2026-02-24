@@ -1,6 +1,8 @@
 # region imports
 # Standard library imports
 from pathlib import Path
+import os
+os.environ["GST_PLUGIN_FEATURE_RANK"] = "vaapidecodebin:NONE"
 
 # Third-party imports
 import gi

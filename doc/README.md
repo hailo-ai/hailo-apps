@@ -56,5 +56,4 @@ Welcome to the complete documentation for the Hailo Applications repository. Thi
 *   **[Object Detection](../hailo_apps/python/standalone_apps/object_detection/README.md)**
 *   **[Paddle OCR](../hailo_apps/python/standalone_apps/paddle_ocr/README.md)**
 *   **[Pose Estimation](../hailo_apps/python/standalone_apps/pose_estimation/README.md)**
-*   **[Speech Recognition](../hailo_apps/python/standalone_apps/speech_recognition/README.md)**
 *   **[Super Resolution](../hailo_apps/python/standalone_apps/super_resolution/README.md)**

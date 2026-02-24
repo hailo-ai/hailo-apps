@@ -1,4 +1,6 @@
 # region imports
+import os
+os.environ["GST_PLUGIN_FEATURE_RANK"] = "vaapidecodebin:NONE"
 # Third-party imports
 import gi
 gi.require_version('Gst', '1.0')

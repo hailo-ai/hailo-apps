@@ -1,4 +1,11 @@
-# Include everything inside the repo
+# Include data files
 recursive-include resources *
+recursive-include local_resources *
+recursive-include scripts *.sh
 include README.md
 include requirements.txt
+
+# Exclude unnecessary files
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude .git*

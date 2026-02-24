@@ -59,6 +59,7 @@ from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging,
 # python/core/gstreamer/gstreamer_app.py
 # Absolute import for your local helper
 from hailo_apps.python.core.gstreamer.gstreamer_helper_pipelines import (
+    get_camera_resolution,
     get_source_type,
 )
 from hailo_apps.python.core.gstreamer.gstreamer_common import (
@@ -736,17 +737,31 @@ def picamera_thread(pipeline, video_width, video_height, video_format, picamera_
 
     with Picamera2() as picam2:
         if picamera_config is None:
-            main = {"size": (1280, 720), "format": "RGB888"}
-            lores = {"size": (video_width, video_height), "format": "RGB888"}
+            # Determine main stream size: must be >= lores for Picamera2.
+            # get_camera_resolution returns the nearest standard resolution >= requested.
+            main_width, main_height = get_camera_resolution(video_width, video_height)
+            main = {"size": (main_width, main_height), "format": "RGB888"}
             controls = {"FrameRate": 30}
-            config = picam2.create_preview_configuration(main=main, lores=lores, controls=controls)
+
+            # If the main and requested sizes match, Picamera2 requires lores < main,
+            # so we skip lores and capture directly from the main stream.
+            if main_width == video_width and main_height == video_height:
+                config = picam2.create_preview_configuration(main=main, controls=controls)
+                capture_stream = "main"
+            else:
+                lores = {"size": (video_width, video_height), "format": "RGB888"}
+                config = picam2.create_preview_configuration(
+                    main=main, lores=lores, controls=controls
+                )
+                capture_stream = "lores"
         else:
             config = picamera_config
+            capture_stream = "lores" if "lores" in config else "main"
 
         picam2.configure(config)
-        lores_stream = config["lores"]
-        format_str = "RGB" if lores_stream["format"] == "RGB888" else video_format
-        width, height = lores_stream["size"]
+        stream_config = config.get(capture_stream, config["main"])
+        format_str = "RGB" if stream_config["format"] == "RGB888" else video_format
+        width, height = stream_config["size"]
         hailo_logger.debug(f"Picamera2 config: width={width}, height={height}, format={format_str}")
 
         appsrc.set_property(
@@ -760,7 +775,7 @@ def picamera_thread(pipeline, video_width, video_height, video_format, picamera_
         hailo_logger.info("picamera_process started")
 
         while True:
-            frame_data = picam2.capture_array("lores")
+            frame_data = picam2.capture_array(capture_stream)
             if frame_data is None:
                 hailo_logger.error("Failed to capture frame")
                 break

@@ -69,12 +69,17 @@ void preprocess_callback(const std::vector<cv::Mat>& org_frames,
 }
 
 // Task-specific postprocessing callback
-void postprocess_callback(cv::Mat& frame_to_draw, 
-                                         const std::vector<std::pair<uint8_t*, hailo_vstream_info_t>>& output_data_and_infos) {
-    size_t class_count = 80; // 80 classes in COCO dataset
+void postprocess_callback(
+    cv::Mat &frame_to_draw,
+    const std::vector<std::pair<uint8_t*, hailo_vstream_info_t>> &output_data_and_infos,
+    const VisualizationParams &vis)
+{
+    const size_t class_count = 80;
     auto bboxes = parse_nms_data(output_data_and_infos[0].first, class_count);
-    draw_bounding_boxes(frame_to_draw, bboxes);
+
+    draw_bounding_boxes(frame_to_draw, bboxes, vis);
 }
+
 
 int main(int argc, char** argv)
 {
@@ -89,6 +94,26 @@ int main(int argc, char** argv)
     CommandLineArgs args = parse_command_line_arguments(argc, argv);
     post_parse_args(APP_NAME, args, argc, argv);
     HailoInfer model(args.net, args.batch_size);
+
+    // Load Visualization config params
+    VisualizationParams vis_param;
+    try {
+        vis_param = load_visualization_params("visualization_config.json");
+    } catch (const std::exception &e) {
+        std::cerr << "ERROR: failed to load visualization_config.json: "
+                << e.what() << "\n";
+        return EXIT_FAILURE;
+    }
+
+    validate_visualization_params(vis_param, AppVisMode::object_detection);
+
+
+    auto post_cb =
+    std::bind(postprocess_callback,
+              std::placeholders::_1,
+              std::placeholders::_2,
+              std::cref(vis_param));
+
     input_type = determine_input_type(args.input,
                                     std::ref(capture),
                                     std::ref(org_height),
@@ -129,7 +154,7 @@ int main(int argc, char** argv)
                                 std::ref(args.output_dir),
                                 std::ref(args.output_resolution),
                                 results_queue,
-                                postprocess_callback);
+                                post_cb);
 
     hailo_status status = wait_and_check_threads(
         preprocess_thread,    "Preprocess",

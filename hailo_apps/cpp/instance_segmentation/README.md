@@ -116,6 +116,30 @@ Example
     ```
     Output video is saved as processed_video.mp4
 
+
+Visualization Configuration
+-------------------------------------------
+The application supports configurable visualization parameters. These settings control how detected objects, segmentation masks, and confidence filtering are displayed on the output frames.
+
+#### Example Configuration:
+```json
+"visualization_params": {
+    "score_thres": 0.42,
+    "mask_thresh": 0.2,
+    "mask_alpha": 0.7,
+    "max_boxes_to_draw": 30
+}
+```
+
+#### Parameter Descriptions:
+
+- `score_thres`: Minimum confidence score required to display a detected object.
+- `mask_thresh`: Threshold for displaying segmentation masks (e.g., only show masks with values above this).
+- `mask_alpha`: Transparency level of the segmentation mask overlay (0 = fully transparent, 1 = fully opaque).
+- `max_boxes_to_draw`: Maximum number of detected objects to display per frame.
+
+
+
 Notes
 ----------------
 - The script assumes that the image is in one of the following formats: .jpg, .jpeg, .png or .bmp 

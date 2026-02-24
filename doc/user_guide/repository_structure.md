@@ -42,7 +42,7 @@ Main Python package for AI applications. Contains:
     - Simple examples: `simple_llm_chat/`, `simple_vlm_chat/`, `simple_whisper_chat/`
     - Documentation: `hailo_ollama/` (Ollama integration guide)
     - Shared utilities: `gen_ai_utils/` (LLM utilities, voice processing components)
-  - `standalone_apps/`: Other standalone Python applications (e.g., lane detection, super resolution, speech recognition). These applications demonstrate various computer vision capabilities and can be run directly with Python.
+  - `standalone_apps/`: Other standalone Python applications (e.g., lane detection, super resolution). These applications demonstrate various computer vision capabilities and can be run directly with Python.
   - `core/`: Shared logic, utilities, and GStreamer integration for apps.
     - `common/`: Foundational utilities (installation, configuration, helpers, logging).
     - `gstreamer/`: Reusable GStreamer components and pipelines.

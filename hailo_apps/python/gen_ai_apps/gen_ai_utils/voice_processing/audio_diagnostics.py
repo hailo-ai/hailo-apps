@@ -52,7 +52,7 @@ def check_voice_dependencies(required_deps: List[str] = None) -> None:
         print("-"*70)
         print("\nTo install all GenAI dependencies (recommended):")
         print("  1. Navigate to the repository root directory")
-        print("  2. Run: pip install -e \".[gen-ai]\" (in case Raspberry Pi add --break-system-packages)")
+        print("  2. Run: pip install -e \".[gen-ai]\"")
         print("\nThis will install:")
         print("  • sounddevice (for audio I/O)")
         print("  • piper-tts (for text-to-speech)")

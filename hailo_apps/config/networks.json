@@ -52,15 +52,10 @@
     },
 
     "instance_segmentation": {
-      "yolov5l_seg": { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov5l_seg.hef"], "description": "YOLOv5l segmentation" },
-      "yolov5m_seg": { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov5m_seg.hef"], "description": "YOLOv5m segmentation" },
-      "yolov5n_seg": { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov5n_seg.hef"], "description": "YOLOv5n segmentation" },
-      "yolov5s_seg": { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov5s_seg.hef"], "description": "YOLOv5s segmentation" },
       "yolov8m_seg": { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov8m_seg.hef"], "description": "YOLOv8m segmentation" },
       "yolov8n_seg": { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov8n_seg.hef"], "description": "YOLOv8n segmentation" },
       "yolov8s_seg": { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov8s_seg.hef"], "description": "YOLOv8s segmentation" },
-      "yolov5m_seg_with_nms": { "arch": ["hailo8"], "source": "cs", "hefs": ["yolov5m_seg_with_nms.hef"], "description": "YOLOv5m segmentation with nms" },
-      "fast_sam_s": { "arch": ["hailo8"], "source": "cs", "hefs": ["fast_sam_s.hef"], "description": "fast_sam_s" }
+      "yolov5m_seg_with_nms": { "arch": ["hailo8"], "source": "cs", "hefs": ["yolov5m_seg_with_nms.hef"], "description": "YOLOv5m segmentation with nms" }
     },
 
     "object_detection": {
@@ -77,7 +72,7 @@
       "yolov5s":  { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov5s.hef"], "description": "YOLOv5s" },
       "yolov6n":  { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov6n.hef"], "description": "YOLOv6n" },
       "yolov7":   { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov7.hef"], "description": "YOLOv7" },
-      "yolov7x":  { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov7x.hef"], "description": "YOLOv7x" },
+      "yolov7x":  { "arch": ["hailo10h"], "source": "model_zoo", "hefs": ["yolov7x.hef"], "description": "YOLOv7x" },
       "yolov8l":  { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov8l.hef"], "description": "YOLOv8l" },
       "yolov8m":  { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov8m.hef"], "description": "YOLOv8m" },
       "yolov8n":  { "arch": ["hailo8","hailo8l","hailo10h"], "source": "model_zoo", "hefs": ["yolov8n.hef"], "description": "YOLOv8n" },

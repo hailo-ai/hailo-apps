@@ -7,18 +7,19 @@
  * This example demonstrates the Async Infer API usage with a specific model.
  **/
 #include "../common/toolbox.hpp"
-using namespace hailo_utils;
-
 #include "../common/hailo_infer.hpp"
 #include "instance_seg_postprocess.hpp"
 
-
+#include <cstdlib>
 #include <cstring>
 
+using namespace hailo_utils;
 namespace fs = std::filesystem;
 
 /////////// Constants ///////////
 constexpr size_t MAX_QUEUE_SIZE = 60;
+constexpr size_t WITH_NMS_OUTPUTS = 1;
+constexpr size_t YOLOV8_OUTPUTS   = 10;
 
 std::shared_ptr<BoundedTSQueue<std::pair<std::vector<cv::Mat>, std::vector<cv::Mat>>>> preprocessed_batch_queue =
     std::make_shared<BoundedTSQueue<std::pair<std::vector<cv::Mat>, std::vector<cv::Mat>>>>(MAX_QUEUE_SIZE);
@@ -26,30 +27,105 @@ std::shared_ptr<BoundedTSQueue<std::pair<std::vector<cv::Mat>, std::vector<cv::M
 std::shared_ptr<BoundedTSQueue<InferenceResult>> results_queue =
     std::make_shared<BoundedTSQueue<InferenceResult>>(MAX_QUEUE_SIZE);
 
+enum class SegType {
+    WithNms,
+    YoloV8
+};
+
+SegType detect_seg_model_type(HailoInfer &model)
+{
+    size_t outputs = model.get_output_vstream_infos_size();
+
+    std::cout << "Detected instance segmentation model with " << outputs << " outputs.\n";
+    if (outputs == WITH_NMS_OUTPUTS)
+        return SegType::WithNms;
+
+    if (outputs == YOLOV8_OUTPUTS)
+        return SegType::YoloV8;
+
+    throw std::runtime_error(
+        "Unsupported instance segmentation HEF. "
+        "To see the supported models, run: --list-nets");
+}
+
+// Task-specific preprocessing callback
+void preprocess_callback(const std::vector<cv::Mat>& org_frames,
+                         std::vector<cv::Mat>& preprocessed_frames,
+                         uint32_t target_width, uint32_t target_height)
+{
+    preprocessed_frames.clear();
+    preprocessed_frames.reserve(org_frames.size());
+
+    for (const auto &src_bgr : org_frames) {
+        // Skip invalid frames but keep vector alignment (optional: push empty)
+        if (src_bgr.empty()) {
+            preprocessed_frames.emplace_back();
+            continue;
+        }
+        cv::Mat rgb;
+        // 1) Convert to RGB
+        if (src_bgr.channels() == 3) {
+            cv::cvtColor(src_bgr, rgb, cv::COLOR_BGR2RGB);
+        } else if (src_bgr.channels() == 4) {
+            // If someone passed BGRA, drop alpha
+            cv::cvtColor(src_bgr, rgb, cv::COLOR_BGRA2RGB);
+        } else if (src_bgr.channels() == 1) {
+            // If grayscale sneaks in, promote to 3 channels
+            cv::cvtColor(src_bgr, rgb, cv::COLOR_GRAY2RGB);
+        } else {
+            // Fallback: force 3 channels by duplicating/merging
+            std::vector<cv::Mat> ch(3, src_bgr);
+            cv::merge(ch, rgb);
+            cv::cvtColor(rgb, rgb, cv::COLOR_BGR2RGB); // ensure RGB order
+        }
+        // 2) Resize to target
+        if (rgb.cols != static_cast<int>(target_width) || rgb.rows != static_cast<int>(target_height)) {
+            cv::resize(rgb, rgb, cv::Size(static_cast<int>(target_width),
+                                          static_cast<int>(target_height)),
+                       0.0, 0.0, cv::INTER_AREA);
+        }
+        // 3) Ensure contiguous buffer
+        if (!rgb.isContinuous()) {
+            rgb = rgb.clone();
+        }
+        // 4) Push to output vector
+        preprocessed_frames.push_back(std::move(rgb));
+    }
+}
 
 void postprocess_callback(cv::Mat &frame_to_draw,
                           const std::vector<std::pair<uint8_t*, hailo_vstream_info_t>> &outputs,
                           const int model_w,
                           const int model_h,
-                          const bool hef_has_nms_and_mask)
+                          SegType seg_model_type,
+                          const VisualizationParams &vis_param)
 {
-        if (hef_has_nms_and_mask) {
-            // ===== packed NMS + byte masks on device =====
-            const uint8_t *src_ptr = outputs.front().first;
-            LetterboxMap map{};
-            cv::Mat model_space = make_model_space_canvas(frame_to_draw, model_w, model_h, map);
-            draw_detections_and_mask(src_ptr, model_w, model_h, model_space);
-            map_model_to_frame(model_space, map, frame_to_draw);
-        } else {
-            // ===== raw heads NMS + mask reconstruction =====
-            auto roi = build_roi_from_outputs(outputs);
-            std::vector<cv::Mat> masks = filter(roi, model_w, model_h);
-            auto dets = get_detections_from_roi(roi);
-            LetterboxMap map{};
-            cv::Mat model_space = make_model_space_canvas(frame_to_draw, model_w, model_h, map);
-            draw_masks_and_boxes(model_space, dets, masks, /*alpha=*/0.7f, /*thresh=*/0.5f);
-            map_model_to_frame(model_space, map, frame_to_draw);
-        }
+    const int org_w = frame_to_draw.cols;
+    const int org_h = frame_to_draw.rows;
+
+
+    if (seg_model_type == SegType::WithNms) {
+        const uint8_t *src_ptr = outputs.front().first;
+        // Draw overlay+boxes directly in original resolution
+        draw_detections_and_mask(src_ptr,
+                                 model_w, model_h,
+                                 org_w, org_h,
+                                 frame_to_draw,
+                                 vis_param);
+        return;
+    }
+
+    if (seg_model_type == SegType::YoloV8) {
+        auto roi = build_roi_from_outputs(outputs);
+        std::vector<cv::Mat> masks = filter(roi,
+                                            org_h, org_w,
+                                            model_h, model_w,
+                                            vis_param.score_thresh);
+
+        auto dets = get_detections_from_roi(roi);
+        draw_masks_and_boxes(frame_to_draw, dets, masks, vis_param);
+        return;
+    }
 }
 
 
@@ -66,7 +142,21 @@ int main(int argc, char** argv)
     CommandLineArgs args = parse_command_line_arguments(argc, argv);
     post_parse_args(APP_NAME, args, argc, argv);
     HailoInfer model(args.net, args.batch_size);
-    bool hef_with_nms_and_mask = model.get_output_vstream_infos_size() == 1;
+
+    SegType seg_model_type = detect_seg_model_type(model);
+
+    // Load Visualization config params
+    VisualizationParams vis_param;
+    try {
+        vis_param = load_visualization_params("visualization_config.json");
+    } catch (const std::exception &e) {
+        std::cerr << "ERROR: failed to load visualization_config.json: "
+                << e.what() << "\n";
+        return EXIT_FAILURE;
+    }
+
+    validate_visualization_params(vis_param, AppVisMode::instance_seg);
+
     input_type = determine_input_type(std::ref(args.input),
                                     std::ref(capture),
                                     std::ref(org_height),
@@ -84,7 +174,7 @@ int main(int argc, char** argv)
                                         std::ref(args.batch_size),
                                         std::ref(args.framerate),
                                         preprocessed_batch_queue,
-                                        preprocess_frames);
+                                        preprocess_callback);
 
     ModelInputQueuesMap input_queues = {
         { model.get_infer_model()->get_input_names().at(0), preprocessed_batch_queue }
@@ -101,8 +191,8 @@ int main(int argc, char** argv)
                 std::placeholders::_2,   // outputs
                 model.get_model_shape().width,
                 model.get_model_shape().height,
-                hef_with_nms_and_mask); 
-
+                seg_model_type,
+                std::cref(vis_param));
 
     auto output_parser_thread = std::async(run_post_process,
                                 std::ref(input_type),

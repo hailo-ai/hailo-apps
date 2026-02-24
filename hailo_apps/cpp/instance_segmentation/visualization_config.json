@@ -1,0 +1,8 @@
+{
+  "visualization_params": {
+    "score_thresh": 0.35,
+    "mask_thresh": 0.7,
+    "mask_alpha": 0.8,
+    "max_boxes_to_draw": 50
+  }
+}

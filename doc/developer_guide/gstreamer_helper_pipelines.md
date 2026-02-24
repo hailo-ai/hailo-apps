@@ -57,7 +57,7 @@ Determines the source type based on the input source string.
 **Source Type Detection:**
 - `/dev/video*` → "usb"
 - Starts with `rpi` → "rpi"
-- Starts with `libcamera` → "libcamera"
+- Starts with `libcamera` → "libcamera" (Note: Requires installation of the plugin.)
 - Starts with `0x` → "ximage"
 - Starts with `rtsp://` → "rtsp"
 - Otherwise → "file"
@@ -104,7 +104,7 @@ Creates a GStreamer pipeline string for the video source with frame rate control
 **Supported Source Types:**
 - **USB cameras** (`/dev/video*`): Uses `v4l2src` with optional JPEG compression
 - **RPI cameras** (`rpi*`): Uses `appsrc` for Raspberry Pi camera interface
-- **LibCamera** (`libcamera*`): Uses `libcamerasrc` element
+- **LibCamera** (`libcamera*`): Uses `libcamerasrc` element. Note: Requires installation of the plugin.
 - **XImage** (`0x*`): Uses `ximagesrc` for X11 screen capture
 - **RTSP streams** (`rtsp://*`): Uses `rtspsrc` for network streams
 - **File sources**: Uses `filesrc` with `decodebin` for video files

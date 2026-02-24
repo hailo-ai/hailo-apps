@@ -70,6 +70,12 @@ class GStreamerClipApp(GStreamerApp):
             self.json_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'example_embeddings.json') if self.options_menu.json_path is None else self.options_menu.json_path
         else:
             self.json_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'embeddings.json') if self.options_menu.json_path is None else self.options_menu.json_path
+
+        # Ensure the JSON file exists and contains valid JSON
+        if not os.path.exists(self.json_file) or os.path.getsize(self.json_file) == 0:
+            with open(self.json_file, "w") as f:
+                f.write("{}")
+
         self.app_callback = app_callback
         self.detector = self.options_menu.detector
         self.text_image_matcher = text_image_matcher

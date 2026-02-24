@@ -10,6 +10,7 @@ import queue
 import uuid
 import setproctitle
 from pathlib import Path
+os.environ["GST_PLUGIN_FEATURE_RANK"] = "vaapidecodebin:NONE"
 
 # Third-party imports
 import gi

@@ -19,6 +19,7 @@
 #include <condition_variable>
 #include <functional>
 #include "hailo_infer.hpp"
+#include <optional>
 
 
 
@@ -34,12 +35,15 @@ extern std::vector<cv::Scalar> COLORS;
 namespace hailo_utils {
 
     namespace fs = std::filesystem;
-    // Resolution table
-    extern const std::unordered_map<std::string, std::pair<int,int>> RESOLUTION_MAP;
     // Resolved paths (toolbox resolves automatically at startup)
     extern const fs::path GET_HEF_BASH_SCRIPT_PATH;
     extern const fs::path GET_INPUT_BASH_SCRIPT_PATH;
 
+    const std::unordered_map<std::string, std::pair<int,int>> RESOLUTION_MAP = {
+        {"sd",  {640, 480}},
+        {"hd",  {1280, 720}},
+        {"fhd", {1920, 1080}}
+    };
 
     struct InferenceResult {
         cv::Mat org_frame;
@@ -309,6 +313,21 @@ namespace hailo_utils {
                             std::vector<cv::Mat>>>> preprocessed_batch_queue,
                             std::shared_ptr<BoundedTSQueue<InferenceResult>> results_queue);
 
-} // namespace hailo_utils
+    // ─────────────────────────────────────────────────────────────────────────────
+    // VISUALIZATION PARAMETERS
+    // ─────────────────────────────────────────────────────────────────────────────
+    struct VisualizationParams {
+        float score_thresh;
+        int   max_boxes_to_draw;
+
+        // instance-seg only
+        std::optional<float> mask_thresh;
+        std::optional<float> mask_alpha;
+    };
+
+    VisualizationParams load_visualization_params(const std::string &path);
+    enum class AppVisMode { object_detection, instance_seg };
+    void validate_visualization_params(const VisualizationParams &vis, AppVisMode mode);
+}
 
 #endif

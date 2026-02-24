@@ -34,15 +34,15 @@ LOG_FILE="${LOG_DIR}/install_${TIMESTAMP}.log"
 
 # Terminal colors (with fallback for non-color terminals)
 if [[ -t 1 ]] && command -v tput &>/dev/null && [[ $(tput colors 2>/dev/null || echo 0) -ge 8 ]]; then
-    readonly RED='\033[0;31m'
-    readonly GREEN='\033[0;32m'
-    readonly YELLOW='\033[1;33m'
-    readonly BLUE='\033[0;34m'
-    readonly CYAN='\033[0;36m'
-    readonly MAGENTA='\033[0;35m'
-    readonly BOLD='\033[1m'
-    readonly DIM='\033[2m'
-    readonly NC='\033[0m'
+    readonly RED=$'\033[0;31m'
+    readonly GREEN=$'\033[0;32m'
+    readonly YELLOW=$'\033[1;33m'
+    readonly BLUE=$'\033[0;34m'
+    readonly CYAN=$'\033[0;36m'
+    readonly MAGENTA=$'\033[0;35m'
+    readonly BOLD=$'\033[1m'
+    readonly DIM=$'\033[2m'
+    readonly NC=$'\033[0m'
 else
     readonly RED='' GREEN='' YELLOW='' BLUE='' CYAN='' MAGENTA='' BOLD='' DIM='' NC=''
 fi

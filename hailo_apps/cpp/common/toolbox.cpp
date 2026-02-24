@@ -5,15 +5,73 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <stdexcept>
+#include <nlohmann/json.hpp>
 
 namespace hailo_utils {
 
 namespace fs = std::filesystem;
-const std::unordered_map<std::string, std::pair<int,int>> RESOLUTION_MAP = {
-    {"sd",  {640, 480}},
-    {"hd",  {1280, 720}},
-    {"fhd", {1920, 1080}}
-};
+
+
+VisualizationParams load_visualization_params(const std::string &path)
+{
+    std::ifstream f(path);
+    if (!f.is_open())
+        throw std::runtime_error("Failed to open config file: " + path);
+
+    nlohmann::json j;
+    f >> j;
+
+    if (!j.contains("visualization_params"))
+        throw std::runtime_error("Missing 'visualization_params' section");
+
+    const auto &vp = j["visualization_params"];
+
+    VisualizationParams p;
+
+    // ---- required ----
+    if (!vp.contains("score_thresh"))
+        throw std::runtime_error("Missing visualization_params.score_thresh");
+    if (!vp.contains("max_boxes_to_draw"))
+        throw std::runtime_error("Missing visualization_params.max_boxes_to_draw");
+
+    p.score_thresh = vp["score_thresh"].get<float>();
+    p.max_boxes_to_draw = vp["max_boxes_to_draw"].get<int>();
+
+    // ---- optional (ex. instance-seg) ----
+    if (vp.contains("mask_thresh"))
+        p.mask_thresh = vp["mask_thresh"].get<float>();
+
+    if (vp.contains("mask_alpha"))
+        p.mask_alpha = vp["mask_alpha"].get<float>();
+
+    return p;
+}
+
+void validate_visualization_params(const VisualizationParams &vis, AppVisMode mode)
+{
+    // basic required fields
+    if (vis.max_boxes_to_draw < 0) {
+        throw std::runtime_error("visualization_params.max_boxes_to_draw must be >= 0");
+    }
+    if (vis.score_thresh < 0.0f || vis.score_thresh > 1.0f) {
+        throw std::runtime_error("visualization_params.score_thresh must be in [0,1]");
+    }
+
+    // per-app requirements
+    if (mode == AppVisMode::instance_seg) {
+        if (!vis.mask_thresh || !vis.mask_alpha) {
+            throw std::runtime_error(
+                "Instance segmentation requires visualization_params.mask_thresh and mask_alpha");
+        }
+        if (*vis.mask_thresh < 0.0f || *vis.mask_thresh > 1.0f) {
+            throw std::runtime_error("visualization_params.mask_thresh must be in [0,1]");
+        }
+        if (*vis.mask_alpha < 0.0f || *vis.mask_alpha > 1.0f) {
+            throw std::runtime_error("visualization_params.mask_alpha must be in [0,1]");
+        }
+    }
+}
 
 static std::string make_rpi_gst_pipeline(int w, int h, int fps)
 {

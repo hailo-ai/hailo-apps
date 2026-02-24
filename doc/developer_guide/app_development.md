@@ -99,6 +99,8 @@ This function is called for every frame processed by the pipeline. This is where
 In this toy example, the callback function receives the GStreamer buffer, extracts detection results, counts how many people are detected in the frame, updates the running totals, and prints out statistics.
 
 ```python
+import os
+os.environ["GST_PLUGIN_FEATURE_RANK"] = "vaapidecodebin:NONE"  # Force software decoding to avoid VAAPI "views=2" bug causing black screens
 import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst
@@ -149,6 +151,8 @@ if __name__ == "__main__":
 Below is a complete, minimal example you can copy and run. It combines the custom class, callback function, and main block into a single script. This is a good starting point for your own application—just modify the callback logic as needed for your use case.
 
 ```python
+import os
+os.environ["GST_PLUGIN_FEATURE_RANK"] = "vaapidecodebin:NONE"
 import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst

@@ -39,7 +39,7 @@ struct NamedBbox {
 cv::Rect get_bbox_coordinates(const hailo_bbox_float32_t &bbox, int frame_width, int frame_height);
 void draw_label(cv::Mat &frame, const std::string &label, const cv::Point &top_left, const cv::Scalar &color);
 void draw_single_bbox(cv::Mat &frame, const NamedBbox &named_bbox, const cv::Scalar &color);
-void draw_bounding_boxes(cv::Mat &frame, const std::vector<NamedBbox> &bboxes);
+void draw_bounding_boxes(cv::Mat &frame, const std::vector<NamedBbox> &bboxes, const VisualizationParams &vis);
 std::vector<NamedBbox> parse_nms_data(uint8_t *data, size_t max_class_count);
 
 // ─────────────────────────────────────────────────────────────────────────────

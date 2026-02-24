@@ -2,6 +2,8 @@
 # Standard library imports
 import datetime
 from datetime import datetime
+import os
+os.environ["GST_PLUGIN_FEATURE_RANK"] = "vaapidecodebin:NONE"
 
 # Third-party imports
 import gi

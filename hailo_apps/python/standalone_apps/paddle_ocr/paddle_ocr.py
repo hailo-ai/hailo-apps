@@ -5,6 +5,7 @@ import queue
 import threading
 from functools import partial
 from pathlib import Path
+import collections
 
 try:
     from hailo_apps.python.core.common.hailo_logger import get_logger, init_logging, level_from_args
@@ -52,7 +53,7 @@ def check_ocr_dependencies():
         print("-"*70)
         print("\nTo install all dependencies (recommended):")
         print("  1. Navigate to the repository root directory")
-        print("  2. Run: pip install -e \".[ocr]\" (in case Raspberry Pi add --break-system-packages)")
+        print("  2. Run: pip install -e \".[ocr]\"")
         print("\n" + "="*70)
         sys.exit(1)
 
@@ -68,7 +69,13 @@ try:
         init_input_source,
         preprocess,
         visualize,
+        select_cap_processing_mode,
         FrameRateTracker,
+    )
+    from hailo_apps.python.core.common.defines import (
+        MAX_INPUT_QUEUE_SIZE,
+        MAX_OUTPUT_QUEUE_SIZE,
+        MAX_ASYNC_INFER_JOBS
     )
     from hailo_apps.python.core.common.core import configure_multi_model_hef_path, handle_and_resolve_args
     from hailo_apps.python.core.common.parser import get_standalone_parser
@@ -85,7 +92,13 @@ except ImportError:
         init_input_source,
         preprocess,
         visualize,
+        select_cap_processing_mode,
         FrameRateTracker
+    )
+    from hailo_apps.python.core.common.defines import (
+        MAX_INPUT_QUEUE_SIZE,
+        MAX_OUTPUT_QUEUE_SIZE,
+        MAX_ASYNC_INFER_JOBS
     )
     from hailo_apps.python.core.common.core import configure_multi_model_hef_path, handle_and_resolve_args
     from hailo_apps.python.core.common.parser import get_standalone_parser
@@ -117,7 +130,7 @@ def parse_args():
     return args
 
 
-def detector_hailo_infer(hailo_inference, input_queue, output_queue):
+def detector_hailo_infer(hailo_inference, input_queue, output_queue, stop_event):
     """
     Main inference loop that pulls data from the input queue, runs asynchronous
     inference, and pushes results to the output queue.
@@ -135,10 +148,16 @@ def detector_hailo_infer(hailo_inference, input_queue, output_queue):
     Returns:
         None
     """
+    # Limit number of concurrent async inferences
+    pending_jobs = collections.deque()
+
     while True:
         next_batch = input_queue.get()
         if not next_batch:
             break  # Stop signal received
+
+        if stop_event.is_set():
+            continue  # Skip processing if stop signal is set
 
         input_batch, preprocessed_batch = next_batch
 
@@ -149,15 +168,20 @@ def detector_hailo_infer(hailo_inference, input_queue, output_queue):
             output_queue=output_queue
         )
 
+
+        while len(pending_jobs) >= MAX_ASYNC_INFER_JOBS:
+            pending_jobs.popleft().wait(10000)
+
         # Run async inference
-        hailo_inference.run(preprocessed_batch, inference_callback_fn)
+        job = hailo_inference.run(preprocessed_batch, inference_callback_fn)
+        pending_jobs.append(job)
 
     # Release resources and context
     hailo_inference.close()
+    output_queue.put(None)
 
 
-
-def ocr_hailo_infer(hailo_inference, input_queue, output_queue):
+def ocr_hailo_infer(hailo_inference, input_queue, output_queue, stop_event):
     """
     Main inference loop that pulls data from the input queue, runs asynchronous
     inference, and pushes results to the output queue.
@@ -175,10 +199,16 @@ def ocr_hailo_infer(hailo_inference, input_queue, output_queue):
     Returns:
         None
     """
+    # Limit number of concurrent async inferences
+    pending_jobs = collections.deque()
+
     while True:
         next_batch = input_queue.get()
         if not next_batch:
             break  # Stop signal received
+
+        if stop_event.is_set():
+            continue  # Skip processing if stop signal is set
 
         input_batch, preprocessed_batch, extra_context = next_batch
 
@@ -187,14 +217,20 @@ def ocr_hailo_infer(hailo_inference, input_queue, output_queue):
             ocr_inference_callback,
             input_batch=input_batch,
             output_queue=output_queue,
-            extra_context = extra_context
+            extra_context=extra_context
         )
 
+        while len(pending_jobs) >= MAX_ASYNC_INFER_JOBS:
+            pending_jobs.popleft().wait(10000)
+
         # Run async inference
-        hailo_inference.run(preprocessed_batch, inference_callback_fn)
+        job = hailo_inference.run(preprocessed_batch, inference_callback_fn)
+        pending_jobs.append(job)
 
     # Release resources and context
     hailo_inference.close()
+    output_queue.put(None)
+
 
 
 def run_inference_pipeline(
@@ -229,18 +265,22 @@ def run_inference_pipeline(
     Returns:
         None
     """
-    # Initialize capture handle for video/camera or load image folder
-    cap, images = init_input_source(input_src, batch_size, camera_resolution)
+    # Initialize input source from string: "camera", video file, or image folder.
+    cap, images, input_type = init_input_source(input_src, batch_size, camera_resolution)
+    cap_processing_mode = None
+    if cap is not None:
+        cap_processing_mode = select_cap_processing_mode(input_type, save_output, frame_rate)
+
+    stop_event = threading.Event()
 
     # Queues for passing data between threads
-    det_input_queue = queue.Queue()
-    ocr_input_queue = queue.Queue()
+    det_input_queue = queue.Queue(maxsize=MAX_INPUT_QUEUE_SIZE)
+    ocr_input_queue = queue.Queue(maxsize=MAX_INPUT_QUEUE_SIZE)
 
-    det_postprocess_queue = queue.Queue()
-    ocr_postprocess_queue = queue.Queue()
+    det_postprocess_queue = queue.Queue(maxsize=MAX_INPUT_QUEUE_SIZE)
+    ocr_postprocess_queue = queue.Queue(maxsize=MAX_INPUT_QUEUE_SIZE)
 
-    vis_output_queue = queue.Queue()
-
+    vis_output_queue = queue.Queue(maxsize=MAX_OUTPUT_QUEUE_SIZE)
 
     fps_tracker=None
     if show_fps:
@@ -285,34 +325,34 @@ def run_inference_pipeline(
 
     # input postprocess
     preprocess_thread = threading.Thread(
-        target=preprocess, args=(images, cap, frame_rate, batch_size, det_input_queue, width, height)
+        target=preprocess, args=(images, cap, frame_rate, batch_size, det_input_queue, width, height, cap_processing_mode, None, stop_event)
     )
 
     # detector output postprocess
     detection_postprocess_thread = threading.Thread(
         target=detection_postprocess,
-        args=(det_postprocess_queue, ocr_input_queue, vis_output_queue, height, width),
+        args=(det_postprocess_queue, ocr_input_queue, vis_output_queue, height, width, stop_event),
     )
 
     # ocr output postprocess
     ocr_postprocess_thread = threading.Thread(
         target=ocr_postprocess,
-        args=(ocr_postprocess_queue, vis_output_queue),
+        args=(ocr_postprocess_queue, vis_output_queue, stop_event),
     )
 
     # visualisation postprocess
     vis_postprocess_thread = threading.Thread(
         target=visualize,
         args=(vis_output_queue, cap, save_output, output_dir,
-              post_process_callback_fn, fps_tracker, output_resolution, frame_rate, True)
+              post_process_callback_fn, fps_tracker, output_resolution, frame_rate, True, stop_event)
     )
 
     det_thread = threading.Thread(
-        target=detector_hailo_infer, args=(detector_hailo_inference, det_input_queue, det_postprocess_queue)
+        target=detector_hailo_infer, args=(detector_hailo_inference, det_input_queue, det_postprocess_queue, stop_event)
     )
 
     ocr_thread = threading.Thread(
-        target=ocr_hailo_infer, args=(ocr_hailo_inference, ocr_input_queue, ocr_postprocess_queue)
+        target=ocr_hailo_infer, args=(ocr_hailo_inference, ocr_input_queue, ocr_postprocess_queue, stop_event)
     )
 
     if show_fps:
@@ -392,6 +432,7 @@ def detection_postprocess(
     vis_output_queue: queue.Queue,
     model_height,
     model_width,
+    stop_event
 ) -> None:
     """
     Worker thread to handle postprocessing of detection results.
@@ -410,6 +451,9 @@ def detection_postprocess(
         item = det_postprocess_queue.get()
         if item is None:
             break  # Shutdown signal
+
+        if stop_event.is_set():
+            continue  # Skip processing if stop signal is set
 
         input_frame, result = item
 
@@ -470,7 +514,8 @@ def ocr_inference_callback(
 
 def ocr_postprocess(
     ocr_postprocess_queue: queue.Queue,
-    vis_output_queue: queue.Queue
+    vis_output_queue: queue.Queue,
+    stop_event: threading.Event
 ) -> None:
     """
     Worker thread to handle postprocessing of OCR model results.
@@ -487,6 +532,9 @@ def ocr_postprocess(
         item = ocr_postprocess_queue.get()
         if item is None:
             break  # Shutdown signal
+
+        if stop_event.is_set():
+            continue  # Skip processing if stop signal is set
 
         frame_id, original_frame, ocr_output, denorm_box = item
         ocr_results_dict[frame_id]["results"].append(ocr_output)

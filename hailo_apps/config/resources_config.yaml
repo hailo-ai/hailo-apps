@@ -321,8 +321,6 @@ detection: &detection_app
           source: mz
         - name: yolov7
           source: mz
-        - name: yolov7x
-          source: mz
         - name: yolov8n
           source: mz
         - name: yolov8l
@@ -368,8 +366,6 @@ detection: &detection_app
         - name: yolov6n
           source: mz
         - name: yolov7
-          source: mz
-        - name: yolov7x
           source: mz
         - name: yolov5m_wo_spp
           source: mz
@@ -495,57 +491,80 @@ instance_segmentation: &instance_segmentation_app
       default:
         - name: yolov5m_seg
           source: mz
+          app_type: [pipeline, standalone]
       extra:
         - name: yolov5l_seg
           source: mz
+          app_type: [standalone]
         - name: yolov5n_seg
           source: mz
+          app_type: [standalone]
         - name: yolov5s_seg
           source: mz
+          app_type: [standalone]
         - name: yolov8m_seg
           source: mz
+          app_type: [standalone]
         - name: yolov8n_seg
           source: mz
+          app_type: [standalone]
         - name: yolov8s_seg
           source: mz
+          app_type: [standalone]
         - name: yolov5m_seg_with_nms
           source: s3
+          app_type: [standalone]
         - name: fast_sam_s
           source: s3
+          app_type: [standalone]
     hailo8l:
       default:
         - name: yolov5n_seg
           source: mz
+          app_type: [pipeline, standalone]
       extra:
         - name: yolov5l_seg
           source: mz
+          app_type: [standalone]
         - name: yolov5m_seg
           source: mz
+          app_type: [standalone]
         - name: yolov5s_seg
           source: mz
+          app_type: [standalone]
         - name: yolov8m_seg
           source: mz
+          app_type: [standalone]
         - name: yolov8n_seg
           source: mz
+          app_type: [standalone]
         - name: yolov8s_seg
           source: mz
+          app_type: [standalone]
     hailo10h:
       default:
         - name: yolov5m_seg
           source: mz
+          app_type: [pipeline, standalone]
       extra:
         - name: yolov5l_seg
           source: mz
+          app_type: [standalone]
         - name: yolov5n_seg
           source: mz
+          app_type: [pipeline, standalone]
         - name: yolov5s_seg
           source: mz
+          app_type: [standalone]
         - name: yolov8m_seg
           source: mz
+          app_type: [standalone]
         - name: yolov8n_seg
           source: mz
+          app_type: [standalone]
         - name: yolov8s_seg
           source: mz
+          app_type: [standalone]
 
 pose_estimation: &pose_estimation_app
   models:

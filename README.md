@@ -10,8 +10,8 @@ Build and deploy high-performance AI applications on edge devices with Hailo har
 **Supports:** Hailo-8, Hailo-8L, and Hailo-10H accelerators
 
 **Supported versions:**
-- **Hailo-8 / Hailo-8L:** HailoRT 4.23, TAPPAS Core 5.1.0
-- **Hailo-10H:** HailoRT 5.1.1 & 5.2.0, TAPPAS Core 5.1.0 & 5.2.0, GenAI Model Zoo 5.1.1 & 5.2.0
+- **Hailo-8 / Hailo-8L:** HailoRT & PCIe driver 4.23, TAPPAS Core 5.1.0
+- **Hailo-10H:** HailoRT & PCIe driver 5.1.1 & 5.2.0, TAPPAS Core 5.1.0 & 5.2.0, GenAI Model Zoo 5.1.1 & 5.2.0
 
 > **💡 Running Multiple Apps:** You can run multiple Hailo applications in parallel (e.g., Vision + GenAI). See the [Running Parallel Applications Guide](./doc/user_guide/running_parallel.md) for configuration details.
 
@@ -22,7 +22,7 @@ Build and deploy high-performance AI applications on edge devices with Hailo har
 ✨ **20+ Ready-to-Run Applications**
 - **🎯 GenAI - Voice to Action (Featured):** AI agents that convert natural language into hardware control - talk to your devices and make things happen
 - **Computer Vision:** Object detection, pose estimation, instance segmentation, face recognition, depth estimation, OCR
-- **More GenAI:** Voice assistants, VLM chat, speech recognition (Whisper)
+- **More GenAI:** Voice assistants, VLM chat, Whisper speech recognition
 - **Advanced:** Multi-camera tracking, zero-shot classification (CLIP), tiling for high-res processing
 
 🚀 **Production-Ready Infrastructure**
@@ -47,16 +47,16 @@ Before installing hailo-apps, ensure you have the following Hailo packages insta
 - hailort Python wheel
 - hailo_tappas_core_python_binding Python wheel
 
-> **Note:** These packages are available from the [Hailo Developer Zone](https://hailo.ai/developer-zone/). See the [Full Installation Guide](./doc/user_guide/installation.md) for detailed setup instructions.
+Installation methods differ between Raspberry Pi and x86 platforms.
 
-### Installation
+See the [Full Installation Guide](./doc/user_guide/installation.md) for detailed setup instructions.
+
+### Installation (Hailo-Apps only)
 ```bash
 git clone https://github.com/hailo-ai/hailo-apps.git
 cd hailo-apps
 sudo ./install.sh
 ```
-
-**Need help?** See the [Full Installation Guide](./doc/user_guide/installation.md) for hardware setup and troubleshooting.
 
 ### Run Your First Application
 ```bash
@@ -166,7 +166,6 @@ python vlm_chat.py
 | `instance_segmentation`    | Instance segmentation with yolov5_seg and yolov8_seg               |
 | `lane_detection`           | Lane detection using UFLDv2                                        |
 | `pose_estimation`          | Pose estimation with yolov8                                        |
-| `speech_recognition`       | Automatic speech recognition with the Whisper model                |
 | `super_resolution`         | Super-resolution with espcnx4 and SRGAN                            |
 
 </details>
@@ -211,7 +210,6 @@ Use GenAI apps for **Hailo-10H** generative AI features:
 - Voice assistants with speech recognition
 - Vision-Language Models (VLM) chat
 - Voice-to-action AI agents
-- Whisper-based speech recognition
 
 **📚 See all applications:** [Running Applications Guide](./doc/user_guide/running_applications.md)
 

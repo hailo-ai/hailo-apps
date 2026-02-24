@@ -38,7 +38,6 @@ These standalone GenAI applications are located in `hailo_apps/python/gen_ai_app
 | [Agent Tools Example](../../hailo_apps/python/gen_ai_apps/agent_tools_example/README.md)   | **Voice-to-action AI agent** with tool integration for controlling hardware (elevators, servos, RGB LEDs) and accessing external services (weather API, math operations). |
 | [Voice Assistant](../../hailo_apps/python/gen_ai_apps/voice_assistant/README.md)           | Complete voice assistant implementation combining speech recognition, LLM, and text-to-speech.                                                                            |
 | [VLM Chat](../../hailo_apps/python/gen_ai_apps/vlm_chat/README.md)                         | Vision-Language Model chat application combining vision and language understanding.                                                                                       |
-| [Speech Recognition](../../hailo_apps/python/standalone_apps/speech_recognition/README.md) | Hailo Whisper-based speech recognition application with GUI.                                                                                                              |
 
 **Simple Example Applications:** The `gen_ai_apps/` directory contains additional simple examples including LLM chat, VLM chat, and Whisper chat demonstrations. See the [GenAI Apps README](../../hailo_apps/python/gen_ai_apps/README.md) for more details.
 

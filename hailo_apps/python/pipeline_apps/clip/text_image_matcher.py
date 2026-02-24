@@ -97,10 +97,15 @@ class TextImageMatcher:
             print(f"Index {index} is out of bounds for entries list.")
 
     def add_text(self, text, index=None, negative=False, ensemble=False):
+        if text.strip() == "":
+            # Clear the entry at this index if text is empty
+            if index is not None and 0 <= index < len(self.entries):
+                self.entries[index] = TextEmbeddingEntry()
+            return
         text_entries = [template.format(text) for template in self.ensemble_template] if ensemble else [self.text_prefix + text]
         embeddings = []
-        for text in text_entries:
-            embeddings.append(run_text_encoder_inference(text=text, hef_path=self.hef_path, text_projection_path=DEFAULT_TEXT_PROJECTION_PATH, timeout_ms=1000))
+        for text_entry in text_entries:
+            embeddings.append(run_text_encoder_inference(text=text_entry, hef_path=self.hef_path, text_projection_path=DEFAULT_TEXT_PROJECTION_PATH, timeout_ms=1000))
         ensemble_embedding = np.mean(np.vstack(embeddings), axis=0).flatten()
         new_entry = TextEmbeddingEntry(text, ensemble_embedding, negative, ensemble)
         self.update_text_entries(new_entry, index)
@@ -131,14 +136,16 @@ class TextImageMatcher:
             try:
                 with open(filename, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    self.threshold = data['threshold']
-                    self.text_prefix = data['text_prefix']
-                    self.ensemble_template = data['ensemble_template']
-                    self.entries = [TextEmbeddingEntry(text=entry['text'],
-                                                       embedding=np.array(entry['embedding']),
-                                                       negative=entry['negative'],
-                                                       ensemble=entry['ensemble'])
-                                    for entry in data['entries']]
+                    self.threshold = data.get('threshold', self.threshold)
+                    self.text_prefix = data.get('text_prefix', self.text_prefix)
+                    self.ensemble_template = data.get('ensemble_template', self.ensemble_template)
+                    loaded_entries = data.get('entries', [])
+                    if loaded_entries:
+                        self.entries = [TextEmbeddingEntry(text=entry['text'],
+                                                           embedding=np.array(entry['embedding']),
+                                                           negative=entry['negative'],
+                                                           ensemble=entry['ensemble'])
+                                        for entry in loaded_entries]
             except Exception as e:
                 print(f"Error while loading file {filename}: {e}")
 
