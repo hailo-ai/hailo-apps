@@ -178,9 +178,6 @@ def main():
     # Add VAD arguments
     add_vad_args(parser)
 
-    # Add VAD arguments
-    add_vad_args(parser)
-
     args = parser.parse_args()
 
     # Initialize logging
