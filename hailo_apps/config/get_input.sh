@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOURCES_JSON="${RESOURCES_JSON:-${SCRIPT_DIR}/inputs.json}"
 
 # These apps will use the "default" resources section
-SPECIAL_DEFAULT_APPS=("object_detection" "instance_segmentation" "pose_estimation" "classifier" "semantic_segmentation" "depth_estimation_mono" "onnxrt_hailo_pipeline")
+SPECIAL_DEFAULT_APPS=("object_detection" "instance_segmentation" "pose_estimation" "custom_pose_estimation" "classifier" "semantic_segmentation" "depth_estimation_mono" "onnxrt_hailo_pipeline")
 
 usage() {
   cat <<EOF

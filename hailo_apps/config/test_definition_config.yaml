@@ -86,6 +86,21 @@ apps:
       - "with_batch_size_2"
       - "pipeline_disable_sync"
 
+  custom_pose_estimation:
+    name: "Custom Pose Estimation Pipeline"
+    description: "Custom Pose Estimation Pipeline"
+    module: "hailo_apps.python.pipeline_apps.custom_pose_estimation.custom_pose_estimation"
+    script: "hailo_apps/python/pipeline_apps/custom_pose_estimation/custom_pose_estimation.py"
+    cli: "hailo-custom-pose"
+    default_test_suites:
+      - "basic_show_fps"
+      - "basic_input_video"
+      - "basic_input_usb"
+      - "input_video_with_hef"
+    extra_test_suites:
+      - "with_batch_size_2"
+      - "pipeline_disable_sync"
+
   depth:
     name: "Depth Estimation Pipeline"
     description: "Depth Estimation Pipeline"
@@ -193,6 +208,18 @@ apps:
     description: "Standalone pose estimation app"
     module: "hailo_apps.python.standalone_apps.pose_estimation.pose_estimation"
     script: "hailo_apps/python/standalone_apps/pose_estimation/pose_estimation.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  custom_pose_estimation_standalone:
+    name: "Custom Pose Estimation Standalone"
+    description: "Standalone custom pose estimation app"
+    module: "hailo_apps.python.standalone_apps.custom_pose_estimation.custom_pose_estimation"
+    script: "hailo_apps/python/standalone_apps/custom_pose_estimation/custom_pose_estimation.py"
     cli: ""
     default_test_suites:
       - "basic_image_smoke"
@@ -649,6 +676,7 @@ test_run_combinations:
       - face_recognition
       - instance_segmentation
       - pose_estimation
+      - custom_pose_estimation
       - depth
       - tiling
       - paddle_ocr
@@ -669,6 +697,7 @@ test_run_combinations:
       - face_recognition
       - instance_segmentation
       - pose_estimation
+      - custom_pose_estimation
       - depth
       - tiling
       - paddle_ocr
@@ -689,6 +718,7 @@ test_run_combinations:
       - face_recognition
       - instance_segmentation
       - pose_estimation
+      - custom_pose_estimation
       - depth
       - tiling
       - paddle_ocr

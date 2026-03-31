@@ -31,6 +31,7 @@ videos:
       - simple_detection
       - instance_segmentation
       - pose_estimation
+      - custom_pose_estimation
       - semantic_segmentation
       - classifier
       - depth
@@ -46,6 +47,7 @@ videos:
       - simple_detection
       - instance_segmentation
       - pose_estimation
+      - custom_pose_estimation
       - semantic_segmentation
       - classifier
       - depth
@@ -85,6 +87,7 @@ videos:
       - simple_detection
       - instance_segmentation
       - pose_estimation
+      - custom_pose_estimation
       - semantic_segmentation
       - classifier
       - depth
@@ -114,6 +117,7 @@ images:
       - simple_detection
       - instance_segmentation
       - pose_estimation
+      - custom_pose_estimation
       - classifier
       - semantic_segmentation
   - name: dog_bicycle.jpg
@@ -124,6 +128,7 @@ images:
       - simple_detection
       - instance_segmentation
       - pose_estimation
+      - custom_pose_estimation
       - classifier
       - semantic_segmentation
   - name: bus.jpg
@@ -134,6 +139,7 @@ images:
       - simple_detection
       - instance_segmentation
       - pose_estimation
+      - custom_pose_estimation
       - classifier
       - semantic_segmentation
   - name: input_image.png
@@ -144,6 +150,7 @@ images:
       - simple_detection
       - instance_segmentation
       - pose_estimation
+      - custom_pose_estimation
       - classifier
       - semantic_segmentation
   - name: ocr_img1.png
@@ -585,6 +592,27 @@ pose_estimation: &pose_estimation_app
           source: mz
       extra:
         - name: yolov8s_pose
+          source: mz
+
+custom_pose_estimation: &custom_pose_estimation_app
+  models:
+    hailo8:
+      default:
+        - name: custom_yolov8s_pose
+          source: mz
+      extra:
+        - name: custom_yolov8n_pose
+          source: mz
+    hailo8l:
+      default:
+        - name: custom_yolov8n_pose
+          source: mz
+    hailo10h:
+      default:
+        - name: custom_yolov8s_pose
+          source: mz
+      extra:
+        - name: custom_yolov8n_pose
           source: mz
 
 depth: &depth_app

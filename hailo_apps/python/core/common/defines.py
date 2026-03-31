@@ -195,6 +195,14 @@ POSE_ESTIMATION_POSTPROCESS_FUNCTION = "filter_letterbox"
 POSE_ESTIMATION_MODEL_NAME_H8 = "yolov8m_pose"
 POSE_ESTIMATION_MODEL_NAME_H8L = "yolov8s_pose"
 
+# Pose estimation pipeline defaults
+CUSTOM_POSE_ESTIMATION_APP_TITLE = "Hailo Custom Pose Estimation App"
+CUSTOM_POSE_ESTIMATION_PIPELINE = "custom_pose_estimation"
+CUSTOM_POSE_ESTIMATION_POSTPROCESS_SO_FILENAME = "libcustom_yolov8pose_postprocess.so"
+CUSTOM_POSE_ESTIMATION_POSTPROCESS_FUNCTION = "filter_letterbox"
+CUSTOM_POSE_ESTIMATION_MODEL_NAME_H8 = "custom_yolov8s_pose"
+CUSTOM_POSE_ESTIMATION_MODEL_NAME_H8L = "custom_yolov8n_pose"
+
 # Face recognition pipeline defaults
 FACE_RECOGNITION_APP_TITLE = "Hailo Face Recognition App"
 FACE_DETECTION_PIPELINE = "face_detection"

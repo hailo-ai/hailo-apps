@@ -69,6 +69,7 @@ hailo-install-python-bindings = "hailo_apps.installation.install_python_bindings
 hailo-detect =              "hailo_apps.python.pipeline_apps.detection.detection:main"
 hailo-depth =               "hailo_apps.python.pipeline_apps.depth.depth:main"
 hailo-pose =                "hailo_apps.python.pipeline_apps.pose_estimation.pose_estimation:main"
+hailo-custom-pose =         "hailo_apps.python.pipeline_apps.custom_pose_estimation.custom_pose_estimation:main"
 hailo-seg =                 "hailo_apps.python.pipeline_apps.instance_segmentation.instance_segmentation:main"
 hailo-detect-simple =       "hailo_apps.python.pipeline_apps.detection_simple.detection_simple:main"
 hailo-face-recon =          "hailo_apps.python.pipeline_apps.face_recognition.face_recognition:main"

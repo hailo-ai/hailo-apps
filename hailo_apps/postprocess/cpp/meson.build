@@ -45,6 +45,21 @@ shared_library('yolov8pose_postprocess',
 )
 
 ################################################
+# custom_yolov8pose_postprocess SOURCES
+################################################
+
+custom_yolov8pose_postprocess_sources = [
+    'custom_yolov8pose_postprocess.cpp',
+]
+shared_library('custom_yolov8pose_postprocess',
+    custom_yolov8pose_postprocess_sources,
+    dependencies : postprocess_dep,
+    gnu_symbol_visibility : 'default',
+    install: true,
+    install_dir: '/usr/local/hailo/resources/so',
+)
+
+################################################
 # YOLOV5SEG SOURCES
 ################################################
 yolov5seg_post_sources = [
