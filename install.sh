@@ -1479,6 +1479,16 @@ print_summary() {
 #===============================================================================
 
 main() {
+    # Pre-parse for help flags to ensure they work even if config.yaml is missing
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+        esac
+    done
+
     # Initialize logging
     init_logging
 
