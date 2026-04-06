@@ -1479,11 +1479,17 @@ print_summary() {
 #===============================================================================
 
 main() {
-    # Parse arguments first (before any output)
-    parse_arguments "$@"
-
     # Initialize logging
     init_logging
+
+    # Load configuration from config.yaml (required)
+    if ! load_config; then
+        log_error "Failed to load configuration. Cannot continue."
+        exit 1
+    fi
+
+    # Parse arguments AFTER config to allow CLI overrides
+    parse_arguments "$@"
 
     # Show banner
     echo ""
@@ -1499,12 +1505,6 @@ main() {
 
     # Enable error trap
     enable_error_trap
-
-    # Load configuration from config.yaml (required)
-    if ! load_config; then
-        log_error "Failed to load configuration. Cannot continue."
-        exit 1
-    fi
 
     # Show configuration summary
     log_info "Configuration:"
