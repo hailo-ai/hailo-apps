@@ -101,7 +101,7 @@ Piper supports many voice models in different languages and styles. To use a dif
 
 1. **Browse available voices:**
    - Visit: https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/API_PYTHON.md
-   - Or list voices: `python3 -m piper.download_voices --list`
+   - Or list voices: `python3 -m piper.download_voices`
 
 2. **Download your chosen voice:**
    ```bash
