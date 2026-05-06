@@ -15,7 +15,10 @@ class ResultStorage:
         self.db_path = db_path
         self._snapshot_dir = Path(snapshot_dir)
         self._snapshot_dir.mkdir(parents=True, exist_ok=True)
-        self._prune_snapshots()
+        try:
+            self._prune_snapshots()
+        except OSError as exc:
+            logger.warning("Snapshot pruning failed: %s", exc)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._lock = threading.Lock()
         self._setup_db()
@@ -59,10 +62,12 @@ class ResultStorage:
             logger.info(f"Pruned {excess} old snapshots")
 
     def save_snapshot(self, frame, camera_id: str, plate_string: str) -> str:
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
         filename = f"cam_{camera_id}_{ts}_{plate_string}.jpg"
         path = self._snapshot_dir / filename
-        cv2.imwrite(str(path), frame)
+        ok = cv2.imwrite(str(path), frame)
+        if not ok:
+            logger.warning("cv2.imwrite failed for %s", path)
         return str(path)
 
     def write_plate_read(self, camera_id: str, timestamp: str, plate_string: str,
