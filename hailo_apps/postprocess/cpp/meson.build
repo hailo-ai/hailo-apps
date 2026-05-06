@@ -60,6 +60,23 @@ shared_library('yolov5seg_postprocess',
 )
 
 ################################################
+# YOLOV8SEG SOURCES
+################################################
+yolov8seg_post_sources = [
+    'yolov8seg.cpp',
+]
+
+shared_library('yolov8seg_postprocess',
+    yolov8seg_post_sources,
+    include_directories : rapidjson_inc,
+    dependencies : postprocess_dep,
+    gnu_symbol_visibility : 'default',
+    install: true,
+    install_dir: '/usr/local/hailo/resources/so',
+)
+
+
+################################################
 # depth_postprocess SOURCES
 ################################################
 

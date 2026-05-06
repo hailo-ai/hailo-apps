@@ -1,0 +1,27 @@
+{
+    "iou_threshold": 0.6,
+    "score_threshold": 0.25,
+    "num_classes": 80,
+    "input_shape": [
+        640,
+        640
+    ],
+    "outputs_name": {
+        "proto": "yolov8n_seg/conv48",
+        "boxes": [
+            "yolov8n_seg/conv44",
+            "yolov8n_seg/conv60",
+            "yolov8n_seg/conv73"
+        ],
+        "scores": [
+            "yolov8n_seg/conv45",
+            "yolov8n_seg/conv61",
+            "yolov8n_seg/conv74"
+        ],
+        "masks": [
+            "yolov8n_seg/conv46",
+            "yolov8n_seg/conv62",
+            "yolov8n_seg/conv75"
+        ]
+    }
+}

@@ -12,11 +12,12 @@ from hailo_apps.python.core.common.core import (
 )
 from hailo_apps.python.core.common.defines import (
     INSTANCE_SEGMENTATION_APP_TITLE,
-    INSTANCE_SEGMENTATION_MODEL_NAME_H8,
-    INSTANCE_SEGMENTATION_MODEL_NAME_H8L,
+    INSTANCE_SEGMENTATION_MODEL_PREFIX_V5,
+    INSTANCE_SEGMENTATION_MODEL_PREFIX_V8,
     INSTANCE_SEGMENTATION_PIPELINE,
     INSTANCE_SEGMENTATION_POSTPROCESS_FUNCTION,
     INSTANCE_SEGMENTATION_POSTPROCESS_SO_FILENAME,
+    INSTANCE_SEGMENTATION_POSTPROCESS_V8_SO_FILENAME,
     JSON_FILE_EXTENSION,
     RESOURCES_JSON_DIR_NAME,
     RESOURCES_SO_DIR_NAME,
@@ -94,36 +95,41 @@ class GStreamerInstanceSegmentationApp(GStreamerApp):
         self.hef_path = str(resolved_path)
         hailo_logger.info("HEF path: %s", self.hef_path)
 
-        # Determine which JSON config to use
+        # Determine which JSON config to use based on model family prefix.
+        # The JSON filename is derived directly from the HEF stem so any
+        # yolov5*_seg or yolov8*_seg model is automatically supported.
+        hef_stem = Path(self.hef_path).stem  # e.g. "yolov8m_seg"
         hef_name = Path(self.hef_path).name
-        if INSTANCE_SEGMENTATION_MODEL_NAME_H8 in hef_name:
-            self.config_file = get_resource_path(
-                INSTANCE_SEGMENTATION_PIPELINE,
-                RESOURCES_JSON_DIR_NAME,
-                self.arch,
-                INSTANCE_SEGMENTATION_MODEL_NAME_H8 + JSON_FILE_EXTENSION,
-            )
-            hailo_logger.info("Using config file for H8: %s", self.config_file)
-        elif INSTANCE_SEGMENTATION_MODEL_NAME_H8L in hef_name:
-            self.config_file = get_resource_path(
-                INSTANCE_SEGMENTATION_PIPELINE,
-                RESOURCES_JSON_DIR_NAME,
-                self.arch,
-                INSTANCE_SEGMENTATION_MODEL_NAME_H8L + JSON_FILE_EXTENSION,
-            )
-            hailo_logger.info("Using config file for H8L: %s", self.config_file)
+        if INSTANCE_SEGMENTATION_MODEL_PREFIX_V5 in hef_stem:
+            json_filename = hef_stem + JSON_FILE_EXTENSION
+            hailo_logger.info("Detected YOLOv5 seg model family (%s)", hef_stem)
+        elif INSTANCE_SEGMENTATION_MODEL_PREFIX_V8 in hef_stem:
+            json_filename = hef_stem + JSON_FILE_EXTENSION
+            hailo_logger.info("Detected YOLOv8 seg model family (%s)", hef_stem)
         else:
-            hailo_logger.error("Unsupported HEF version: %s", hef_name)
+            hailo_logger.error("Unsupported HEF model: %s", hef_name)
             raise ValueError(
-                "HEF version not supported; please provide a compatible segmentation HEF or config file."
+                f"HEF '{hef_name}' is not supported; expected a yolov5*_seg or yolov8*_seg model."
             )
+        self.config_file = get_resource_path(
+            INSTANCE_SEGMENTATION_PIPELINE,
+            RESOURCES_JSON_DIR_NAME,
+            self.arch,
+            json_filename,
+        )
+        hailo_logger.info("Using config file: %s", self.config_file)
 
         # Post-process shared object
+        if INSTANCE_SEGMENTATION_MODEL_PREFIX_V8 in hef_stem:
+            so_filename = INSTANCE_SEGMENTATION_POSTPROCESS_V8_SO_FILENAME
+        else:
+            so_filename = INSTANCE_SEGMENTATION_POSTPROCESS_SO_FILENAME
+
         self.post_process_so = get_resource_path(
             INSTANCE_SEGMENTATION_PIPELINE,
             RESOURCES_SO_DIR_NAME,
             self.arch,
-            INSTANCE_SEGMENTATION_POSTPROCESS_SO_FILENAME,
+            so_filename,
         )
         self.post_function_name = INSTANCE_SEGMENTATION_POSTPROCESS_FUNCTION
         hailo_logger.debug(

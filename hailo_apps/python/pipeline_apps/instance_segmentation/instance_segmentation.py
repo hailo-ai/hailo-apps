@@ -72,16 +72,21 @@ def app_callback(element, buffer, user_data):
 
     pad = element.get_static_pad("src")
     format, width, height = get_caps_from_pad(pad)
+    if width is None or height is None:
+        hailo_logger.debug("Skipping frame %d due to missing caps dimensions", user_data.get_count())
+        return
 
     reduced_width = width // 4
     reduced_height = height // 4
 
     reduced_frame = None
+    mask_overlay = None
     if user_data.use_frame and format is not None and width is not None and height is not None:
         frame = get_numpy_from_buffer(buffer, format, width, height)
         reduced_frame = cv2.resize(
             frame, (reduced_width, reduced_height), interpolation=cv2.INTER_AREA
         )
+        mask_overlay = np.zeros_like(reduced_frame)
 
     roi = hailo.get_roi_from_buffer(buffer)
     detections = roi.get_objects_typed(hailo.HAILO_DETECTION)
@@ -103,16 +108,33 @@ def app_callback(element, buffer, user_data):
 
             if user_data.use_frame:
                 masks = detection.get_objects_typed(hailo.HAILO_CONF_CLASS_MASK)
-                if len(masks) != 0:
+                if len(masks) != 0 and reduced_frame is not None:
                     mask = masks[0]
                     mask_height = mask.get_height()
                     mask_width = mask.get_width()
+                    if mask_height <= 0 or mask_width <= 0:
+                        hailo_logger.debug(
+                            "Skipping mask for track_id=%d due to invalid mask dimensions (%d, %d)",
+                            track_id,
+                            mask_width,
+                            mask_height,
+                        )
+                        continue
 
                     data = np.array(mask.get_data())
                     data = data.reshape((mask_height, mask_width))
 
                     roi_width = int(bbox.width() * reduced_width)
                     roi_height = int(bbox.height() * reduced_height)
+                    if roi_width <= 0 or roi_height <= 0:
+                        hailo_logger.debug(
+                            "Skipping mask for track_id=%d due to invalid ROI dimensions (%d, %d)",
+                            track_id,
+                            roi_width,
+                            roi_height,
+                        )
+                        continue
+
                     resized_mask_data = cv2.resize(
                         data, (roi_width, roi_height), interpolation=cv2.INTER_LINEAR
                     )
@@ -129,16 +151,16 @@ def app_callback(element, buffer, user_data):
                     x_max = min(x_max, reduced_frame.shape[1])
 
                     if x_max > x_min and y_max > y_min:
-                        mask_overlay = np.zeros_like(reduced_frame)
                         color = COLORS[track_id % len(COLORS)]
                         mask_overlay[y_min:y_max, x_min:x_max] = (
                             resized_mask_data[: y_max - y_min, : x_max - x_min, np.newaxis] > 0.5
                         ) * color
-                        reduced_frame = cv2.addWeighted(reduced_frame, 1, mask_overlay, 0.5, 0)
 
     print(string_to_print)
 
-    if user_data.use_frame:
+    if user_data.use_frame and reduced_frame is not None:
+        if mask_overlay is not None:
+            reduced_frame = cv2.addWeighted(reduced_frame, 1, mask_overlay, 0.5, 0)
         reduced_frame = cv2.cvtColor(reduced_frame, cv2.COLOR_RGB2BGR)
         user_data.set_frame(reduced_frame)
 

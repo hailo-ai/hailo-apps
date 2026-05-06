@@ -130,6 +130,12 @@ def get_resource_path(
     if resource_type == RESOURCES_PHOTOS_DIR_NAME and model:
         return root / RESOURCES_PHOTOS_DIR_NAME / model
     if resource_type == RESOURCES_JSON_DIR_NAME and model:
+        # Check local resources first (git-tracked)
+        local_root = Path(DEFAULT_LOCAL_RESOURCES_PATH)
+        local_path = local_root / RESOURCES_JSON_DIR_NAME / model
+        if local_path.exists():
+            return local_path
+        # Fallback to system resources (auto-generated)
         return root / RESOURCES_JSON_DIR_NAME / model
     if resource_type == RESOURCES_NPY_DIR_NAME and model:
         return root / RESOURCES_NPY_DIR_NAME / model

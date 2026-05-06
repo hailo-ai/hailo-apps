@@ -57,5 +57,7 @@ resources
 # IDE configuration files (user-specific)
 .vscode/launch.json
 .cursor/
+gstshark*/
 .vscode/
 docs/superpowers/
+.codex

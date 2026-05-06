@@ -318,6 +318,7 @@ class GStreamerApp:
         self.user_data = user_data
         self.video_sink = GST_VIDEO_SINK
         self.pipeline = None
+        self.display_process = None
         self.loop = None
         self.threads = []
         self.error_occurred = False
@@ -472,6 +473,34 @@ class GStreamerApp:
 
         self.loop = GLib.MainLoop()
 
+    def _start_display_process(self):
+        if not self.options_menu.use_frame or self.display_process is not None:
+            return
+
+        hailo_logger.debug("Starting display_user_data_frame process")
+        self.user_data.running = True
+        self.display_process = multiprocessing.Process(
+            target=display_user_data_frame,
+            args=(self.user_data,),
+        )
+        self.display_process.daemon = True
+        self.display_process.start()
+
+    def _stop_display_process(self):
+        if self.display_process is None:
+            return
+
+        hailo_logger.debug("Stopping display_user_data_frame process")
+        self.user_data.running = False
+        try:
+            if self.display_process.is_alive():
+                self.display_process.terminate()
+                self.display_process.join(timeout=2.0)
+            if self.display_process.is_alive():
+                hailo_logger.warning("Display process did not exit after terminate()")
+        finally:
+            self.display_process = None
+
     def bus_call(self, bus, message, loop):
         t = message.type
         hailo_logger.debug(f"Bus message received: {t}")
@@ -555,6 +584,10 @@ class GStreamerApp:
         self.rebuild_count += 1
 
         try:
+            restart_display_process = self.display_process is not None
+            if restart_display_process:
+                self._stop_display_process()
+
             # Step 1: Stop and destroy the old pipeline
             hailo_logger.debug("Stopping old pipeline")
             if self.pipeline:
@@ -604,6 +637,9 @@ class GStreamerApp:
 
             hailo_logger.debug("Pipeline rebuilt and restarted successfully")
 
+            if restart_display_process:
+                self._start_display_process()
+
             # Resume watchdog monitoring
             self.watchdog_paused = False
 
@@ -624,6 +660,8 @@ class GStreamerApp:
             if self.watchdog_thread and self.watchdog_thread.is_alive():
                 self.watchdog_thread.join(timeout=2.0)
             self.watchdog_thread = None
+
+        self._stop_display_process()
 
         print("Shutting down... Hit Ctrl-C again to force quit.")
         # signal.signal() may only be called from the main thread (e.g. EOS/shutdown from pipeline thread)
@@ -705,12 +743,7 @@ class GStreamerApp:
 
         disable_qos(self.pipeline)
 
-        if self.options_menu.use_frame:
-            hailo_logger.debug("Starting display_user_data_frame process")
-            display_process = multiprocessing.Process(
-                target=display_user_data_frame, args=(self.user_data,)
-            )
-            display_process.start()
+        self._start_display_process()
 
         if self.source_type == RPI_NAME_I:
             hailo_logger.debug("Starting picamera_thread")
@@ -740,9 +773,7 @@ class GStreamerApp:
             hailo_logger.debug("Cleaning up after loop exit")
             self.user_data.running = False
             self.pipeline.set_state(Gst.State.NULL)
-            if self.options_menu.use_frame:
-                display_process.terminate()
-                display_process.join()
+            self._stop_display_process()
             for t in self.threads:
                 t.join()
         except Exception as e:
@@ -822,5 +853,3 @@ def picamera_thread(pipeline, video_width, video_height, video_format, picamera_
                 hailo_logger.error(f"Failed to push buffer: {ret}")
                 break
             frame_count += 1
-
-

@@ -183,9 +183,18 @@ DETECTION_POSTPROCESS_FUNCTION = "filter_letterbox"
 INSTANCE_SEGMENTATION_APP_TITLE = "Hailo Instance Segmentation App"
 INSTANCE_SEGMENTATION_PIPELINE = "instance_segmentation"
 INSTANCE_SEGMENTATION_POSTPROCESS_SO_FILENAME = "libyolov5seg_postprocess.so"
+INSTANCE_SEGMENTATION_POSTPROCESS_V8_SO_FILENAME = "libyolov8seg_postprocess.so"
 INSTANCE_SEGMENTATION_POSTPROCESS_FUNCTION = "filter_letterbox"
+# YOLOv5 seg defaults (used when no explicit --hef-path is given)
 INSTANCE_SEGMENTATION_MODEL_NAME_H8 = "yolov5m_seg"
 INSTANCE_SEGMENTATION_MODEL_NAME_H8L = "yolov5n_seg"
+# YOLOv8 seg defaults
+INSTANCE_SEGMENTATION_MODEL_NAME_V8_H8 = "yolov8m_seg"
+INSTANCE_SEGMENTATION_MODEL_NAME_V8_H8L = "yolov8n_seg"
+INSTANCE_SEGMENTATION_MODEL_NAME_V8_H10 = "yolov8m_seg"
+# Model family prefixes - used to detect which JSON config to load
+INSTANCE_SEGMENTATION_MODEL_PREFIX_V5 = "yolov5"
+INSTANCE_SEGMENTATION_MODEL_PREFIX_V8 = "yolov8"
 
 # Pose estimation pipeline defaults
 POSE_ESTIMATION_APP_TITLE = "Hailo Pose Estimation App"

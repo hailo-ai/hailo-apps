@@ -12,6 +12,15 @@ Instance segmentation refers to the process of identifying and segmenting indivi
 
 ### How Instance Segmentation Works in the App:
 
+#### **Model Support**:
+- The app supports both **YOLOv5** and **YOLOv8** instance segmentation models (`yolov5*_seg` or `yolov8*_seg`).
+- The application automatically detects the model family from the HEF filename and applies the appropriate post-processing logic and shared objects.
+
+#### **Post-processing Configuration**:
+- Post-processing parameters are managed via **JSON configuration files**.
+- These configuration files (e.g., `yolov8m_seg.json`) contain model-specific details such as output tensor names, labels, and post-processing thresholds.
+- The app lookups the corresponding JSON file based on the HEF's name.
+
 #### **Object Detection**:
 - The app uses a neural network to detect objects in the video frame.
 - Each detected object is represented as a `HAILO_DETECTION` object, which includes metadata such as:
@@ -30,6 +39,13 @@ Instance segmentation refers to the process of identifying and segmenting indivi
 
 #### **Tracking Objects**:
 - The app assigns a unique track ID to each detected object, allowing it to track the object across frames.
+
+#### Running with Specific Models:
+The app supports various YOLOv5 and YOLOv8 models. To use a specific model:
+```bash
+# Running with YOLOv8m-seg
+hailo-seg --hef-path yolov8m_seg
+```
 
 #### Running with Raspberry Pi Camera input:
 ```bash
@@ -135,6 +151,8 @@ Detailed Steps of the `callback` function:
 
 ### Key Features
 
+#### Multi-Model Support: Seamlessly switch between YOLOv5 and YOLOv8 models.
+#### Dynamic Post-processing: Automatically loads model-specific JSON configurations.
 #### Frame Skipping: Processes every 2nd frame to reduce computational load.
 #### Color Coding: Uses predefined colors to differentiate between tracked instances.
 #### Mask Overlay: Resizes and overlays the segmentation masks on the frame.
