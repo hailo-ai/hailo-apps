@@ -41,16 +41,7 @@ class SessionTracker:
         max_entry = (egress_dt - timedelta(minutes=self._tunnel_min)).isoformat()
 
         session = self._storage.find_open_session_by_entry(min_entry, max_entry)
-
         snapshot_path = self._storage.save_snapshot(frame, "egress", plate_string)
-        read_id = self._storage.write_plate_read(
-            camera_id="egress",
-            timestamp=timestamp,
-            plate_string=plate_string,
-            confidence=confidence,
-            snapshot_path=snapshot_path,
-            source=source,
-        )
 
         if session is None:
             self._storage.write_egress_only(
@@ -62,6 +53,16 @@ class SessionTracker:
             )
             logger.warning(f"Egress-only (no matching ingress session): {plate_string}")
             return
+
+        # Only write plate_read when a session was found
+        read_id = self._storage.write_plate_read(
+            camera_id="egress",
+            timestamp=timestamp,
+            plate_string=plate_string,
+            confidence=confidence,
+            snapshot_path=snapshot_path,
+            source=source,
+        )
 
         session_id, ingress_plate, entry_time = session
         entry_dt = datetime.fromisoformat(entry_time)
