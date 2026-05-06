@@ -32,6 +32,8 @@ class PlateInference:
         self._det_input_hw = (det_shape[0], det_shape[1])
         self._ocr_input_hw = (ocr_shape[0], ocr_shape[1])
         logger.info(f"Detector input: {self._det_input_hw}, OCR input: {self._ocr_input_hw}")
+        self._det_lock = threading.Lock()
+        self._ocr_lock = threading.Lock()
 
     def _preprocess(self, frame: np.ndarray, target_hw: Tuple[int, int]) -> np.ndarray:
         h, w = target_hw
@@ -56,8 +58,13 @@ class PlateInference:
                             result_holder.append((bbox, score))
             done.set()
 
-        self._det_model.run([processed], callback)
-        done.wait(timeout=5.0)
+        with self._det_lock:
+            self._det_model.run([processed], callback)
+            timed_out = not done.wait(timeout=5.0)
+
+        if timed_out:
+            logger.error("Detector inference timed out")
+            return []
         return result_holder
 
     def _run_ocr(self, crop: np.ndarray) -> np.ndarray:
@@ -73,8 +80,13 @@ class PlateInference:
                 result_holder.append(bindings_list[0].output().get_buffer())
             done.set()
 
-        self._ocr_model.run([processed], callback)
-        done.wait(timeout=5.0)
+        with self._ocr_lock:
+            self._ocr_model.run([processed], callback)
+            timed_out = not done.wait(timeout=5.0)
+
+        if timed_out:
+            logger.error("OCR inference timed out")
+            return np.zeros((1, 1, 37), dtype=np.float32)
         return result_holder[0] if result_holder else np.zeros((1, 1, 37), dtype=np.float32)
 
     @staticmethod
@@ -98,7 +110,7 @@ class PlateInference:
             max(0, int(y1 * h)):min(h, int(y2 * h)),
             max(0, int(x1 * w)):min(w, int(x2 * w)),
         ]
-        return r if r.size > 0 else np.zeros((10, 10, 3), dtype=np.uint8)
+        return r.copy() if r.size > 0 else np.zeros((10, 10, 3), dtype=np.uint8)
 
     def run(self, frame: np.ndarray) -> List[PlateRead]:
         detections = self._run_detector(frame)
@@ -119,6 +131,6 @@ class PlateInference:
                     confidence=score,
                     bbox=bbox,
                     crop_frame=crop,
-                    full_frame=frame,
+                    full_frame=frame.copy(),
                 ))
         return reads
