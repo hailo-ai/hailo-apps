@@ -1488,10 +1488,7 @@ print_summary() {
 #===============================================================================
 
 main() {
-    # Parse arguments first (before any output)
-    parse_arguments "$@"
-
-    # Initialize logging
+    # Initialize logging first (needed for log_error in load_config)
     init_logging
 
     # Show banner
@@ -1501,18 +1498,24 @@ main() {
     echo -e "${CYAN}${BOLD}╚══════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
-    if [[ "${DRY_RUN}" == true ]]; then
-        echo -e "${MAGENTA}${BOLD}🔍 DRY-RUN MODE - No changes will be made${NC}"
-        echo ""
-    fi
-
     # Enable error trap
     enable_error_trap
 
-    # Load configuration from config.yaml (required)
+    # Load configuration from config.yaml FIRST (sets defaults)
     if ! load_config; then
         log_error "Failed to load configuration. Cannot continue."
         exit 1
+    fi
+
+    # Parse CLI arguments AFTER config, so CLI flags override config defaults.
+    # Previously parse_arguments ran first, and load_config would silently
+    # overwrite user-provided values (e.g., --all setting DOWNLOAD_GROUP="all"
+    # was overwritten to "default" by config.yaml). See issue #141.
+    parse_arguments "$@"
+
+    if [[ "${DRY_RUN}" == true ]]; then
+        echo -e "${MAGENTA}${BOLD}🔍 DRY-RUN MODE - No changes will be made${NC}"
+        echo ""
     fi
 
     # Show configuration summary

@@ -560,6 +560,21 @@ std::vector<std::pair<HailoDetection, xt::xarray<float>>> decode_boxes_and_extra
                            (decoded_box(j, 3) - decoded_box(j, 1)) / network_dims[0]);
 
             label = common::coco_eighty[class_index + 1];
+
+            // Validate confidence is in [0, 1] range.
+            // Models compiled without sigmoid activation on classification
+            // outputs may produce raw logits > 1.0, which causes
+            // HailoDetection to freeze. Clamp and warn the user.
+            if (confidence < 0.0f || confidence > 1.0f) {
+                std::fprintf(stderr,
+                    "[WARNING] Classification confidence %.4f is outside [0, 1] "
+                    "for class '%s' (index %d). This usually means the model was "
+                    "compiled without sigmoid activation on classification output "
+                    "layers. Clamping to valid range.\n",
+                    confidence, label.c_str(), class_index);
+                confidence = std::max(0.0f, std::min(1.0f, confidence));
+            }
+
             HailoDetection detected_instance(bbox, class_index, label, confidence);
 
             detections_and_masks.push_back(std::make_pair(detected_instance, mask));

@@ -74,8 +74,12 @@ detect_hailo_arch() {
                     arch="hailo8l"
                     echo "[OK]   Detected Hailo architecture: HAILO8L (via PCI device)"
                 else
+                    # NOTE: lspci does NOT reliably distinguish Hailo-8 from Hailo-8L
+                    # because 8L devices report as "Hailo-8" in PCI output (no "L" suffix).
+                    # Set tentatively; hailortcli (Method 2) will refine if available.
                     arch="hailo8"
-                    echo "[OK]   Detected Hailo architecture: HAILO8 (via PCI device)"
+                    echo "[INFO] PCI device matches Hailo-8 family (could be Hailo-8 or Hailo-8L)"
+                    echo "[INFO] Will attempt hailortcli for precise identification..."
                 fi
             elif echo "$pci_output" | grep -qiE "hailo-10|hailo10|hailo-15|hailo15"; then
                 arch="hailo10h"
@@ -90,8 +94,10 @@ detect_hailo_arch() {
                         arch="hailo8l"
                         echo "[OK]   Detected Hailo architecture: HAILO8L (via PCI device detailed info)"
                     else
+                        # Same issue: lspci -v also can't distinguish 8 from 8L
                         arch="hailo8"
-                        echo "[OK]   Detected Hailo architecture: HAILO8 (via PCI device detailed info)"
+                        echo "[INFO] PCI device matches Hailo-8 family (could be Hailo-8 or Hailo-8L)"
+                        echo "[INFO] Will attempt hailortcli for precise identification..."
                     fi
                 elif echo "$pci_detailed" | grep -qiE "hailo-10|hailo10|hailo-15|hailo15"; then
                     arch="hailo10h"
@@ -105,7 +111,9 @@ detect_hailo_arch() {
     fi
     
     # Method 2: Try hailortcli if available (most reliable when device is connected)
-    if [[ "$arch" == "unknown" ]] && command -v hailortcli >/dev/null 2>&1; then
+    # Also run when arch is "hailo8" from lspci — lspci can't distinguish 8 from 8L
+    if [[ "$arch" == "unknown" || "$arch" == "hailo8" ]] && command -v hailortcli >/dev/null 2>&1; then
+        local pci_tentative_arch="$arch"
         detection_method="hailortcli"
         local fw_output
         local fw_exit_code=0
