@@ -91,7 +91,7 @@ def inference_worker(camera_id: str, frame_queue: queue.Queue,
 
 def main():
     args = parse_args()
-    init_logging(debug=args.debug)
+    init_logging(level="DEBUG" if args.debug else None)
 
     running = threading.Event()
     running.set()
@@ -140,6 +140,7 @@ def main():
     finally:
         ingress_ingest.stop()
         egress_ingest.stop()
+        inference.close()
         storage.close()
         logger.info("Shutdown complete")
 
