@@ -123,3 +123,172 @@ def call_rekor_carcheck(
     response = requests.post(url, data=img_b64, timeout=timeout_seconds)
     response.raise_for_status()
     return parse_rekor_response(response.json())
+
+
+import hashlib
+import json
+import logging
+import queue
+import threading
+import time
+import uuid
+from datetime import datetime, timezone
+
+from hailo_apps.python.standalone_apps.tunnelvision.db import (
+    InsertRekorRequest, InsertRekorResponse, InsertRekorPlateResult,
+    UpdateRekorRequest,
+)
+
+_logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RekorRequest:
+    request_id: str
+    image_path: str
+    image_sha256: str
+    observation_id: str
+    vehicle_track_id: str
+    best_image_id: str
+    visit_id: Optional[str]
+    recognize_vehicle: bool
+    credit_policy: str
+
+
+_SHUTDOWN = object()
+
+
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class RekorWorker(threading.Thread):
+    """Drains a queue of RekorRequest, calls Rekor, emits DB events.
+
+    Camera loop is never blocked by this thread.
+    """
+
+    def __init__(
+        self,
+        in_queue: queue.Queue,
+        db_queue: queue.Queue,
+        *,
+        secret_key: str,
+        policy: CreditPolicy,
+        max_retries: int = 3,
+        retry_backoff: float = 1.0,
+        timeout_seconds: int = 8,
+        name: str = "rekor-worker",
+    ):
+        super().__init__(name=name, daemon=True)
+        self._in = in_queue
+        self._db = db_queue
+        self._secret = secret_key
+        self._policy = policy
+        self._max_retries = max_retries
+        self._backoff = retry_backoff
+        self._timeout = timeout_seconds
+
+    def run(self) -> None:
+        while True:
+            req = self._in.get()
+            try:
+                if req is _SHUTDOWN:
+                    return
+                self._handle_request(req)
+            except Exception as exc:  # noqa: BLE001
+                _logger.exception("RekorWorker fatal: %s", exc)
+            finally:
+                self._in.task_done()
+
+    def stop(self) -> None:
+        self._in.put(_SHUTDOWN)
+        self.join(timeout=10)
+
+    def _handle_request(self, req: RekorRequest) -> None:
+        # Persist the queued request first
+        self._db.put(InsertRekorRequest(
+            id=req.request_id,
+            visit_id=req.visit_id,
+            observation_id=req.observation_id,
+            vehicle_track_id=req.vehicle_track_id,
+            best_image_id=req.best_image_id,
+            image_path=req.image_path,
+            image_sha256=req.image_sha256,
+            request_status="sent",
+            credit_policy=req.credit_policy,
+            sent_at=_iso_now(),
+        ))
+
+        last_error = None
+        for attempt in range(self._max_retries):
+            try:
+                payload = call_rekor_carcheck(
+                    req.image_path,
+                    secret_key=self._secret,
+                    recognize_vehicle=req.recognize_vehicle,
+                    timeout_seconds=self._timeout,
+                )
+                self._persist_success(req, payload)
+                return
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                _logger.warning("Rekor attempt %d/%d failed: %s",
+                                attempt + 1, self._max_retries, exc)
+                time.sleep(self._backoff * (2 ** attempt))
+
+        self._db.put(UpdateRekorRequest(
+            id=req.request_id,
+            request_status="failed",
+            completed_at=_iso_now(),
+            error_message=str(last_error),
+        ))
+
+    def _persist_success(self, req: RekorRequest, parsed: dict) -> None:
+        response_id = str(uuid.uuid4())
+        self._db.put(InsertRekorResponse(
+            id=response_id,
+            request_id=req.request_id,
+            data_type=parsed.get("data_type"),
+            epoch_time=parsed.get("epoch_time"),
+            img_width=parsed.get("img_width"),
+            img_height=parsed.get("img_height"),
+            error=int(bool(parsed.get("error"))),
+            version=parsed.get("version"),
+            uuid=parsed.get("uuid"),
+            credit_cost=parsed.get("credit_cost"),
+            credits_monthly_used=parsed.get("credits_monthly_used"),
+            credits_monthly_total=parsed.get("credits_monthly_total"),
+            processing_time_total_ms=parsed.get("processing_time_total_ms"),
+            raw_response=json.dumps(parsed),
+            created_at=_iso_now(),
+        ))
+        if parsed.get("plate"):
+            self._db.put(InsertRekorPlateResult(
+                id=str(uuid.uuid4()),
+                response_id=response_id,
+                plate_index=0,
+                plate=parsed["plate"],
+                normalized_plate=parsed.get("normalized_plate") or parsed["plate"],
+                region=parsed.get("region"),
+                confidence=parsed.get("plate_confidence"),
+                region_confidence=parsed.get("region_confidence"),
+                matches_template=int(bool(parsed.get("matches_template"))),
+                coordinates=json.dumps(parsed.get("coordinates")) if parsed.get("coordinates") else None,
+                selected=1,
+            ))
+        self._db.put(UpdateRekorRequest(
+            id=req.request_id,
+            request_status="succeeded",
+            actual_credit_cost=parsed.get("credit_cost"),
+            completed_at=_iso_now(),
+            http_status=200,
+        ))
+
+
+def file_sha256(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
