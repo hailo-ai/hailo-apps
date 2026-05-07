@@ -141,18 +141,41 @@ ByteTrack/DeepSORT noted as future upgrade if multi-lane density increases. IoU/
 
 ### 5.3 `zone.py` — Zone Evaluator
 
-Zones are loaded from a per-camera JSON config file (`--zone-config cam1_zones.json`), not from the database. Schema:
+**Schema adopted from `td-edge`** for forward compatibility with TD-Core integration. Single JSON file, normalized 0–1 polygon coordinates, per-zone `camera_id` filter (0 = ingress / cam1, 1 = egress / cam2):
 
 ```json
 {
-  "approach": [[x1,y1], [x2,y2], [x3,y3], [x4,y4]],
-  "capture":  [[x1,y1], ...],
-  "ignore":   [[x1,y1], ...],
-  "exit":     [[x1,y1], ...]
+  "zones": [
+    {
+      "name": "ingress_gate",
+      "zone_type": "trigger",
+      "camera_id": 0,
+      "action": "start_visit",
+      "polygon": [[0.325, 0.2824], [0.1297, 0.988], ...]
+    },
+    {
+      "name": "lpr_zone",
+      "zone_type": "alpr",
+      "camera_id": 0,
+      "action": "capture_plate",
+      "polygon": [[0.0911, 0.1157], ...]
+    }
+  ]
 }
 ```
 
-Point-in-polygon test using ray casting. A vehicle's zone is determined by where the centroid of its bounding box falls. A vehicle can be in at most one zone (priority: ignore > exit > capture > approach > none).
+**Initial config:** `experiments/tunnelvision/zones.json` — copied from `td-edge/config/zones.example.json`. Cam0 polygons (`ingress_gate`, `lpr_zone`) are already tuned for the live ingress camera. Cam1 polygon (`egress_gate`) is a placeholder — tuned at first live egress test.
+
+**PRD zone vocabulary maps onto td-edge `(zone_type, action)` pairs:**
+
+| PRD concept | td-edge representation |
+|---|---|
+| `approach` (start paying attention) | `(trigger, start_visit)` |
+| `capture` (eligible for best-frame scoring) | `(alpr, capture_plate)` |
+| `exit` (retire track after car leaves) | `(trigger, end_visit)` |
+| `ignore` (do not create new captures) | `(ignore, skip)` — new pair, no td-edge equivalent |
+
+`zone.py` exposes the same `Zone.contains_point()` and `Zone.overlaps_bbox()` API as `td_edge/config/zones.py` (ray-casting point-in-polygon, four-corner + center bbox overlap test). The state machine queries zones by `(zone_type, action)` pair, not by raw zone name. A vehicle can be inside multiple zones simultaneously (e.g. inside both `lpr_zone` and `ingress_gate`); precedence is determined by the state machine, not by the zone evaluator.
 
 ### 5.4 `state.py` — VehicleTrack + State Machine
 
@@ -288,8 +311,7 @@ UUIDs stored as `TEXT`. Timestamps stored as ISO 8601 `TEXT`. JSONB columns stor
 python3 -m hailo_apps.python.standalone_apps.tunnelvision.tunnelvision \
   --ingress 'rtsp://bowtie:dieformalwear99!@192.168.1.121:554/media/live/1/1' \
   --egress  'rtsp://admin:123456@192.168.1.125:554/media/live/1/1' \
-  --ingress-zones config/cam1_zones.json \
-  --egress-zones  config/cam2_zones.json \
+  --zones         experiments/tunnelvision/zones.json \
   --db            tunnelvision.db \
   --snapshot-dir  snapshots/ \
   --tunnel-min    3 \
@@ -349,22 +371,13 @@ sent_at TEXT, completed_at TEXT, http_status INT, error_message TEXT
 
 ## 7. Configuration
 
-### Zone Config File Format
+### Zone Config File
 
-```json
-{
-  "camera": "ingress",
-  "resolution": [2560, 1440],
-  "zones": {
-    "approach": [[100,800],[600,800],[600,1440],[100,1440]],
-    "capture":  [[300,400],[900,400],[900,900],[300,900]],
-    "ignore":   [[0,0],[200,0],[200,200],[0,200]],
-    "exit":     [[2200,0],[2560,0],[2560,1440],[2200,1440]]
-  }
-}
-```
+`experiments/tunnelvision/zones.json` — td-edge schema, normalized 0–1 polygon coordinates. Single file covers both cameras via per-zone `camera_id` (0 = ingress, 1 = egress). See §5.3 for the schema and the PRD-vocabulary mapping.
 
-Zone polygons are in source-resolution pixel coordinates. Zone evaluator scales to processing resolution at runtime.
+CLI flag: `--zones experiments/tunnelvision/zones.json` (single path, not per-camera).
+
+Coordinates are normalized — no resolution scaling needed at runtime; each zone evaluator just multiplies by the current frame's `(width, height)`.
 
 ### Credit Policy (CLI args, phase 2 promotes to DB)
 
@@ -448,9 +461,10 @@ Following ERD build order (§ Build Order):
 | # | Item | When to resolve |
 |---|---|---|
 | 1 | Vehicle detection model name on DeGirum local zoo | First task in implementation |
-| 2 | Zone polygon coordinates for cam1 and cam2 | After first live camera test |
-| 3 | TD-Core API endpoint + auth for visit sync | Staging phase |
-| 4 | `REKOR_SECRET_KEY` value confirmed in environment | Before first Rekor call |
+| 2 | Egress polygon (`egress_gate`) tuning — cam0 polygons already tuned in `zones.json` | First live egress test |
+| 3 | Add `(ignore, skip)` zone pair to schema if/when needed — not in current `zones.json` | Only if false-trigger areas surface in field |
+| 4 | TD-Core API endpoint + auth for visit sync | Staging phase |
+| 5 | `REKOR_SECRET_KEY` value confirmed in environment | Before first Rekor call |
 
 ---
 
