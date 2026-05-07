@@ -28,16 +28,32 @@ mapping; what matters is which RTSP URL is passed to `--ingress` vs `--egress`.
 
 ## Quick start — named test scripts
 
-Two wrapper scripts in `experiments/tunnelvision/scripts/` invoke the CLI with
-the right URLs, zones, db path, and snapshot dir for each site:
+Three wrapper scripts in `experiments/tunnelvision/scripts/` invoke the CLI
+with the right URLs, zones, db path, and snapshot dir for each setup:
 
 ```bash
-# Local cameras
+# Local cameras (this machine on the lalaland LAN)
 bash experiments/tunnelvision/scripts/run_lalaland.sh
 
-# Advance Car Wash, Jamaica Queens
+# Advance Car Wash, Jamaica Queens — direct (run from the Pi at the site)
 bash experiments/tunnelvision/scripts/run_jajamaica.sh
+
+# Advance Car Wash, Jamaica Queens — remote (via SSH+cloudflared tunnel)
+bash experiments/tunnelvision/scripts/run_jajamaica_via_tunnel.sh
 ```
+
+For the **via-tunnel** variant, open the SSH port-forward in a separate
+terminal first (leave it running for the duration of the test):
+
+```bash
+ssh -o ProxyCommand='cloudflared access ssh --hostname %h' \
+    -L 8121:192.168.35.121:554 \
+    -L 8150:192.168.1.50:554 \
+    -N td-pi@ssh-metal-pi.tuxedodrive.dev
+```
+
+`-N` opens forward-only (no shell). The metal-pi has eth1 to the WashiFi
+subnet and direct LAN access to the NVR, so it can route both forwards.
 
 Each script writes to a site-specific SQLite db (`tunnelvision-lalaland.db` /
 `tunnelvision-jajamaica.db`) and snapshot dir (`tv_snapshots/lalaland/` /
