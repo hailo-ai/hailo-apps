@@ -29,7 +29,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="TunnelVision edge ALPR")
     p.add_argument("--ingress", required=True, help="RTSP URL for cam0 (ingress)")
     p.add_argument("--egress", required=True, help="RTSP URL for cam1 (egress)")
-    p.add_argument("--zones", default="experiments/tunnelvision/zones.json")
+    p.add_argument("--zones", default="experiments/tunnelvision/zones-lalaland.json")
     p.add_argument("--db", default="tunnelvision.db")
     p.add_argument("--snapshot-dir", default="tv_snapshots")
     p.add_argument("--monthly-budget", type=int, default=500)

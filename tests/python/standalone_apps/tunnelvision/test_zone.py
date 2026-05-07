@@ -62,11 +62,21 @@ def test_load_zones_from_file(tmp_path: Path):
 
 
 def test_load_real_zones_file():
-    """Smoke test against the actual file shipped with the experiment."""
-    cfg = load_zones("experiments/tunnelvision/zones.json")
+    """Smoke test against the lalaland site config shipped with the experiment."""
+    cfg = load_zones("experiments/tunnelvision/zones-lalaland.json")
     cam0 = cfg.for_camera(0)
     cam1 = cfg.for_camera(1)
     assert len(cam0) >= 2
     assert any(z.action == "start_visit" for z in cam0)
     assert any(z.action == "capture_plate" for z in cam0)
+
+
+def test_load_jajamaica_zones_file():
+    """jajamaica config exists and has the three expected zones, even with placeholder polygons."""
+    cfg = load_zones("experiments/tunnelvision/zones-jajamaica.json")
+    cam0 = cfg.for_camera(0)
+    cam1 = cfg.for_camera(1)
+    assert any(z.action == "start_visit" for z in cam0)
+    assert any(z.action == "capture_plate" for z in cam0)
+    assert any(z.action == "end_visit" for z in cam1)
     assert any(z.action == "end_visit" for z in cam1)

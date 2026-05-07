@@ -1,0 +1,49 @@
+{
+  "_comment": "Zone configuration for spatial visit detection. Copy to ~/.td-edge/zones.json",
+  "_doc_polygon": "Polygon points as [x, y] in normalized 0.0-1.0 coordinates (fraction of frame width/height)",
+  "_doc_zone_types": "trigger = start/end visit, alpr = capture plate, counting = count in/out",
+  "_doc_camera_id": "Per-zone camera_id filters which camera triggers each zone (0=ingress, 1=egress)",
+
+  "zones": [
+    {
+      "name": "ingress_gate",
+      "zone_type": "trigger",
+      "camera_id": 0,
+      "action": "start_visit",
+      "_description": "Trigger zone covering the entry lane - fires when car center enters",
+      "polygon": [
+        [0.325, 0.2824],
+        [0.1297, 0.988],
+        [0.9695, 0.9722],
+        [0.7219, 0.2167],
+        [0.3281, 0.2852]
+      ]
+    },
+    {
+      "name": "lpr_zone",
+      "zone_type": "alpr",
+      "camera_id": 0,
+      "action": "capture_plate",
+      "_description": "LPR region - covers area where plates are visible before tunnel",
+      "polygon": [
+        [0.0911, 0.1157],
+        [0.4688, 0.0926],
+        [0.5208, 0.8102],
+        [0.0651, 0.8333]
+      ]
+    },
+    {
+      "name": "egress_gate",
+      "zone_type": "trigger",
+      "camera_id": 1,
+      "action": "end_visit",
+      "_description": "Exit detection zone - covers path where cars exit toward camera",
+      "polygon": [
+        [0.1172, 0.2083],
+        [0.5469, 0.1667],
+        [0.625, 0.7639],
+        [0.0781, 0.8333]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "_comment": "Advance Car Wash, Jamaica Queens — placeholder polygons. Tune against actual cam2 (WashiFi Axis ingress, 192.168.35.121) and cam1 (NVR egress, 192.168.1.50) frames at first live test.",
+  "_doc_polygon": "Polygon points as [x, y] in normalized 0.0-1.0 coordinates (fraction of frame width/height)",
+  "_doc_zone_types": "trigger = start/end visit, alpr = capture plate, counting = count in/out",
+  "_doc_camera_id": "Per-zone camera_id filters which logical role each zone fires for (0=ingress, 1=egress). Physical cam2 maps to camera_id=0, physical cam1 maps to camera_id=1 at this site.",
+
+  "zones": [
+    {
+      "name": "ingress_gate",
+      "zone_type": "trigger",
+      "camera_id": 0,
+      "action": "start_visit",
+      "_description": "PLACEHOLDER full-frame trigger — tune against WashiFi Axis 1920x1080 frames",
+      "polygon": [
+        [0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]
+      ]
+    },
+    {
+      "name": "lpr_zone",
+      "zone_type": "alpr",
+      "camera_id": 0,
+      "action": "capture_plate",
+      "_description": "PLACEHOLDER full-frame alpr capture — tune to where plates are actually readable on the WashiFi feed",
+      "polygon": [
+        [0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]
+      ]
+    },
+    {
+      "name": "egress_gate",
+      "zone_type": "trigger",
+      "camera_id": 1,
+      "action": "end_visit",
+      "_description": "PLACEHOLDER full-frame end_visit — tune against NVR ch801 egress feed",
+      "polygon": [
+        [0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]
+      ]
+    }
+  ]
+}
