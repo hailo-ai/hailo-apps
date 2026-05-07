@@ -44,8 +44,16 @@ Each script writes to a site-specific SQLite db (`tunnelvision-lalaland.db` /
 `tv_snapshots/jajamaica/`). The site-specific zones polygons live in
 `experiments/tunnelvision/zones-{lalaland,jajamaica}.json`.
 
-The jajamaica zones are placeholder full-frame polygons — tune them against
-real WashiFi/NVR frames at first live test.
+**Polygon provenance:**
+
+- `zones-jajamaica.json` — `lpr_zone` and `ingress_gate` polygons are the
+  production WashiFi cam2 polygon from `td-edge` deploy on 2026-04-29
+  (`docs/plans/2026-04-29-cam2-alpr-latest-frame.md`). `egress_gate` is a
+  full-frame placeholder; tune against the NVR ch801 feed at first live test.
+- `zones-lalaland.json` — full-frame placeholders. We do not have tuned
+  polygons for the local 192.168.1.121 / 192.168.1.125 cameras anywhere in
+  the codebase. Tune against actual frames at first live test before relying
+  on visit data.
 
 ## Quick start — raw CLI
 
