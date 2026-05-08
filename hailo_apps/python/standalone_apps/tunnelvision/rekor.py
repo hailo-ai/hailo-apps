@@ -1,0 +1,294 @@
+import base64
+from dataclasses import dataclass
+from typing import Optional, Tuple
+
+import requests
+
+
+REKOR_BASE_URL = "https://api.openalpr.com/v3/recognize_bytes"
+
+
+@dataclass
+class CreditPolicy:
+    monthly_credit_budget: int = 500
+    min_quality_score_to_call: float = 80.0
+    min_plate_confidence_to_call: float = 0.70
+    emergency_threshold: float = 0.85
+    call_rekor_on_ingress: bool = True
+    call_rekor_on_egress: bool = False
+    default_recognize_vehicle: bool = False
+
+
+def _normalize_plate(plate: Optional[str]) -> Optional[str]:
+    if plate is None:
+        return None
+    return "".join(c for c in plate.upper() if c.isalnum())
+
+
+def _top_attr(vehicle: Optional[dict], key: str) -> Tuple[Optional[str], Optional[float]]:
+    values = (vehicle or {}).get(key) or []
+    if not values:
+        return None, None
+    return values[0].get("name"), values[0].get("confidence")
+
+
+def parse_rekor_response(payload: dict) -> dict:
+    first_result = (payload.get("results") or [None])[0]
+    first_vehicle = first_result.get("vehicle") if first_result else None
+    make, make_conf = _top_attr(first_vehicle, "make")
+    make_model, make_model_conf = _top_attr(first_vehicle, "make_model")
+    color, color_conf = _top_attr(first_vehicle, "color")
+    year, year_conf = _top_attr(first_vehicle, "year")
+    orientation, orientation_conf = _top_attr(first_vehicle, "orientation")
+    body_type, body_type_conf = _top_attr(first_vehicle, "body_type")
+
+    proc = payload.get("processing_time") or {}
+    return {
+        "data_type": payload.get("data_type"),
+        "epoch_time": payload.get("epoch_time"),
+        "img_width": payload.get("img_width"),
+        "img_height": payload.get("img_height"),
+        "error": payload.get("error"),
+        "version": payload.get("version"),
+        "uuid": payload.get("uuid"),
+        "credit_cost": payload.get("credit_cost"),
+        "credits_monthly_used": payload.get("credits_monthly_used"),
+        "credits_monthly_total": payload.get("credits_monthly_total"),
+        "processing_time_total_ms": proc.get("total"),
+        "processing_time_plates_ms": proc.get("plates"),
+        "processing_time_vehicles_ms": proc.get("vehicles"),
+        "regions_of_interest": payload.get("regions_of_interest"),
+        "plate": first_result.get("plate") if first_result else None,
+        "normalized_plate": _normalize_plate(first_result.get("plate") if first_result else None),
+        "region": first_result.get("region") if first_result else None,
+        "plate_confidence": first_result.get("confidence") if first_result else None,
+        "region_confidence": first_result.get("region_confidence") if first_result else None,
+        "matches_template": first_result.get("matches_template") if first_result else None,
+        "coordinates": first_result.get("coordinates") if first_result else None,
+        "candidates": (first_result.get("candidates") if first_result else []) or [],
+        "vehicle_detected": first_result.get("vehicle_detected") if first_result else None,
+        "make": make, "make_confidence": make_conf,
+        "make_model": make_model, "make_model_confidence": make_model_conf,
+        "color": color, "color_confidence": color_conf,
+        "year_range": year, "year_confidence": year_conf,
+        "orientation": orientation, "orientation_confidence": orientation_conf,
+        "body_type": body_type, "body_type_confidence": body_type_conf,
+    }
+
+
+def should_call_rekor(
+    *,
+    quality_score: float,
+    camera_role: str,
+    credits_used: int,
+    monthly_budget: int,
+    known_recently: bool,
+    policy: CreditPolicy,
+) -> Tuple[bool, bool, str]:
+    """Returns (call?, recognize_vehicle?, reason)."""
+    if quality_score < policy.min_quality_score_to_call:
+        return False, False, "skip_low_quality"
+    if camera_role == "egress" and not policy.call_rekor_on_egress:
+        return False, False, "skip_egress"
+    if camera_role == "ingress" and not policy.call_rekor_on_ingress:
+        return False, False, "skip_ingress_disabled"
+    monthly_ratio = (credits_used / monthly_budget) if monthly_budget > 0 else 0.0
+    if monthly_ratio >= policy.emergency_threshold:
+        if known_recently:
+            return False, False, "emergency_credit_conservation"
+        return True, False, "plate_only"
+    if known_recently:
+        return False, False, "skip_known_plate"
+    return True, policy.default_recognize_vehicle, (
+        "vehicle_enrichment" if policy.default_recognize_vehicle else "plate_only"
+    )
+
+
+def call_rekor_carcheck(
+    image_path: str,
+    *,
+    secret_key: str,
+    recognize_vehicle: bool = False,
+    country: str = "us",
+    timeout_seconds: int = 8,
+) -> dict:
+    with open(image_path, "rb") as f:
+        img_b64 = base64.b64encode(f.read())
+    url = (
+        f"{REKOR_BASE_URL}"
+        f"?recognize_vehicle={1 if recognize_vehicle else 0}"
+        f"&country={country}"
+        f"&secret_key={secret_key}"
+    )
+    response = requests.post(url, data=img_b64, timeout=timeout_seconds)
+    response.raise_for_status()
+    return parse_rekor_response(response.json())
+
+
+import hashlib
+import json
+import logging
+import queue
+import threading
+import time
+import uuid
+from datetime import datetime, timezone
+
+from hailo_apps.python.standalone_apps.tunnelvision.db import (
+    InsertRekorRequest, InsertRekorResponse, InsertRekorPlateResult,
+    UpdateRekorRequest,
+)
+
+_logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RekorRequest:
+    request_id: str
+    image_path: str
+    image_sha256: str
+    observation_id: str
+    vehicle_track_id: str
+    best_image_id: str
+    visit_id: Optional[str]
+    recognize_vehicle: bool
+    credit_policy: str
+
+
+_SHUTDOWN = object()
+
+
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class RekorWorker(threading.Thread):
+    """Drains a queue of RekorRequest, calls Rekor, emits DB events.
+
+    Camera loop is never blocked by this thread.
+    """
+
+    def __init__(
+        self,
+        in_queue: queue.Queue,
+        db_queue: queue.Queue,
+        *,
+        secret_key: str,
+        policy: CreditPolicy,
+        max_retries: int = 3,
+        retry_backoff: float = 1.0,
+        timeout_seconds: int = 8,
+        name: str = "rekor-worker",
+    ):
+        super().__init__(name=name, daemon=True)
+        self._in = in_queue
+        self._db = db_queue
+        self._secret = secret_key
+        self._policy = policy
+        self._max_retries = max_retries
+        self._backoff = retry_backoff
+        self._timeout = timeout_seconds
+
+    def run(self) -> None:
+        while True:
+            req = self._in.get()
+            try:
+                if req is _SHUTDOWN:
+                    return
+                self._handle_request(req)
+            except Exception as exc:  # noqa: BLE001
+                _logger.exception("RekorWorker fatal: %s", exc)
+            finally:
+                self._in.task_done()
+
+    def stop(self) -> None:
+        self._in.put(_SHUTDOWN)
+        self.join(timeout=10)
+
+    def _handle_request(self, req: RekorRequest) -> None:
+        # Persist the queued request first
+        self._db.put(InsertRekorRequest(
+            id=req.request_id,
+            visit_id=req.visit_id,
+            observation_id=req.observation_id,
+            vehicle_track_id=req.vehicle_track_id,
+            best_image_id=req.best_image_id,
+            image_path=req.image_path,
+            image_sha256=req.image_sha256,
+            request_status="sent",
+            credit_policy=req.credit_policy,
+            sent_at=_iso_now(),
+        ))
+
+        last_error = None
+        for attempt in range(self._max_retries):
+            try:
+                payload = call_rekor_carcheck(
+                    req.image_path,
+                    secret_key=self._secret,
+                    recognize_vehicle=req.recognize_vehicle,
+                    timeout_seconds=self._timeout,
+                )
+                self._persist_success(req, payload)
+                return
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                _logger.warning("Rekor attempt %d/%d failed: %s",
+                                attempt + 1, self._max_retries, exc)
+                time.sleep(self._backoff * (2 ** attempt))
+
+        self._db.put(UpdateRekorRequest(
+            id=req.request_id,
+            request_status="failed",
+            completed_at=_iso_now(),
+            error_message=str(last_error),
+        ))
+
+    def _persist_success(self, req: RekorRequest, parsed: dict) -> None:
+        response_id = str(uuid.uuid4())
+        self._db.put(InsertRekorResponse(
+            id=response_id,
+            request_id=req.request_id,
+            data_type=parsed.get("data_type"),
+            epoch_time=parsed.get("epoch_time"),
+            img_width=parsed.get("img_width"),
+            img_height=parsed.get("img_height"),
+            error=int(bool(parsed.get("error"))),
+            version=parsed.get("version"),
+            uuid=parsed.get("uuid"),
+            credit_cost=parsed.get("credit_cost"),
+            credits_monthly_used=parsed.get("credits_monthly_used"),
+            credits_monthly_total=parsed.get("credits_monthly_total"),
+            processing_time_total_ms=parsed.get("processing_time_total_ms"),
+            raw_response=json.dumps(parsed),
+            created_at=_iso_now(),
+        ))
+        if parsed.get("plate"):
+            self._db.put(InsertRekorPlateResult(
+                id=str(uuid.uuid4()),
+                response_id=response_id,
+                plate_index=0,
+                plate=parsed["plate"],
+                normalized_plate=parsed.get("normalized_plate") or parsed["plate"],
+                region=parsed.get("region"),
+                confidence=parsed.get("plate_confidence"),
+                region_confidence=parsed.get("region_confidence"),
+                matches_template=int(bool(parsed.get("matches_template"))),
+                coordinates=json.dumps(parsed.get("coordinates")) if parsed.get("coordinates") else None,
+                selected=1,
+            ))
+        self._db.put(UpdateRekorRequest(
+            id=req.request_id,
+            request_status="succeeded",
+            actual_credit_cost=parsed.get("credit_cost"),
+            completed_at=_iso_now(),
+            http_status=200,
+        ))
+
+
+def file_sha256(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
