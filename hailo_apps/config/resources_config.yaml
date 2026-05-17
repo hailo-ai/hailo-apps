@@ -915,6 +915,9 @@ vlm_chat: &vlm_chat_app
       default:
         - name: Qwen2-VL-2B-Instruct
           source: gen-ai-mz
+      extra:
+        - name: Qwen3-VL-2B-Instruct
+          source: gen-ai-mz
 
 llm_chat: &llm_chat_app
   models:

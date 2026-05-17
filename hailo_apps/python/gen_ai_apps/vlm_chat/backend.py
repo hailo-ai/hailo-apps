@@ -203,13 +203,13 @@ class Backend:
                 break
 
     @staticmethod
-    def convert_resize_image(image_array: np.ndarray, target_size: tuple[int, int] = (336, 336)) -> np.ndarray:
+    def convert_resize_image(image_array: np.ndarray, target_size: tuple[int, int] = (512, 288)) -> np.ndarray: # 336,336 for Qwen2 and 512,288 for Qwen3
         """
         Convert and resize image for VLM using central crop to maintain aspect ratio.
 
         Args:
             image_array (np.ndarray): Input image (BGR).
-            target_size (tuple[int, int], optional): Target size (width, height). Defaults to (336, 336).
+            target_size (tuple[int, int], optional): Target size (width, height). Defaults to (512, 288).
 
         Returns:
             np.ndarray: Resized RGB image.
