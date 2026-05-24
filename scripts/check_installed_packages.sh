@@ -301,28 +301,37 @@ validate_versions_for_arch() {
 }
 
 check_kernel_module() {
+    local hailo_arch="${1:-unknown}"
     local version="-1"
     local module=""
     local module_found="false"
+    local modules_to_check=()
 
-    # Try to find hailo_pci module first
-    if lsmod | grep -q "^hailo_pci "; then
-        module="hailo_pci"
-        module_found="true"
-    elif modinfo hailo_pci &>/dev/null; then
-        module="hailo_pci"
-        module_found="true"
+    if [[ "$hailo_arch" == "hailo10h" ]]; then
+        modules_to_check=("hailo1x_pci" "hailo_pci")
+    elif [[ "$hailo_arch" == "hailo8" || "$hailo_arch" == "hailo8l" ]]; then
+        modules_to_check=("hailo_pci" "hailo1x_pci")
+    else
+        modules_to_check=("hailo1x_pci" "hailo_pci")
     fi
 
-    # If hailo_pci was not found, check for hailo1x_pci
-    if [[ "$module_found" == "false" ]]; then
-        if lsmod | grep -q "^hailo1x_pci "; then
-            module="hailo1x_pci"
+    # Prefer the module that is actually loaded, then fall back to installed modules.
+    for candidate in "${modules_to_check[@]}"; do
+        if lsmod | grep -q "^$candidate "; then
+            module="$candidate"
             module_found="true"
-        elif modinfo hailo1x_pci &>/dev/null; then
-            module="hailo1x_pci"
-            module_found="true"
+            break
         fi
+    done
+
+    if [[ "$module_found" == "false" ]]; then
+        for candidate in "${modules_to_check[@]}"; do
+            if modinfo "$candidate" &>/dev/null; then
+                module="$candidate"
+                module_found="true"
+                break
+            fi
+        done
     fi
 
     # If a module was found, get its version
@@ -562,7 +571,7 @@ to_check() {
     echo ""
     
     # Display all check results for verbose output
-    kernel_output=$(check_kernel_module)
+    kernel_output=$(check_kernel_module "$hailo_arch")
     hailort_output=$(check_hailort)
     tappas_output=$(check_tappas_packages) 
     pyhailort_output=$(check_hailort_py)
