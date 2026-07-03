@@ -190,15 +190,15 @@ def get_resource_path(pipeline_name: str,
     if resource_type == DEFAULT_LOCAL_RESOURCES_PATH and model:
         return (root / DEFAULT_LOCAL_RESOURCES_PATH / model)
 
-    # 4) Models: append architecture and .hef extension
+    # 4) Models: append architecture and .hef extension edited by oscar madegwa
     if resource_type == RESOURCES_MODELS_DIR_NAME:
         # specific model name provided
         if model:
-            return (root / RESOURCES_MODELS_DIR_NAME / arch / model).with_suffix(HAILO_FILE_EXTENSION)
+            return root / RESOURCES_MODELS_DIR_NAME / arch / f"{model}{HAILO_FILE_EXTENSION}"
         # derive model name from pipeline
         if pipeline_name:
             name = get_model_name(pipeline_name, arch)
-            return (root / RESOURCES_MODELS_DIR_NAME / arch / name).with_suffix(HAILO_FILE_EXTENSION)
+            return root / RESOURCES_MODELS_DIR_NAME / arch / f"{name}{HAILO_FILE_EXTENSION}"
 
     return None
 
