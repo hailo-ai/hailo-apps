@@ -51,33 +51,35 @@ def resize_infer_result_to_original(
 
     # Resize to original image size
     result = cv2.resize(cropped, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
-    return cv2.cvtColor(np.array(result), cv2.COLOR_BGR2RGB)
+    return result
 
 
-def inference_result_handler(original_frame: np.ndarray, infer_result: np.ndarray, model_height, model_width) -> np.ndarray:
+def inference_result_handler(original_frame: np.ndarray, infer_result: np.ndarray, model_height, model_width, utils=None) -> np.ndarray:
     """
     Processes a single super-resolution inference result and returns a side-by-side comparison.
 
+    The SR result is kept at its native upscaled resolution (2× for ESRGAN, 4× for ESPCN).
+    The original frame is upscaled to match for side-by-side visual comparison.
+
     Args:
         original_frame (np.ndarray): Original input image (H, W, 3).
-        infer_result (np.ndarray): Super-resolved output image (H', W', 3).
+        infer_result (np.ndarray): Raw model output (H', W', C).
+        model_height (int): Model input height.
+        model_width (int): Model input width.
+        utils (SuperResolutionUtils, optional): For model-specific post-processing.
 
     Returns:
-        np.ndarray: Side-by-side image with [original | resized result].
-    orig_h, orig_w = infer_result.shape[:2]
-    original_frame_resized = cv2.resize(original_frame, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
-
-    return np.hstack((original_frame_resized, infer_result))
+        np.ndarray: Side-by-side image [original_upscaled | SR_output].
     """
+    # Apply model-specific post-processing (float→uint8, YUV→RGB, etc.)
+    if utils is not None:
+        infer_result = utils.post_process(infer_result, original_frame)
 
+    # SR output is at upscaled resolution — resize original to match for comparison
+    sr_h, sr_w = infer_result.shape[:2]
+    original_resized = cv2.resize(original_frame, (sr_w, sr_h), interpolation=cv2.INTER_CUBIC)
 
-    infer_result_resized = resize_infer_result_to_original(
-        infer_result=infer_result,
-        original_size=original_frame.shape[:2],
-        model_input_size=infer_result.shape[:2]
-    )
-
-    return np.hstack((original_frame, infer_result_resized))
+    return np.hstack((original_resized, infer_result))
 
 class SuperResolutionUtils:
     """
@@ -113,7 +115,8 @@ class SrganUtils(SuperResolutionUtils):
         return image
 
     def post_process(self, infer_result: np.ndarray, input_image: np.ndarray) -> np.ndarray:
-        infer_result = (infer_result * 255.0).clip(0, 255).astype(np.uint8) if infer_result.dtype != np.uint8 else infer_result
+        if infer_result.dtype != np.uint8:
+            infer_result = (infer_result * 255.0).clip(0, 255).astype(np.uint8)
         return infer_result
 
 

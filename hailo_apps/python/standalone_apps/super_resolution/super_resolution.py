@@ -172,12 +172,12 @@ def run_inference_pipeline(
         hailo_inference = HailoInfer(net_path, input_context.batch_size, input_type="FLOAT32", output_type="FLOAT32")
     else:
         utils = SrganUtils()
-        hailo_inference = HailoInfer(net_path, input_context.batch_size)
+        hailo_inference = HailoInfer(net_path, input_context.batch_size, output_type="FLOAT32")
 
     height, width, _ = hailo_inference.get_input_shape()
 
     post_process_callback_fn = partial(
-        inference_result_handler,model_height=height, model_width=width
+        inference_result_handler, model_height=height, model_width=width, utils=utils
     )
 
     preprocess_thread = threading.Thread(
@@ -187,7 +187,7 @@ def run_inference_pipeline(
             input_queue,
             width,
             height,
-            None,
+            utils.pre_process,
             stop_event,
         ),
         name="preprocess-thread",
