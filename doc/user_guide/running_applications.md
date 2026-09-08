@@ -60,6 +60,7 @@ These standalone GenAI applications are located in `hailo_apps/python/gen_ai_app
 | [Simple LLM Chat](../../hailo_apps/python/gen_ai_apps/simple_llm_chat/README.md)           | Minimal text-only LLM chat example.                                                                                                                                        |
 | [Simple VLM Chat](../../hailo_apps/python/gen_ai_apps/simple_vlm_chat/README.md)           | Minimal Vision-Language chat example (image + text).                                                                                                                      |
 | [Simple Whisper Chat](../../hailo_apps/python/gen_ai_apps/simple_whisper_chat/README.md)   | Minimal Whisper-based speech recognition chat example.                                                                                                                     |
+| [Voice-to-Action Demo](../../hailo_apps/python/gen_ai_apps/v2a_demo/README.md)             | End-to-end voice pipeline: wake word → Whisper STT → tool selection → LLM → Piper TTS, for controlling hardware via spoken commands.                                     |
 
 See the [GenAI Apps README](../../hailo_apps/python/gen_ai_apps/README.md) for additional details and usage notes.
 
@@ -117,21 +118,28 @@ source setup_env.sh
 ```
 #### Common Pipeline Arguments
 
-| Flag(s)                  | Description                                                                                                                                   |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--input, -i <source>`   | Specifies the input source. Common options include: `rpi`, `usb`, a device path like `/dev/video0`, or a path to a video file.                |
-| `--arch <architecture>`  | Manually sets the Hailo device architecture (e.g., `hailo8`, `hailo8l`, `hailo10h`). If not provided, the system will auto-detect the device. |
-| `--hef-path <path>`      | Path to a custom compiled HEF model file, allowing you to run your own trained models.                                                        |
-| `--show-fps, -f`         | Displays a real-time Frames-Per-Second (FPS) counter on the output video window.                                                              |
-| `--frame-rate, -r <fps>` | Sets the target input frame rate for the video source. Defaults to 30.                                                                        |
-| `--disable-sync`         | Disables display synchronization to run the pipeline at maximum speed. This is ideal for benchmarking processing throughput.                  |
-| `--disable-callback`     | Disables user-defined Python callback functions. Frame counting for watchdog continues. Use for performance benchmarking.                     |
-| `--dump-dot`             | Generates a `pipeline.dot` file, which is a graph of the GStreamer pipeline that can be visualized with tools like Graphviz.                  |
-| `--labels-json <path>`   | Path to a custom JSON file containing the labels for the classes your model can detect or classify.                                           |
-| `--use-frame, -u`        | In applications with a Python callback, this flag indicates that the callback is responsible for providing the frame for display.             |
-| `--enable-watchdog`      | Monitors the pipeline for stalls (no frames processed for 5s) and automatically rebuilds it. Works with --disable-callback.                   |
-| `--log-level <level>`    | Set logging level: debug, info, warning, error, critical. Default: info. Can also use --debug for debug level.                                |
-| `--log-file <path>`      | Optional log file path for persistent logging. Also respects $HAILO_LOG_FILE environment variable.                                            |
+| Flag(s)                     | Description                                                                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--input, -i <source>`      | Specifies the input source. Common options include: `rpi`, `usb`, a device path like `/dev/video0`, an RTSP URL, or a path to a video file.    |
+| `--arch, -a <architecture>` | Manually sets the Hailo device architecture (`hailo8`, `hailo8l`, `hailo10h`). If not provided, the system will auto-detect the device.        |
+| `--hef-path, -n <path>`     | Path or name of a custom compiled HEF model file, allowing you to run your own trained models.                                                 |
+| `--list-models`             | Lists all available models for the application (default + extras usable with `--hef-path`) and exits.                                          |
+| `--batch-size, -b <n>`      | Number of frames processed in parallel during inference. Default is 1.                                                                          |
+| `--show-fps`                | Displays a real-time Frames-Per-Second (FPS) counter on the output video window.                                                                |
+| `--frame-rate, -f <fps>`    | Sets the target input frame rate for the video source. Defaults to 30.                                                                          |
+| `--width, -W <px>` / `--height, -H <px>` | Custom output resolution; if omitted, uses the input resolution or model default.                                                  |
+| `--labels, -l <path>`       | Path to a text file with one class label per line, used to override the default label set.                                                     |
+| `--labels-json <path>`      | Path to a custom JSON labels file (used by detection/CLIP/tiling apps); auto-detected from the HEF when not provided.                           |
+| `--disable-sync`            | Disables display synchronization to run the pipeline at maximum speed. This is ideal for benchmarking processing throughput.                    |
+| `--disable-callback`        | Disables user-defined Python callback functions. Frame counting for watchdog continues. Use for performance benchmarking.                       |
+| `--use-frame`               | In applications with a Python callback, this flag indicates that the callback is responsible for providing the frame for display.               |
+| `--dump-dot`                | Generates a `pipeline.dot` file, which is a graph of the GStreamer pipeline that can be visualized with tools like Graphviz.                    |
+| `--print-pipeline`          | Prints the GStreamer pipeline string to stdout before launching.                                                                                |
+| `--horizontal-mirror` / `--vertical-mirror` | Flips the video source horizontally/vertically (useful when the camera is mounted upside down).                                |
+| `--run-duration <seconds>`  | Runs the pipeline for the given number of seconds, then shuts down cleanly (EOS). Useful for benchmarking/automated testing.                    |
+| `--enable-watchdog`         | Monitors the pipeline for stalls (no frames processed for 5s) and automatically rebuilds it. Works with `--disable-callback`.                   |
+| `--log-level <level>`       | Set logging level: debug, info, warning, error, critical. Default: info. Can also use `--debug` for debug level.                                |
+| `--log-file <path>`         | Optional log file path for persistent logging. Also respects `$HAILO_LOG_FILE` environment variable.                                            |
 
 ### Standalone apps (Python + C++)
 
