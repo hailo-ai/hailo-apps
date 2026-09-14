@@ -1,5 +1,7 @@
 # Prerequisites
 
+> The most recent HailoRT version tested with Hailo-Apps is **v5.4.0**.
+
 Before installing Hailo-Apps, set up the Hailo software for your platform.
 
 <!-- tabs -->
