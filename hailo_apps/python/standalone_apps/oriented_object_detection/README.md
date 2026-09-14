@@ -33,7 +33,7 @@ This example currently supports only YoloV11-OBB model.
 ## Linux Installation
 
 Run this app in one of two ways:
-1. Standalone installation in a clean virtual environment (no TAPPAS required) — see [Option 1](#option-1-standalone-installation)
+1. Standalone installation in a clean virtual environment (no GStreamer required) — see [Option 1](#option-1-standalone-installation)
 2. From an installed `hailo-apps` repository — see [Option 2](#option-2-inside-an-installed-hailo-apps-repository)
 
 ### Option 1: Standalone Installation

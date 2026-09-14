@@ -13,14 +13,14 @@ This diagram visually represents our technology stack. Understanding this stack 
 ### Level 1: The GStreamer Framework
 At the base of our stack is **GStreamer**, a powerful open-source framework for creating streaming media applications. It provides a plugin-based architecture where elements are linked together to form a pipeline that defines a data flow. For more information, you can visit the [GStreamer official documentation](https://gstreamer.freedesktop.org/documentation/).
 
-### Level 2: Hailo's Tappas C/C++ GStreamer Plugins
-On top of GStreamer, we use **Hailo's Tappas** plugins. This is a library of C/C++ GStreamer elements specifically designed to interface with the Hailo AI accelerator. These high-performance elements are the bridge between the GStreamer framework and the Hailo hardware.
+### Level 2: Hailo's GStreamer Plugins (TAPPAS)
+On top of GStreamer, we use **Hailo's C/C++ GStreamer plugins**. This is a library of GStreamer elements specifically designed to interface with the Hailo AI accelerator. These high-performance elements are the bridge between the GStreamer framework and the Hailo hardware.
 
-#### Core Tappas GStreamer Elements
+#### Core GStreamer Elements
 The framework provides many specialized GStreamer elements.
 
 <details>
-<summary><strong>Click to see the list of Core Tappas Elements</strong></summary>
+<summary><strong>Click to see the list of Core GStreamer Elements</strong></summary>
 
 *   **AI/ML Processing Elements**
     *   **[HailoNet](https://github.com/hailo-ai/tappas/blob/master/docs/elements/hailo_net.rst)**: Runs neural network inference on input video frames using a Hailo device.(This element is released as part of HailoRT)
@@ -54,7 +54,7 @@ For optimizing and debugging your GStreamer pipelines, we recommend using **GstS
 See our [GstShark Debugging Guide](debugging_with_gst_shark.md) for installation and usage instructions.
 
 ### Level 3: Hailo Apps Python Layer
-This layer is developed in this repository to simplify the process of building and running applications on top of the GStreamer and TAPPAS foundation. It consists of three main components:
+This layer is developed in this repository to simplify the process of building and running applications on top of the GStreamer foundation. It consists of three main components:
 *   **The Application Runner (`gstreamer_app.py`)**: This component features the `GStreamerApp` class, which serves as the core engine of the application. It is responsible for managing the pipeline's lifecycle, handling bus messages (such as errors or End-Of-Stream), and integrating your Python callback functions.
 *   **The Pipeline Factory (`gstreamer_helper_pipelines.py`)**: This module provides a set of Python functions that facilitate the creation of GStreamer pipeline strings in a modular and easily understandable manner. For a comprehensive reference of all available helper functions, see the [GStreamer Helper Pipelines Reference](./gstreamer_helper_pipelines.md).
 *   **Hailo Pipelines**: These are pre-configured, ready-to-use AI pipelines that leverage the helper functions from the factory to form complete, executable applications for common scenarios like object detection or pose estimation. You can connect to their outputs with a simple callback, allowing you to easily integrate custom logic or processing steps.

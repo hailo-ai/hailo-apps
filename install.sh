@@ -28,6 +28,13 @@ readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 readonly TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 readonly CONFIG_FILE="${SCRIPT_DIR}/hailo_apps/config/config.yaml"
 
+# TAPPAS Core GStreamer resources (auto-downloaded when missing, unless --skip-gstreamer)
+readonly TAPPAS_RESOURCES_VERSION="5.4.0"
+readonly TAPPAS_DEB_URL_AMD64="https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/installation_files/v${TAPPAS_RESOURCES_VERSION}/hailo-tappas-core_${TAPPAS_RESOURCES_VERSION}_amd64.deb"
+readonly TAPPAS_DEB_URL_ARM64="https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/installation_files/v${TAPPAS_RESOURCES_VERSION}/hailo-tappas-core_${TAPPAS_RESOURCES_VERSION}_arm64.deb"
+readonly TAPPAS_WHL_URL="https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/installation_files/v${TAPPAS_RESOURCES_VERSION}/hailo_tappas_core_python_binding-${TAPPAS_RESOURCES_VERSION}-py3-none-any.whl"
+readonly TAPPAS_DOWNLOAD_DIR="/tmp/hailo_tappas_download"
+
 # Log file path (not readonly - may be updated if log dir not writable)
 LOG_DIR="${SCRIPT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/install_${TIMESTAMP}.log"
@@ -55,7 +62,7 @@ DRY_RUN=false
 FORCE_CLEANUP=false
 NO_INSTALL=false
 NO_SYSTEM_PYTHON=false
-NO_TAPPAS_REQUIRED=false
+SKIP_GSTREAMER=false
 PYHAILORT_PATH=""
 PYTAPPAS_PATH=""
 
@@ -623,7 +630,7 @@ ${BOLD}OPTIONS:${NC}
     --all                       Download all available models/resources
     -x, --no-install            Skip Python package installation
     --no-system-python          Don't use system site-packages in venv
-    --no-tappas-required        Skip TAPPAS checks, Python TAPPAS install, compile, and post_install
+    --skip-gstreamer             Skip TAPPAS checks, Python TAPPAS install, compile, and post_install
                                 (downloads resources directly, no C++ compilation)
     --dry-run                   Show what would be done without executing
     --force-cleanup             Run cleanup script before installation (removes venv,
@@ -650,11 +657,13 @@ ${BOLD}REQUIREMENTS:${NC}
     - Must be run with sudo (not as root directly)
     - Hailo PCI driver must be installed (.deb)
     - HailoRT must be installed (.deb)
-    - TAPPAS Core must be installed (.deb) — unless --no-tappas-required
     - HailoRT Python binding must be installed (.whl)
-    - TAPPAS Core Python binding must be installed (.whl) — unless --no-tappas-required
 
-    Download all required packages from the Hailo Developer Zone:
+    Unless --skip-gstreamer is passed, TAPPAS Core (.deb) and its Python
+    binding (.whl) are downloaded and installed automatically (v${TAPPAS_RESOURCES_VERSION})
+    if not already present. Use --pytappas to supply a custom wheel instead.
+
+    Download the Hailo driver and HailoRT packages from the Hailo Developer Zone:
     https://hailo.ai/developer-zone/
 
 EOF
@@ -692,8 +701,8 @@ parse_arguments() {
                 USE_SYSTEM_SITE_PACKAGES=false
                 shift
                 ;;
-            --no-tappas-required)
-                NO_TAPPAS_REQUIRED=true
+            --skip-gstreamer)
+                SKIP_GSTREAMER=true
                 shift
                 ;;
             --force-cleanup)
@@ -761,6 +770,102 @@ detect_user_and_group() {
 }
 
 #===============================================================================
+# TAPPAS GSTREAMER RESOURCES (auto-download)
+#===============================================================================
+
+# Download a file from a URL to a destination path using curl or wget
+download_file() {
+    local url="$1"
+    local dest="$2"
+
+    if command_exists curl; then
+        curl -fsSL --retry 3 --connect-timeout 15 -o "$dest" "$url"
+    elif command_exists wget; then
+        wget -q --tries=3 --timeout=15 -O "$dest" "$url"
+    else
+        log_error "Neither curl nor wget is available to download files"
+        return 1
+    fi
+}
+
+# Download and install the TAPPAS Core .deb (matching host architecture) and
+# the TAPPAS Core Python binding .whl, unless already installed/provided.
+ensure_gstreamer_resources() {
+    if [[ "${SKIP_GSTREAMER}" == true ]]; then
+        log_debug "Skipping TAPPAS GStreamer resources (--skip-gstreamer)"
+        return 0
+    fi
+
+    log_info "Checking TAPPAS GStreamer resources (v${TAPPAS_RESOURCES_VERSION})..."
+
+    # Detect architecture (amd64/arm64) for the correct .deb
+    local arch
+    arch="$(dpkg --print-architecture 2>/dev/null || true)"
+    if [[ -z "$arch" ]]; then
+        case "$(uname -m)" in
+            x86_64) arch="amd64" ;;
+            aarch64|arm64) arch="arm64" ;;
+            *) arch="$(uname -m)" ;;
+        esac
+    fi
+
+    # --- TAPPAS Core .deb ---
+    if dpkg -l 2>/dev/null | grep -qE "^ii\s+(hailo-apps-core|hailo-tappas-core|hailo-tappas|tappas-core|tappas)\b"; then
+        log_success "TAPPAS Core already installed, skipping download"
+    else
+        local deb_url=""
+        case "$arch" in
+            amd64) deb_url="${TAPPAS_DEB_URL_AMD64}" ;;
+            arm64) deb_url="${TAPPAS_DEB_URL_ARM64}" ;;
+            *)
+                log_error "No TAPPAS Core package available for architecture: ${arch}"
+                log_error "Install hailo-tappas-core manually or use --skip-gstreamer"
+                return 1
+                ;;
+        esac
+
+        local deb_path="${TAPPAS_DOWNLOAD_DIR}/$(basename "$deb_url")"
+        mkdir -p "${TAPPAS_DOWNLOAD_DIR}"
+
+        log_info "Downloading TAPPAS Core (.deb, ${arch})..."
+        if ! download_file "$deb_url" "$deb_path"; then
+            log_error "Failed to download TAPPAS Core package: ${deb_url}"
+            return 1
+        fi
+
+        log_info "Installing TAPPAS Core package (this may take a while)..."
+        apt-get update -qq 2>/dev/null || log_warning "apt-get update had warnings (continuing anyway)"
+        if ! apt-get install -y "${deb_path}"; then
+            log_error "Failed to install TAPPAS Core package: ${deb_path}"
+            return 1
+        fi
+        log_success "TAPPAS Core installed"
+    fi
+
+    # --- TAPPAS Core Python binding .whl ---
+    if [[ -n "${PYTAPPAS_PATH}" ]]; then
+        log_debug "Custom PyTappas wheel provided (--pytappas ${PYTAPPAS_PATH}), skipping auto-download"
+        return 0
+    fi
+
+    local whl_path="${TAPPAS_DOWNLOAD_DIR}/$(basename "${TAPPAS_WHL_URL}")"
+    mkdir -p "${TAPPAS_DOWNLOAD_DIR}"
+
+    log_info "Downloading TAPPAS Core Python binding (.whl)..."
+    if ! download_file "${TAPPAS_WHL_URL}" "$whl_path"; then
+        log_error "Failed to download TAPPAS Core Python binding: ${TAPPAS_WHL_URL}"
+        return 1
+    fi
+
+    # Make readable by the original (non-root) user for the later pip install
+    chown "${ORIGINAL_USER}:${ORIGINAL_GROUP}" "$whl_path" 2>/dev/null || true
+    PYTAPPAS_PATH="$whl_path"
+    log_success "TAPPAS Core Python binding downloaded to ${whl_path}"
+
+    return 0
+}
+
+#===============================================================================
 # STEP 2: PREREQUISITES CHECK
 #===============================================================================
 
@@ -778,8 +883,16 @@ check_prerequisites() {
     if [[ "${DRY_RUN}" == true ]]; then
         log_dry_run "Running: ${check_script}"
         log_info "Would check: Hailo driver, HailoRT, TAPPAS, Python bindings"
+        log_dry_run "Would download/install TAPPAS Core .deb and Python binding .whl if missing (v${TAPPAS_RESOURCES_VERSION})"
         record_step_result "SKIPPED" "Dry-run mode"
         return 0
+    fi
+
+    # Auto-download and install TAPPAS Core (.deb) and Python binding (.whl)
+    # if not already present, before checking installed versions below.
+    if ! ensure_gstreamer_resources; then
+        record_step_result "FAILED" "TAPPAS GStreamer resources setup failed"
+        return 1
     fi
 
     # --- Get installed driver versions from dpkg (always available) ---
@@ -888,8 +1001,8 @@ check_prerequisites() {
         log_info "Detected versions:"
         log_info "  Driver: ${driver_type} ${driver_version}"
         log_info "  HailoRT: ${hailort_version}"
-        if [[ "${NO_TAPPAS_REQUIRED}" == true ]]; then
-            log_info "  TAPPAS: skipped (--no-tappas-required)"
+        if [[ "${SKIP_GSTREAMER}" == true ]]; then
+            log_info "  TAPPAS: skipped (--skip-gstreamer)"
         else
             log_info "  TAPPAS: ${tappas_version}"
         fi
@@ -897,7 +1010,7 @@ check_prerequisites() {
 
         # Validate TAPPAS combo
         local failed=false
-        if [[ "${NO_TAPPAS_REQUIRED}" == true ]]; then
+        if [[ "${SKIP_GSTREAMER}" == true ]]; then
             validate_versions "$hailort_version" "-1" "${HAILO_ARCH}" || failed=true
         else
             validate_versions "$hailort_version" "$tappas_version" "${HAILO_ARCH}" || failed=true
@@ -907,7 +1020,7 @@ check_prerequisites() {
         # Check required components
         local missing_components=()
         [[ "$pyhailort_version" == "-1" && -z "${PYHAILORT_PATH}" ]] && missing_components+=("HailoRT Python binding (.whl)")
-        if [[ "${NO_TAPPAS_REQUIRED}" != true ]]; then
+        if [[ "${SKIP_GSTREAMER}" != true ]]; then
             [[ "$tappas_version" == "-1" ]] && missing_components+=("TAPPAS Core (.deb)")
             [[ "$tappas_python_version" == "-1" && -z "${PYTAPPAS_PATH}" ]] && missing_components+=("TAPPAS Core Python binding (.whl)")
         fi
@@ -924,7 +1037,7 @@ check_prerequisites() {
             log_warning "The HailoRT deb and Python binding should have matching versions."
             failed=true
         fi
-        if [[ "${NO_TAPPAS_REQUIRED}" != true \
+        if [[ "${SKIP_GSTREAMER}" != true \
            && "$tappas_version" != "-1" && "$tappas_python_version" != "-1" \
            && "$tappas_version" != "$tappas_python_version" ]]; then
             log_warning "TAPPAS version mismatch: system package=$tappas_version, Python wheel=$tappas_python_version"
@@ -1218,7 +1331,7 @@ install_python_packages() {
         log_dry_run "source ${venv_activate}"
         log_dry_run "pip install --upgrade pip setuptools wheel"
         [[ -n "$PYHAILORT_PATH" ]] && log_dry_run "pip install '${PYHAILORT_PATH}'"
-        if [[ -n "$PYTAPPAS_PATH" && "${NO_TAPPAS_REQUIRED}" != true ]]; then
+        if [[ -n "$PYTAPPAS_PATH" && "${SKIP_GSTREAMER}" != true ]]; then
             log_dry_run "pip install '${PYTAPPAS_PATH}'"
         fi
         log_dry_run "pip install -e ."
@@ -1242,8 +1355,8 @@ install_python_packages() {
     fi
 
     if [[ -n "$PYTAPPAS_PATH" ]]; then
-        if [[ "${NO_TAPPAS_REQUIRED}" == true ]]; then
-            log_warning "Ignoring PyTappas wheel (--no-tappas-required): ${PYTAPPAS_PATH}"
+        if [[ "${SKIP_GSTREAMER}" == true ]]; then
+            log_warning "Ignoring PyTappas wheel (--skip-gstreamer): ${PYTAPPAS_PATH}"
             PYTAPPAS_PATH=""
         fi
     fi
@@ -1342,8 +1455,8 @@ run_post_install() {
     fix_ownership "${SCRIPT_DIR}"
     fix_ownership "${RESOURCES_ROOT}"
 
-    if [[ "${NO_TAPPAS_REQUIRED}" == true ]]; then
-        log_info "Running minimal post-installation (--no-tappas-required)"
+    if [[ "${SKIP_GSTREAMER}" == true ]]; then
+        log_info "Running minimal post-installation (--skip-gstreamer)"
         
         # Create resources symlink
         if ! setup_resources_symlink; then
@@ -1523,8 +1636,8 @@ verify_installation() {
 
     # Check TAPPAS binding
     echo -n "  📦 TAPPAS Core Python binding: "
-    if [[ "${NO_TAPPAS_REQUIRED}" == true ]]; then
-        echo -e "${YELLOW}⚠️  Skipped (--no-tappas-required)${NC}"
+    if [[ "${SKIP_GSTREAMER}" == true ]]; then
+        echo -e "${YELLOW}⚠️  Skipped (--skip-gstreamer)${NC}"
     else
         if run_as_user bash -c "source '${venv_activate}' && python3 -c 'import hailo'" 2>/dev/null; then
             echo -e "${GREEN}✅ OK${NC}"

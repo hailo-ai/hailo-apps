@@ -47,16 +47,16 @@ All packages must be installed **before** running `install.sh`. Download from th
 |---|---|---|
 | HailoRT PCIe Driver | .deb | All apps |
 | HailoRT | .deb | All apps |
-| TAPPAS Core | .deb | GStreamer pipeline apps |
+| GStreamer Runtime (TAPPAS Core) | .deb | GStreamer pipeline apps |
 | HailoRT Python Binding | .whl | All Python apps |
-| TAPPAS Core Python Binding | .whl | GStreamer pipeline apps |
+| GStreamer Python Binding (TAPPAS Core) | .whl | GStreamer pipeline apps |
 
-> **Tip:** Standalone and gen-ai apps do **not** require TAPPAS packages. Use `--no-tappas-required` with `install.sh` to skip them.
+> **Tip:** Standalone and gen-ai apps do **not** require the GStreamer packages above. Use `--skip-gstreamer` with `install.sh` to skip them.
 
 [Full installation Guide](./doc/user_guide/installation.md)
 
 ## Quick Start
-> **💡 Tip:** Standalone apps can be installed and run independently, they do **not** require `hailo-tappas-core` or installing the full Hailo-Apps repository.
+> **💡 Tip:** Standalone apps can be installed and run independently, they do **not** require GStreamer (`hailo-tappas-core`) or installing the full Hailo-Apps repository.
 
 ### Install Hailo-Apps
 

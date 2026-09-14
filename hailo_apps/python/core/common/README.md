@@ -222,14 +222,14 @@ rpi_available = is_rpi_camera_available()  # Returns True/False
 **Key Features**:
 - Hailo architecture detection (H8, H8L, H10H)
 - Host architecture detection (x86, ARM, Raspberry Pi)
-- Package version detection (HailoRT, Tappas)
+- Package version detection (HailoRT, GStreamer)
 - Installation validation utilities
 
 **Main Functions**:
 - `detect_hailo_arch()`: Auto-detect connected Hailo device architecture
 - `detect_host_arch()`: Detect host system architecture
 - `detect_hailort_version()`: Get installed HailoRT version
-- `detect_tappas_version()`: Get installed Tappas version
+- `detect_tappas_version()`: Get installed GStreamer (TAPPAS) version
 - `is_package_installed(pkg_name)`: Check if a package is installed
 
 **Usage Example**:
