@@ -1,238 +1,204 @@
 # Hailo-Apps Installation Guide
 
-Hailo-Apps supports four app types:
+## Before you begin
 
-| App type                                            | Location                                   | Installation               | Platforms                       |
-| --------------------------------------------------- | ------------------------------------------ | -------------------------- | ------------------------------- |
-| [GStreamer pipeline apps](#gstreamer-pipeline-apps) | `hailo_apps/python/pipeline_apps/`         | Full repository            | Ubuntu x86_64, Raspberry Pi 5   |
-| [Python standalone apps](#python-standalone-apps)   | `hailo_apps/python/standalone_apps/<app>/` | Full repository or per app | Linux, Windows                  |
-| [GenAI apps](#genai-apps)                           | `hailo_apps/python/gen_ai_apps/<app>/`     | Full repository or per app | Linux, Windows (Hailo-10H only) |
-| [C++ apps](#c-apps)                                 | `hailo_apps/cpp/<app>/`                    | Per app                    | Linux, Windows                  |
+Complete the [Prerequisites](./prerequisites.md) for your platform. This sets up HailoRT, the device driver, and any platform specific components required by Hailo Apps.
 
-Before continuing, complete the setup for your platform in the [Prerequisites guide](./prerequisites.md).
+## Clone Hailo-Apps
 
-* [GStreamer pipeline apps](#gstreamer-pipeline-apps)
-* [Python standalone apps](#python-standalone-apps)
-* [GenAI apps](#genai-apps)
-* [C++ apps](#c-apps)
-* [Troubleshooting](#troubleshooting)
-* [Uninstall](#uninstall)
-
----
-
-## GStreamer pipeline apps
-
-GStreamer pipeline apps use the full Hailo-Apps installation and are supported on **Ubuntu x86_64** (including the Hailo AI Software Suite Docker) and **Raspberry Pi 5**.
-
-`install.sh` sets up the Python environment, installs the required GStreamer components, compiles the post-processing libraries, and downloads the default models.
-
-### Ubuntu x86_64 / Hailo AI Software Suite Docker
-
-Clone the repository:
+The Hailo Apps repository is required for all installation methods:
 
 ```bash
 git clone https://github.com/hailo-ai/hailo-apps.git
 cd hailo-apps
 ```
 
-On a **clean Ubuntu installation**, provide the PyHailoRT wheel downloaded during the prerequisite setup:
+## Choose an installation type
+
+Choose the installation method based on whether you want a shared Hailo Apps installation, a dedicated setup for a single Python app, or a C++ build:
+
+| Installation type                                                 | Use for                             | Platforms                     |
+| ----------------------------------------------------------------- | ----------------------------------- | ----------------------------- |
+| [Shared Hailo Apps installation](#shared-hailo-apps-installation) | GStreamer, standalone Python, GenAI | Ubuntu x86_64, Raspberry Pi 5 |
+| [Per-app Python installation](#per-app-python-installation)       | Standalone Python, GenAI            | Linux, Windows                |
+| [C++ app installation](#c-app-installation)                       | C++ apps                            | Linux, Windows                |
+
+> GStreamer pipeline apps are only supported by the shared Hailo Apps installation.
+
+---
+
+## Shared Hailo Apps installation
+
+Use this option to install a single Hailo Apps environment used by multiple apps.
+
+It supports:
+
+* GStreamer pipeline apps
+* Python standalone apps
+* GenAI apps
+
+For **Hailo AI Software Suite Docker** and **Raspberry Pi 5**:
+
+```bash
+sudo ./install.sh
+```
+
+For a **clean Python environment on Ubuntu x86_64**, provide the PyHailoRT wheel downloaded during the prerequisite setup:
 
 ```bash
 sudo ./install.sh --pyhailort /path/to/hailort-*.whl
 ```
 
-When using the **Hailo AI Software Suite Docker**, PyHailoRT is already available:
+### Without GStreamer
 
-```bash
-sudo ./install.sh
-```
-
-### Raspberry Pi 5
-
-After completing the [Raspberry Pi prerequisites](./prerequisites.md#step1-rpi):
-
-```bash
-git clone https://github.com/hailo-ai/hailo-apps.git
-cd hailo-apps
-
-sudo ./install.sh
-```
-
-### Run
-
-In every new terminal:
-
-```bash
-source setup_env.sh
-```
-
-For example:
-
-```bash
-hailo-detect-simple
-```
-
-### Models and resources
-
-`install.sh` downloads the default resources automatically. **No additional download is required.**
-
-Models are stored under `/usr/local/hailo/resources/`.
-
-Optionally, use `hailo-download-resources` to manage resources:
-
-| Option             | Description                       |
-| ------------------ | --------------------------------- |
-| `--group <app>`    | Download resources for one app    |
-| `--all`            | Download all models               |
-| `--include-gen-ai` | Include GenAI models with `--all` |
-| `--list-models`    | List available models             |
-| `--dry-run`        | Preview downloads                 |
-
-
----
-
-## Python standalone apps
-
-Standalone apps under `hailo_apps/python/standalone_apps/<app>/` do not require GStreamer.
-
-### Shared Hailo-Apps environment
-
-Clone the repository if you have not already:
-
-```bash
-git clone https://github.com/hailo-ai/hailo-apps.git
-cd hailo-apps
-```
-
-To install Hailo-Apps for standalone apps only:
+If you only need Python standalone or GenAI apps:
 
 ```bash
 sudo ./install.sh --skip-gstreamer
 ```
 
-If you already installed Hailo-Apps using `install.sh`, you can use the existing environment instead.
-
-Activate the environment and run an app:
+For a clean Python environment on Ubuntu x86_64:
 
 ```bash
-source setup_env.sh
+sudo ./install.sh --pyhailort /path/to/hailort-*.whl --skip-gstreamer
+```
 
+---
+
+## Per-app Python installation
+
+Use this option to run a single **Python standalone** or **GenAI** app without installing the shared Hailo Apps environment.
+
+The example below uses the `object_detection` standalone app.
+
+### Ubuntu x86_64
+
+For a **clean Python environment on Ubuntu x86_64**, create a virtual environment:
+
+```bash
 cd hailo_apps/python/standalone_apps/object_detection
-./object_detection.py -n yolov8n -i usb
-```
-
-Install any additional app-specific dependencies with:
-
-```bash
-pip install -r requirements.txt
-```
-
-### Per-app environment
-
-If you only need one app, you can create a dedicated environment instead of installing the shared Hailo-Apps environment.
-
-
-#### Ubuntu x86_64 / Hailo AI Software Suite Docker
-
-```bash
-git clone https://github.com/hailo-ai/hailo-apps.git
-cd hailo-apps/hailo_apps/python/standalone_apps/object_detection
 
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-On a **clean Ubuntu installation**, install the PyHailoRT wheel downloaded during the prerequisite setup:
+Install the PyHailoRT wheel downloaded during the prerequisite setup, followed by the app dependencies:
 
 ```bash
 pip install /path/to/hailort-*.whl
+pip install -r requirements.txt
 ```
 
-Skip this step when using the **Hailo AI Software Suite Docker**.
-
-Then:
+When using the **Hailo AI Software Suite Docker**, PyHailoRT is already available in the container, so a separate virtual environment is not required. Install only the app specific dependencies:
 
 ```bash
+cd hailo_apps/python/standalone_apps/object_detection
+
 pip install -r requirements.txt
+```
+
+Run the app:
+
+```bash
 ./object_detection.py -n yolov8n -i usb
 ```
 
-#### Windows
+### Windows
+
+Create a virtual environment:
 
 ```powershell
-git clone https://github.com/hailo-ai/hailo-apps.git
-cd hailo-apps\hailo_apps\python\standalone_apps\object_detection
+cd hailo_apps\python\standalone_apps\object_detection
 
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+```
 
+Install the PyHailoRT wheel provided by the HailoRT Windows installation and the app dependencies:
+
+```powershell
 pip install "C:\Program Files\HailoRT\python\hailort-*.whl"
 pip install -r requirements.txt
+```
 
+Run the app:
+
+```powershell
 python .\object_detection.py -n yolov8n -i 0
 ```
 
-#### Raspberry Pi 5
+### Raspberry Pi 5
 
-After completing the [Raspberry Pi prerequisites](./prerequisites.md#step1-rpi):
+Create a virtual environment with access to the Hailo packages installed during the prerequisite setup:
 
 ```bash
-git clone https://github.com/hailo-ai/hailo-apps.git
-cd hailo-apps/hailo_apps/python/standalone_apps/object_detection
+cd hailo_apps/python/standalone_apps/object_detection
 
 python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 
 pip install -r requirements.txt
+```
+
+Run the app:
+
+```bash
 ./object_detection.py -n yolov8n -i rpi
 ```
 
-Replace `object_detection` with the desired app directory.
+Replace `object_detection` with the directory of the app you want to run.
 
 Models are downloaded automatically on first use.
 
----
+### GenAI apps
 
-## GenAI apps
+GenAI apps use the same per-app setup. Use the corresponding app directory under:
 
-GenAI apps are located under `hailo_apps/python/gen_ai_apps/<app>/` and require **Hailo-10H**.
-
-You can use either the shared Hailo-Apps environment or a dedicated environment, as described for [Python standalone apps](#python-standalone-apps).
-
-From the repository root, install the additional GenAI dependencies:
-
-```bash
-pip install -e ".[gen-ai]"
+```text
+hailo_apps/python/gen_ai_apps/<app>/
 ```
 
+GenAI apps require **Hailo-10H**. See the app's README for any additional dependencies or run instructions.
 
 ---
 
-## C++ apps
+## C++ app installation
 
-C++ apps are located under `hailo_apps/cpp/<app>/` and do not require a Python environment.
+C++ apps are located under:
 
-Clone the repository with its submodules:
-
-```bash
-git clone --recurse-submodules https://github.com/hailo-ai/hailo-apps.git
+```text
+hailo_apps/cpp/<app>/
 ```
 
-On Linux:
+They do not require a Python environment.
+
+The build uses system-installed `yaml-cpp` and `libcurl` if available:
 
 ```bash
-cd hailo-apps/hailo_apps/cpp/object_detection
+sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+```
+
+Otherwise, initialize the submodules to build them from source instead:
+
+```bash
+git submodule update --init --recursive
+```
+
+### Linux
+
+```bash
+cd hailo_apps/cpp/object_detection
 ./build.sh
 ```
 
-On Windows:
+### Windows
 
 ```powershell
-cd hailo-apps\hailo_apps\cpp\object_detection
+cd hailo_apps\cpp\object_detection
 .\build.ps1
 ```
 
-See each app's README for its dependencies and run command.
+See each app's README for its dependencies and run instructions.
 
 ---
 
@@ -262,22 +228,24 @@ export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1
 
 ---
 
+## Upgrade
+
+From the repository root:
+
+```bash
+git pull
+sudo ./install.sh --force-cleanup
+```
+
+---
+
 ## Uninstall
 
-For a full Hailo-Apps installation:
+For a shared Hailo Apps installation:
 
 ```bash
 deactivate
 sudo rm -rf venv_hailo_apps/ /usr/local/hailo
 ```
 
-For a standalone app, delete its `.venv` directory.
-
-To remove HailoRT or other platform components, refer to the corresponding platform documentation.
-
-## Upgrade
-
-```bash
-git pull
-sudo ./install.sh --force-cleanup
-```
+For a per-app installation, delete the app's `.venv` directory.

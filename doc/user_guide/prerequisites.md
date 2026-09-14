@@ -1,80 +1,71 @@
 # Prerequisites
 
-> The most recent HailoRT version tested with Hailo-Apps is **v5.4.0**.
+> The most recent HailoRT version tested with Hailo Apps is v5.4.0.
 
-Before installing Hailo-Apps, set up the Hailo software for your platform.
+Set up the Hailo software for your platform before installing Hailo Apps.
 
-<!-- tabs -->
+* [Ubuntu x86_64](#ubuntu-x86_64)
+* [Windows](#windows)
+* [Raspberry Pi 5](#raspberry-pi-5)
 
-<a id="step1-ubuntu"></a>
+## Ubuntu x86_64
 
-**Clean Ubuntu x86_64**
+Choose the setup based on where you want Hailo Apps to run.
 
-Download the following packages from the [Hailo Developer Zone](https://hailo.ai/developer-zone/):
+[**Hailo AI Software Suite Docker**](#hailo-ai-software-suite-docker) is the simpler option if you want an isolated environment with HailoRT, PyHailoRT, and the required GStreamer components already available inside the container.
 
-* HailoRT PCIe driver (`.deb`)
-* HailoRT (`.deb`)
-* PyHailoRT (`.whl`)
+[**Install HailoRT directly on Ubuntu**](#install-hailort-directly-on-ubuntu) if you want Hailo Apps to run directly on the host system.
 
-Install the driver and HailoRT:
+### Install HailoRT directly on Ubuntu
 
-```bash id="6ggvdx"
-sudo dpkg -i hailort-pcie-driver_<version>_all.deb
-sudo dpkg -i hailort_<version>_amd64.deb
+Follow the **HailoRT installation instructions** in the [Hailo documentation](https://hailo.ai/developer-zone/documentation/?product=accelerators&device=hailo_8&category=sw) to install:
+
+* HailoRT PCIe driver
+* HailoRT
+* PyHailoRT
+
+Keep the downloaded PyHailoRT wheel, as it is required later when setting up a clean Python environment during the [Hailo Apps installation](./installation.md).
+
+The wheel has a name similar to:
+
+```text id="14etvz"
+hailort-<version>-cp<py>-cp<py>-linux_x86_64.whl
 ```
 
-Keep the PyHailoRT wheel (`hailort-<version>-cp<py>-cp<py>-linux_x86_64.whl`) for the Hailo-Apps installation step.
+### Hailo AI Software Suite Docker
 
-> **GStreamer pipeline apps:** TAPPAS Core and its Python binding are installed automatically by `install.sh`. No manual installation is required. To use a custom PyTAPPAS wheel, pass `--pytappas /path/to/wheel` to `install.sh`.
+Follow the **Hailo AI Software Suite installation instructions** in the [Hailo documentation](https://hailo.ai/developer-zone/documentation/?product=accelerators&device=hailo_8&category=sw).
 
-<a id="step1-suite-docker"></a>
+The HailoRT PCIe driver must be installed on the host. HailoRT, PyHailoRT, and the required GStreamer components are already available inside the Suite container.
 
-**Hailo AI Software Suite Docker**
+## Windows
 
-Install the HailoRT PCIe driver on the host as described in the [Hailo AI Software Suite documentation](https://hailo.ai/developer-zone/).
+> Windows supports Python standalone, GenAI, and C++ apps. GStreamer pipeline apps are not supported.
 
-HailoRT and the GStreamer components are already available inside the Suite container. `install.sh` installs any additional system packages required by Hailo-Apps.
+Follow the **HailoRT Windows installation instructions** in the [Hailo documentation](https://hailo.ai/developer-zone/documentation/?product=accelerators&device=hailo_8&category=sw) and install the **HailoRT Windows MSI**.
 
-<a id="step1-windows"></a>
+During **Custom Setup**, make sure **PyHailoRT** is selected.
 
-**Windows**
+The PyHailoRT wheel can be found under:
 
-> Windows supports Python standalone and C++ apps. GStreamer pipeline apps are not supported.
-
-1. Download and run the **HailoRT Windows MSI** from the [Hailo Developer Zone](https://hailo.ai/developer-zone/).
-2. In **Custom Setup**, make sure **PyHailoRT** is selected.
-3. After installation, the Python wheel is available under:
-
-   ```text
-   C:\Program Files\HailoRT\python\hailort-*.whl
-   ```
-
-   Keep this wheel for the Python app installation.
-
-<a id="step1-rpi"></a>
-
-**Raspberry Pi 5**
-
-Set up the AI Kit / AI HAT+ as described in the [Raspberry Pi AI documentation](https://www.raspberrypi.com/documentation/computers/ai.html#getting-started).
-
-Then install the Hailo software stack:
-
-```bash id="oh5d8e"
-sudo apt update && sudo apt full-upgrade
-sudo apt install hailo-all
-sudo reboot
+```text id="pmmfpi"
+C:\Program Files\HailoRT\python\hailort-*.whl
 ```
 
-`hailo-all` installs the HailoRT driver, runtime, GStreamer components, and Python bindings. No additional Hailo packages need to be installed manually.
+This wheel is used during the [per-app Python installation](./installation.md#per-app-python-installation).
 
-<!-- /tabs -->
+## Raspberry Pi 5
+
+Set up the AI Kit or AI HAT+ by following the [Raspberry Pi AI documentation](https://www.raspberrypi.com/documentation/computers/ai.html#getting-started).
+
+The recommended setup uses the `hailo-all` package, which installs the HailoRT driver and runtime, GStreamer components, and Python bindings.
 
 ## Verify the installation
 
 Confirm that the Hailo device is detected:
 
-```bash id="q2ytsj"
+```bash id="k7z0g1"
 hailortcli fw-control identify
 ```
 
-Once the device is detected, continue to the [Installation Guide](./installation.md#step-2-install-by-app-type).
+Once the device is detected, continue to the [Hailo Apps Installation Guide](./installation.md).
