@@ -236,6 +236,19 @@ as_original_user() {
     fi
 }
 
+# Extract the version number (e.g. 4.24.0) from a wheel filename such as
+# hailort-4.24.0-cp312-cp312-linux_x86_64.whl
+extract_wheel_version() {
+    local whl="$1"
+    local name
+    name="$(basename "$whl")"
+    if [[ "$name" =~ -([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+    else
+        echo ""
+    fi
+}
+
 # Fix ownership of files/directories to original user and group
 fix_ownership() {
     local target="$1"
@@ -988,6 +1001,26 @@ check_prerequisites() {
                 tappas-python) tappas_python_version="$value" ;;
             esac
         done
+
+        # If the user supplied an explicit wheel via --pyhailort/--pytappas, that
+        # wheel is what will actually be installed later (Step 6), so its version
+        # takes precedence over whatever pyhailort/tappas-python happens to be
+        # detected right now (which may be stale or absent since the venv/wheel
+        # install hasn't happened yet at this point in the flow).
+        if [[ -n "${PYHAILORT_PATH}" ]]; then
+            local whl_ver
+            whl_ver="$(extract_wheel_version "${PYHAILORT_PATH}")"
+            if [[ -n "$whl_ver" ]]; then
+                pyhailort_version="$whl_ver"
+            fi
+        fi
+        if [[ -n "${PYTAPPAS_PATH}" ]]; then
+            local whl_ver
+            whl_ver="$(extract_wheel_version "${PYTAPPAS_PATH}")"
+            if [[ -n "$whl_ver" ]]; then
+                tappas_python_version="$whl_ver"
+            fi
+        fi
 
         # Load valid combinations for detected arch
         MODEL_ZOO_VER=$(get_model_zoo_version "${HAILO_ARCH}")
