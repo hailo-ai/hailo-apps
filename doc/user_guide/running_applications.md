@@ -14,15 +14,6 @@ If you installed only a standalone app independently, you can skip this step and
 source setup_env.sh
 ```
 
-## Useful CLI Utilities
-
-| Command | Purpose |
-| --- | --- |
-| `get-usb-camera` | Detect and print available USB camera devices. |
-| `hailo-download-resources` | Download/update model resources (by app group, model, or architecture). |
-| `hailo-post-install` | Complete post-install setup (resources + postprocess compilation). |
-| `hailo-audio-troubleshoot` | Audio diagnostics utility for voice workflows. |
-
 
 ## Available Applications
 
@@ -156,3 +147,12 @@ pip install -e ".[gen-ai]"
 - C++ standalone apps: build/run from each app folder (`./build.sh`).
 
 For C++ overview, see [CPP Examples README](../../hailo_apps/cpp/README.md).
+
+## Useful CLI Utilities
+
+| Command | Purpose |
+| --- | --- |
+| `get-usb-camera` | Detect and print available USB camera devices. |
+| `hailo-download-resources` | Download/update model resources (by app group, model, or architecture). |
+| `hailo-post-install` | Complete post-install setup (resources + postprocess compilation). |
+| `hailo-audio-troubleshoot` | Audio diagnostics utility for voice workflows. |

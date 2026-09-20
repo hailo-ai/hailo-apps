@@ -59,13 +59,15 @@ Activate it in **every new terminal session** before running apps:
 source setup_env.sh
 ```
 
+To verify the install, [run an application](running_applications.md).
+
 ---
 
 ## Per-app Python installation
 
 Use this option to run a single **Python standalone** or **GenAI** app without installing the shared Hailo Apps environment.
 
-The example below uses the `object_detection` standalone app.
+The example below uses the [`object_detection`](../../hailo_apps/python/standalone_apps/object_detection/README.md) standalone app; running it also verifies the install.
 
 ### Ubuntu x86_64
 
@@ -179,6 +181,8 @@ Otherwise, initialize the submodules to build them from source instead:
 ```bash
 git submodule update --init --recursive
 ```
+
+Building and running an app (e.g. [object_detection](../../hailo_apps/cpp/object_detection/README.md)) verifies the install.
 
 ### Linux
 
