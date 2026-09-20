@@ -49,18 +49,14 @@ For a **clean Python environment on Ubuntu x86_64**, provide the PyHailoRT wheel
 sudo ./install.sh --pyhailort /path/to/hailort-*.whl
 ```
 
-### Without GStreamer
+Add `--skip-gstreamer` if you only need Python standalone or GenAI apps.
 
-If you only need Python standalone or GenAI apps:
+### Activate the environment
 
-```bash
-sudo ./install.sh --skip-gstreamer
-```
-
-For a clean Python environment on Ubuntu x86_64:
+Activate it in **every new terminal session** before running apps:
 
 ```bash
-sudo ./install.sh --pyhailort /path/to/hailort-*.whl --skip-gstreamer
+source setup_env.sh
 ```
 
 ---
