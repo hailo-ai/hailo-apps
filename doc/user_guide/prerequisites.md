@@ -12,7 +12,7 @@ Set up the Hailo software for your platform before installing Hailo Apps.
 
 Choose the setup based on where you want Hailo Apps to run.
 
-[**Hailo AI Software Suite Docker**](#hailo-ai-software-suite-docker) is the simpler option if you want an isolated environment with HailoRT, PyHailoRT, and the required GStreamer components already available inside the container.
+[**Hailo AI Software Suite Docker**](#hailo-ai-software-suite-docker) or the [**HailoRT Docker container**](#hailort-docker-container) are the simpler options if you want an isolated environment with HailoRT and PyHailoRT already available inside the container. The Suite Docker also includes the required GStreamer components.
 
 [**Install HailoRT directly on Ubuntu**](#install-hailort-directly-on-ubuntu) if you want Hailo Apps to run directly on the host system.
 
@@ -37,6 +37,18 @@ hailort-<version>-cp<py>-cp<py>-linux_x86_64.whl
 Follow the **Hailo AI Software Suite installation instructions** in the [Hailo documentation](https://hailo.ai/developer-zone/documentation/?product=accelerators&device=hailo_8&category=sw).
 
 The HailoRT PCIe driver must be installed on the host. HailoRT, PyHailoRT, and the required GStreamer components are already available inside the Suite container.
+
+### HailoRT Docker container
+
+Follow the **HailoRT Docker installation instructions** in the [Hailo documentation](https://hailo.ai/developer-zone/documentation/?product=accelerators&device=hailo_8&category=sw).
+
+The HailoRT PCIe driver must be installed on the host. HailoRT and PyHailoRT are already available inside the container.
+
+> Minimal Docker images (Suite Docker or HailoRT Docker container) may not include `git`, `curl`, or `wget`, which are required to clone the repository and download resources. Install them before proceeding:
+>
+> ```bash
+> apt-get update && apt-get install -y git curl wget
+> ```
 
 ## Windows
 

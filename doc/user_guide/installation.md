@@ -37,7 +37,7 @@ It supports:
 * Python standalone apps
 * GenAI apps
 
-For **Hailo AI Software Suite Docker** and **Raspberry Pi 5**:
+For **Hailo AI Software Suite Docker**, **HailoRT Docker container**, and **Raspberry Pi 5**:
 
 ```bash
 sudo ./install.sh
@@ -87,7 +87,7 @@ pip install /path/to/hailort-*.whl
 pip install -r requirements.txt
 ```
 
-When using the **Hailo AI Software Suite Docker**, PyHailoRT is already available in the container, so a separate virtual environment is not required. Install only the app specific dependencies:
+When using the **Hailo AI Software Suite Docker** or the **HailoRT Docker container**, PyHailoRT is already available in the container, so a separate virtual environment is not required. Install only the app specific dependencies:
 
 ```bash
 cd hailo_apps/python/standalone_apps/object_detection
