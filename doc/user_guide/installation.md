@@ -321,7 +321,7 @@ Before running hailo-apps, you need to install the Hailo runtime packages. The i
 
 > **Supported versions:**
 > - **Hailo-8 / Hailo-8L:** HailoRT 4.23, TAPPAS Core 5.1.0
-> - **Hailo-10H:** HailoRT 5.1.1, 5.2.0 & 5.3.0, TAPPAS Core 5.1.0, 5.2.0 & 5.3.0
+> - **Hailo-10H:** HailoRT 5.1.1, 5.2.0, 5.3.0 & 5.4.0, TAPPAS Core 5.1.0, 5.2.0, 5.3.0 & 5.4.0
 
 ---
 

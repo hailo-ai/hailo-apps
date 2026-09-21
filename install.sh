@@ -360,10 +360,13 @@ get_model_zoo_version() {
             ;;
         hailo10h)
             # H10: Derive from HailoRT version
+            # HailoRT 5.4.x -> Model Zoo v5.4.0
             # HailoRT 5.3.x -> Model Zoo v5.3.0
             # HailoRT 5.2.x -> Model Zoo v5.2.0
             # HailoRT 5.1.x (default) -> Model Zoo v5.1.0
-            if [[ "$hailort_ver" == 5.3.* ]]; then
+            if [[ "$hailort_ver" == 5.4.* ]]; then
+                mz_version="v5.4.0"
+            elif [[ "$hailort_ver" == 5.3.* ]]; then
                 mz_version="v5.3.0"
             elif [[ "$hailort_ver" == 5.2.* ]]; then
                 mz_version="v5.2.0"
