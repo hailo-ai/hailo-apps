@@ -846,14 +846,12 @@ ensure_gstreamer_resources() {
             return 1
         fi
 
-        log_info "Installing TAPPAS Core package..."
-
-        if ! dpkg -i "${deb_path}"; then
+        log_info "Installing TAPPAS Core package"
+        apt-get update -qq 2>/dev/null || log_warning "apt-get update had warnings (continuing anyway)"
+        if ! apt-get install -y "${deb_path}"; then
             log_error "Failed to install TAPPAS Core package: ${deb_path}"
-            log_error "The package may have missing dependencies."
             return 1
         fi
-
         log_success "TAPPAS Core installed"
     fi
 
