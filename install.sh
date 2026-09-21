@@ -66,6 +66,12 @@ SKIP_GSTREAMER=false
 PYHAILORT_PATH=""
 PYTAPPAS_PATH=""
 
+# Reuse PyHailoRT from the HailoRT Docker image when available.
+# The HailoRT release container installs hailo_platform in this dedicated venv.
+CONTAINER_PYHAILORT_VENV="${CONTAINER_PYHAILORT_VENV:-/local/workspace/hailo_platform_venv}"
+CONTAINER_PYHAILORT_SITE_PACKAGES=""
+CONTAINER_PYHAILORT_VERSION=""
+
 # Configuration variables (populated from config.yaml)
 VENV_NAME=""
 DOWNLOAD_GROUP=""
@@ -281,6 +287,45 @@ run_as_user() {
 # Check if a command exists
 command_exists() {
     command -v "$1" &>/dev/null
+}
+
+# Detect PyHailoRT preinstalled in the HailoRT Docker image.
+# This is intentionally separate from system site-packages: the release image
+# keeps hailo_platform in /local/workspace/hailo_platform_venv.
+detect_container_pyhailort() {
+    local pyhailort_python="${CONTAINER_PYHAILORT_VENV}/bin/python3"
+
+    CONTAINER_PYHAILORT_SITE_PACKAGES=""
+    CONTAINER_PYHAILORT_VERSION=""
+
+    if [[ ! -x "${pyhailort_python}" ]]; then
+        return 1
+    fi
+
+    if ! "${pyhailort_python}" -c 'import hailo_platform' >/dev/null 2>&1; then
+        return 1
+    fi
+
+    CONTAINER_PYHAILORT_SITE_PACKAGES=$(
+        "${pyhailort_python}" -c 'import site; print(site.getsitepackages()[0])' 2>/dev/null
+    ) || true
+
+    if [[ -z "${CONTAINER_PYHAILORT_SITE_PACKAGES}" \
+       || ! -d "${CONTAINER_PYHAILORT_SITE_PACKAGES}" ]]; then
+        CONTAINER_PYHAILORT_SITE_PACKAGES=""
+        return 1
+    fi
+
+    # The PyHailoRT wheel/distribution is named "hailort". If distribution
+    # metadata is unavailable, the caller can fall back to the HailoRT .deb
+    # version that was already detected.
+    CONTAINER_PYHAILORT_VERSION=$(
+        "${pyhailort_python}" -c \
+            'import importlib.metadata as m; print(m.version("hailort"))' \
+            2>/dev/null
+    ) || true
+
+    return 0
 }
 
 # Validate detected versions against config
@@ -670,7 +715,8 @@ ${BOLD}REQUIREMENTS:${NC}
     - Must be run with sudo (not as root directly)
     - Hailo PCI driver must be installed (.deb)
     - HailoRT must be installed (.deb)
-    - HailoRT Python binding must be installed (.whl)
+    - HailoRT Python binding must be available either from the HailoRT container
+      environment (${CONTAINER_PYHAILORT_VENV}) or from a supplied .whl
 
     Unless --skip-gstreamer is passed, TAPPAS Core (.deb) and its Python
     binding (.whl) are downloaded and installed automatically (v${TAPPAS_RESOURCES_VERSION})
@@ -1050,9 +1096,28 @@ check_prerequisites() {
         fi
         [[ -n "${MODEL_ZOO_VER}" ]] && validate_model_zoo_version "${HAILO_ARCH}" "${MODEL_ZOO_VER}" || true
 
+        # Reuse PyHailoRT from the HailoRT Docker image when no explicit wheel
+        # was supplied. The release image keeps hailo_platform in a dedicated
+        # venv, so --system-site-packages alone cannot expose it to our new venv.
+        if [[ -z "${PYHAILORT_PATH}" ]] && detect_container_pyhailort; then
+            log_success "Found existing PyHailoRT in ${CONTAINER_PYHAILORT_VENV}"
+            log_debug "PyHailoRT site-packages: ${CONTAINER_PYHAILORT_SITE_PACKAGES}"
+
+            if [[ "$pyhailort_version" == "-1" ]]; then
+                if [[ -n "${CONTAINER_PYHAILORT_VERSION}" ]]; then
+                    pyhailort_version="${CONTAINER_PYHAILORT_VERSION}"
+                else
+                    # The container is a versioned HailoRT release image, so if
+                    # the Python distribution metadata is unavailable, use the
+                    # detected HailoRT package version for compatibility checks.
+                    pyhailort_version="${hailort_version}"
+                fi
+            fi
+        fi
+
         # Check required components
         local missing_components=()
-        [[ "$pyhailort_version" == "-1" && -z "${PYHAILORT_PATH}" ]] && missing_components+=("HailoRT Python binding (.whl)")
+        [[ "$pyhailort_version" == "-1" && -z "${PYHAILORT_PATH}" ]] && missing_components+=("HailoRT Python binding")
         if [[ "${SKIP_GSTREAMER}" != true ]]; then
             [[ "$tappas_version" == "-1" ]] && missing_components+=("TAPPAS Core (.deb)")
             [[ "$tappas_python_version" == "-1" && -z "${PYTAPPAS_PATH}" ]] && missing_components+=("TAPPAS Core Python binding (.whl)")
@@ -1345,6 +1410,45 @@ setup_virtual_environment() {
         return 1
     fi
 
+    # If PyHailoRT is provided by the HailoRT release container's dedicated
+    # venv, expose that site-packages directory to venv_hailo_apps using a .pth
+    # file. This reuses the existing hailo_platform installation without
+    # copying or reinstalling the wheel.
+    if [[ -n "${CONTAINER_PYHAILORT_SITE_PACKAGES}" && -z "${PYHAILORT_PATH}" ]]; then
+        local venv_python="${venv_path}/bin/python3"
+        local venv_site_packages=""
+        local pyhailort_pth=""
+
+        venv_site_packages=$(
+            run_as_user "${venv_python}" -c 'import site; print(site.getsitepackages()[0])'
+        ) || true
+
+        if [[ -z "${venv_site_packages}" || ! -d "${venv_site_packages}" ]]; then
+            log_error "Could not determine site-packages for ${VENV_NAME}"
+            record_step_result "FAILED" "venv site-packages detection failed"
+            return 1
+        fi
+
+        pyhailort_pth="${venv_site_packages}/hailo_platform_container.pth"
+        log_info "Reusing container PyHailoRT from ${CONTAINER_PYHAILORT_SITE_PACKAGES}"
+
+        if ! run_as_user bash -c \
+            "printf '%s\n' '${CONTAINER_PYHAILORT_SITE_PACKAGES}' > '${pyhailort_pth}'"; then
+            log_error "Failed to expose container PyHailoRT to ${VENV_NAME}"
+            record_step_result "FAILED" "PyHailoRT path setup failed"
+            return 1
+        fi
+
+        if ! run_as_user "${venv_python}" -c 'import hailo_platform' >/dev/null 2>&1; then
+            log_error "Container PyHailoRT is not importable from ${VENV_NAME}"
+            log_error "Source site-packages: ${CONTAINER_PYHAILORT_SITE_PACKAGES}"
+            record_step_result "FAILED" "PyHailoRT import failed in venv"
+            return 1
+        fi
+
+        log_success "Container PyHailoRT available in ${VENV_NAME}"
+    fi
+
     log_success "Virtual environment created at ${venv_path}"
     record_step_result "SUCCESS" "venv: ${venv_path}"
     return 0
@@ -1408,9 +1512,9 @@ install_python_packages() {
         fi
     fi
 
-    # Install Hailo Python packages into venv (only from user-provided wheels)
-    # Note: If no --pyhailort/--pytappas provided, wheels must already be
-    # installed system-wide as prerequisites.
+    # Install Hailo Python packages into venv (only from user-provided wheels).
+    # Without --pyhailort, PyHailoRT may come from system site-packages or from
+    # the HailoRT release container venv exposed in Step 5 via a .pth file.
 
     # Upgrade pip/setuptools/wheel
     log_info "Upgrading pip, setuptools, and wheel..."
