@@ -66,7 +66,7 @@ python -m hailo_apps.config.config_manager --show-paths
 config = config_manager.get_main_config()
 
 # Get valid versions for validation
-versions = config_manager.get_valid_versions("hailort")  # ["4.23.0", "5.1.1", "5.2.0", "5.3.0"]
+versions = config_manager.get_valid_versions("hailort")  # ["4.23.0", "5.1.1", "5.2.0", "5.3.0", "5.4.0"]
 
 # Get Model Zoo version for architecture
 mz_version = config_manager.get_model_zoo_version_for_arch("hailo8")  # "v2.17.0"

@@ -102,9 +102,9 @@ DEFAULT_DOTENV_PATH = "/usr/local/hailo/resources/.env"  # your env file lives h
 DEFAULT_LOCAL_RESOURCES_PATH = _get_local_resources_path()  # bundled GIFs, JSON, etc.
 
 # Supported config options (used for validation in config_utils.py)
-VALID_HAILORT_VERSION = [AUTO_DETECT, "4.23.0", "5.1.1", "5.2.0", "5.3.0"]
-VALID_TAPPAS_VERSION = [AUTO_DETECT, "5.1.0", "5.2.0", "5.3.0"]
-VALID_H10_MODEL_ZOO_VERSION = ["v5.1.0", "v5.2.0", "v5.3.0"]  # First element is default
+VALID_HAILORT_VERSION = [AUTO_DETECT, "4.23.0", "5.1.1", "5.2.0", "5.3.0", "5.4.0"]
+VALID_TAPPAS_VERSION = [AUTO_DETECT, "5.1.0", "5.2.0", "5.3.0", "5.4.0"]
+VALID_H10_MODEL_ZOO_VERSION = ["v5.1.0", "v5.2.0", "v5.3.0", "v5.4.0"]  # First element is default
 VALID_H8_MODEL_ZOO_VERSION = ["v2.17.0"]
 VALID_MODEL_ZOO_VERSION = VALID_H10_MODEL_ZOO_VERSION + VALID_H8_MODEL_ZOO_VERSION
 VALID_HOST_ARCH = [AUTO_DETECT, "x86", "rpi", "arm"]

@@ -10,7 +10,7 @@ Here is a breakdown of what each option in the configuration file controls.
 
 ```yaml
 # HailoRT version configuration
-hailort_version: "auto"  # Options: "auto" or a specific version like "5.2.0", "5.3.0"
+hailort_version: "auto"  # Options: "auto" or a specific version like "5.2.0", "5.3.0", "5.4.0"
 
 # TAPPAS framework version
 tappas_version: "auto"   # Recommended: keep "auto" for detection
