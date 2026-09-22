@@ -19,13 +19,8 @@
 
 set -uo pipefail
 
-# Self-elevate to root if not already running as one, preserving the caller's
-# environment (PATH, VIRTUAL_ENV, etc.) via `sudo -E`. This must happen before
-# any other sudo call, since environment variables lost to a plain `sudo`
-# (without -E) cannot be recovered afterwards. This lets an already-active
-# virtual environment (e.g. pre-activated inside the Hailo AI Software Suite
-# Docker) remain visible to the installer, without users needing to
-# remember to pass `-E` themselves.
+# Self-elevate via 'sudo -E' if not already root, preserving PATH/VIRTUAL_ENV
+# so an active virtual environment (e.g. Suite Docker) stays visible.
 # Skip elevation for --help/-h, which doesn't need root.
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
     _skip_elevation=false
@@ -251,20 +246,10 @@ disable_error_trap() {
 # UTILITY FUNCTIONS
 #===============================================================================
 
-# Execute command as the original user (not root)
-# Preserves PATH and VIRTUAL_ENV so an already-active virtual environment
-# (e.g. pre-activated inside the Hailo AI Software Suite Docker) is still
-# visible to the original user's shell instead of being wiped by sudo's
-# default env_reset behavior. The script self-elevates via 'sudo -E' at
-# startup so these variables are available to preserve in the first place.
-#
-# Note: --preserve-env=PATH is not enough on its own. Most distros set a
-# sudoers "secure_path" default, which unconditionally overrides PATH for the
-# executed command regardless of --preserve-env/env_keep. Without working
-# around this, a bare "python3" resolved through sudo would silently fall
-# back to the system interpreter instead of the active venv's one. Route the
-# call through `env` to re-inject the venv's bin directory into PATH for the
-# child process itself, which sudo's secure_path cannot intercept.
+# Execute command as the original user (not root).
+# Preserves PATH/VIRTUAL_ENV so an active virtual environment (e.g. Suite
+# Docker) stays visible. Also re-injects VIRTUAL_ENV/bin into PATH via `env`,
+# since sudo's secure_path default overrides --preserve-env=PATH otherwise.
 as_original_user() {
     if [[ ${EUID:-$(id -u)} -eq 0 && -n "${SUDO_USER:-}" ]]; then
         log_debug "Running as user ${SUDO_USER}: $*"
@@ -326,18 +311,15 @@ command_exists() {
     command -v "$1" &>/dev/null
 }
 
-# Detect PyHailoRT preinstalled in a HailoRT/Suite Docker image.
-# The release image may keep hailo_platform in a dedicated venv (commonly at
-# /local/workspace/hailo_platform_venv, but not guaranteed), or it may already
-# be importable from the currently active environment (e.g. the Suite Docker's
-# pre-activated venv, or the container's system python3). Try each in turn.
+# Detect PyHailoRT preinstalled in a HailoRT/Suite Docker image: either in a
+# dedicated venv, or already importable in the active environment.
 detect_container_pyhailort() {
     CONTAINER_PYHAILORT_SITE_PACKAGES=""
     CONTAINER_PYHAILORT_VERSION=""
 
     local candidate_python=""
 
-    # 1) Known/expected dedicated venv locations for the PyHailoRT binding.
+    # 1) Known dedicated venv locations for the PyHailoRT binding.
     local venv_candidates=(
         "${CONTAINER_PYHAILORT_VENV}"
         "/local/workspace/hailo_platform_venv"
@@ -353,8 +335,7 @@ detect_container_pyhailort() {
         fi
     done
 
-    # 2) A dedicated venv wasn't found at a known path — search a shallow
-    # depth under common container roots for one named like it.
+    # 2) Search a shallow depth under common container roots as a fallback.
     if [[ -z "$candidate_python" ]]; then
         local found_dir
         found_dir=$(find /local/workspace /opt /root -maxdepth 3 -type d -iname "hailo_platform_venv" 2>/dev/null | head -1) || true
@@ -364,21 +345,8 @@ detect_container_pyhailort() {
         fi
     fi
 
-    # 3) An already-active virtual environment (e.g. the Suite Docker
-    # pre-activates one). Resolve its interpreter via $VIRTUAL_ENV directly
-    # rather than a bare "python3": sudo's default secure_path setting
-    # overrides PATH even with --preserve-env=PATH, so a bare "python3"
-    # looked up through sudo would silently resolve to the system
-    # interpreter instead of the active venv's one.
-    if [[ -z "$candidate_python" && -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python3" ]]; then
-        if as_original_user "${VIRTUAL_ENV}/bin/python3" -c 'import hailo_platform' >/dev/null 2>&1; then
-            candidate_python="${VIRTUAL_ENV}/bin/python3"
-        fi
-    fi
-
-    # 4) Last resort: whatever "python3" resolves to for the original user
-    # (covers the container's system python3 having the binding installed
-    # directly, without any venv involved).
+    # 3) Fall back to "python3" for the original user (covers an already-active
+    # venv, e.g. Suite Docker, or the container's system python3).
     if [[ -z "$candidate_python" ]] && as_original_user python3 -c 'import hailo_platform' >/dev/null 2>&1; then
         candidate_python="python3"
     fi
@@ -397,9 +365,7 @@ detect_container_pyhailort() {
         return 1
     fi
 
-    # The PyHailoRT wheel/distribution is named "hailort". If distribution
-    # metadata is unavailable, the caller can fall back to the HailoRT .deb
-    # version that was already detected.
+    # Fall back to the detected HailoRT .deb version if metadata is unavailable.
     CONTAINER_PYHAILORT_VERSION=$(
         as_original_user "${candidate_python}" -c \
             'import importlib.metadata as m; print(m.version("hailort"))' \
@@ -886,14 +852,17 @@ detect_user_and_group() {
         return 1
     fi
 
-    # Check if running as root directly (not via sudo)
+    # No SUDO_USER means root was invoked directly, e.g. in a container with
+    # no unprivileged user (like the HailoRT Docker container). Proceed as
+    # root instead of failing, since there's no other user to drop to.
     if [[ -z "${SUDO_USER:-}" ]]; then
-        log_error "This script must be run as a regular user (it self-elevates via sudo), not as root directly"
-        echo ""
-        echo "Please run with: ./$SCRIPT_NAME"
-        echo "Do not use: su -c or login as root"
-        record_step_result "FAILED" "Running as root directly"
-        return 1
+        log_warning "Running as root with no SUDO_USER (e.g. a container with only a root user)"
+        log_warning "Proceeding as root for the rest of the installation"
+        ORIGINAL_USER="root"
+        ORIGINAL_GROUP="$(id -gn root 2>/dev/null || echo root)"
+        export ORIGINAL_USER ORIGINAL_GROUP
+        record_step_result "SUCCESS" "User: ${ORIGINAL_USER} (root-only environment), Group: ${ORIGINAL_GROUP}"
+        return 0
     fi
 
     ORIGINAL_USER="${SUDO_USER}"
@@ -1007,19 +976,10 @@ ensure_gstreamer_resources() {
         return 0
     fi
 
-    # Skip the download if the binding is already importable in the original
-    # user's Python environment (e.g. pre-installed in the Suite Docker's
-    # active venv). Downloading a newer wheel here would otherwise create a
-    # version mismatch against the already-installed TAPPAS Core package.
-    # Prefer $VIRTUAL_ENV's interpreter directly: sudo's default secure_path
-    # setting overrides PATH even with --preserve-env=PATH, so a bare
-    # "python3" looked up through sudo could resolve to the system
-    # interpreter instead of the active venv's one.
-    local hailo_platform_python="python3"
-    if [[ -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python3" ]]; then
-        hailo_platform_python="${VIRTUAL_ENV}/bin/python3"
-    fi
-    if as_original_user "${hailo_platform_python}" -c 'import hailo_platform' >/dev/null 2>&1; then
+    # Skip the download if already importable (e.g. pre-installed in the
+    # Suite Docker's active venv), to avoid a version mismatch against the
+    # already-installed TAPPAS Core package.
+    if as_original_user python3 -c 'import hailo_platform' >/dev/null 2>&1; then
         log_success "TAPPAS Core Python binding already importable (hailo_platform), skipping download"
         return 0
     fi
@@ -1494,12 +1454,8 @@ setup_virtual_environment() {
     enable_error_trap
     log_debug "Build artifacts cleaned"
 
-    # Resolve which python3 interpreter to use for creating the new venv.
-    # If a virtualenv is already active (e.g. the Hailo AI Software Suite
-    # Docker pre-activates its own venv), building a venv from that
-    # interpreter nests it inside the active one, which can produce a
-    # broken or incomplete environment. Bypass it and use the underlying
-    # base/system interpreter instead.
+    # If a virtualenv is already active (e.g. Suite Docker), build the new
+    # venv from the base/system interpreter instead of nesting it inside.
     local python_bin="python3"
     if [[ -n "${VIRTUAL_ENV:-}" ]]; then
         log_warning "An active virtual environment was detected: ${VIRTUAL_ENV}"

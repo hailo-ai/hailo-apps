@@ -61,6 +61,8 @@ Activate it in **every new terminal session** before running apps:
 source setup_env.sh
 ```
 
+> If another virtual environment is already active (e.g. the DFC venv pre-activated inside the Hailo AI Software Suite Docker), there's no need to `deactivate` it first — sourcing `setup_env.sh` automatically switches to `venv_hailo_apps`.
+
 To verify the install, [run an application](running_applications.md).
 
 ---
