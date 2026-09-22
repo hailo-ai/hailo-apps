@@ -313,25 +313,57 @@ command_exists() {
     command -v "$1" &>/dev/null
 }
 
-# Detect PyHailoRT preinstalled in the HailoRT Docker image.
-# This is intentionally separate from system site-packages: the release image
-# keeps hailo_platform in /local/workspace/hailo_platform_venv.
+# Detect PyHailoRT preinstalled in a HailoRT/Suite Docker image.
+# The release image may keep hailo_platform in a dedicated venv (commonly at
+# /local/workspace/hailo_platform_venv, but not guaranteed), or it may already
+# be importable from the currently active environment (e.g. the Suite Docker's
+# pre-activated venv, or the container's system python3). Try each in turn.
 detect_container_pyhailort() {
-    local pyhailort_python="${CONTAINER_PYHAILORT_VENV}/bin/python3"
-
     CONTAINER_PYHAILORT_SITE_PACKAGES=""
     CONTAINER_PYHAILORT_VERSION=""
 
-    if [[ ! -x "${pyhailort_python}" ]]; then
-        return 1
+    local candidate_python=""
+
+    # 1) Known/expected dedicated venv locations for the PyHailoRT binding.
+    local venv_candidates=(
+        "${CONTAINER_PYHAILORT_VENV}"
+        "/local/workspace/hailo_platform_venv"
+        "/opt/hailo_platform_venv"
+        "/root/hailo_platform_venv"
+    )
+    local venv_dir
+    for venv_dir in "${venv_candidates[@]}"; do
+        [[ -n "$venv_dir" && -x "${venv_dir}/bin/python3" ]] || continue
+        if "${venv_dir}/bin/python3" -c 'import hailo_platform' >/dev/null 2>&1; then
+            candidate_python="${venv_dir}/bin/python3"
+            break
+        fi
+    done
+
+    # 2) A dedicated venv wasn't found at a known path — search a shallow
+    # depth under common container roots for one named like it.
+    if [[ -z "$candidate_python" ]]; then
+        local found_dir
+        found_dir=$(find /local/workspace /opt /root -maxdepth 3 -type d -iname "hailo_platform_venv" 2>/dev/null | head -1) || true
+        if [[ -n "$found_dir" && -x "${found_dir}/bin/python3" ]] \
+           && "${found_dir}/bin/python3" -c 'import hailo_platform' >/dev/null 2>&1; then
+            candidate_python="${found_dir}/bin/python3"
+        fi
     fi
 
-    if ! "${pyhailort_python}" -c 'import hailo_platform' >/dev/null 2>&1; then
+    # 3) Fall back to whatever python3 is already active for the original
+    # user (covers an already-active venv, e.g. the Suite Docker, or the
+    # container's system python3 having the binding installed directly).
+    if [[ -z "$candidate_python" ]] && as_original_user python3 -c 'import hailo_platform' >/dev/null 2>&1; then
+        candidate_python="python3"
+    fi
+
+    if [[ -z "$candidate_python" ]]; then
         return 1
     fi
 
     CONTAINER_PYHAILORT_SITE_PACKAGES=$(
-        "${pyhailort_python}" -c 'import site; print(site.getsitepackages()[0])' 2>/dev/null
+        as_original_user "${candidate_python}" -c 'import site; print(site.getsitepackages()[0])' 2>/dev/null
     ) || true
 
     if [[ -z "${CONTAINER_PYHAILORT_SITE_PACKAGES}" \
@@ -344,7 +376,7 @@ detect_container_pyhailort() {
     # metadata is unavailable, the caller can fall back to the HailoRT .deb
     # version that was already detected.
     CONTAINER_PYHAILORT_VERSION=$(
-        "${pyhailort_python}" -c \
+        as_original_user "${candidate_python}" -c \
             'import importlib.metadata as m; print(m.version("hailort"))' \
             2>/dev/null
     ) || true
