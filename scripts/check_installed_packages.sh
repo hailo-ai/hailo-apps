@@ -441,9 +441,10 @@ check_hailort_py() {
         pyhailort_version="$ver"
         echo "[OK]   pip 'hailort' version: $pyhailort_version"
         
-        # Additional test - try to import in the current environment
-        if python3 -c 'import hailo' >/dev/null 2>&1; then
-            echo "[OK]   Python import 'hailo' succeeded"
+        # Additional test - try to import in the current environment.
+        # The importable module for the 'hailort' pip package is 'hailo_platform'.
+        if python3 -c 'import hailo_platform' >/dev/null 2>&1; then
+            echo "[OK]   Python import 'hailo_platform' succeeded"
         elif python3 -c 'import hailort' >/dev/null 2>&1; then
             # Try to get the version from the module itself
             module_ver=$(python3 -c 'import hailort; print(getattr(hailort, "__version__", "unknown"))' 2>/dev/null)
@@ -459,8 +460,8 @@ check_hailort_py() {
         echo "[OK]   pip 'hailort' is part of hailo-all package: $pyhailort_version"
         
         # Check if it can be imported
-        if python3 -c 'import hailo' >/dev/null 2>&1; then
-            echo "[OK]   Python import 'hailo' succeeded"
+        if python3 -c 'import hailo_platform' >/dev/null 2>&1; then
+            echo "[OK]   Python import 'hailo_platform' succeeded"
         elif python3 -c 'import hailort' >/dev/null 2>&1; then
             echo "[OK]   Python import 'hailort' succeeded, version: $pyhailort_version"
         else
@@ -470,8 +471,8 @@ check_hailort_py() {
         echo "[MISSING] pip 'hailort', version: -1"
         
         # One last try - maybe it's importable but not visible to pip
-        if python3 -c 'import hailo' >/dev/null 2>&1; then
-            echo "[OK]   Python import 'hailo' succeeded (not from pip)"
+        if python3 -c 'import hailo_platform' >/dev/null 2>&1; then
+            echo "[OK]   Python import 'hailo_platform' succeeded (not from pip)"
             pyhailort_version="unknown"
         elif python3 -c 'import hailort' >/dev/null 2>&1; then
             module_ver=$(python3 -c 'import hailort; print(getattr(hailort, "__version__", "unknown"))' 2>/dev/null)
@@ -520,29 +521,31 @@ check_tappas_core_py() {
         fi
     fi
     
-    # Check if the module can be imported
-    if python3 -c 'import hailo_platform' >/dev/null 2>&1; then
+    # Check if the module can be imported.
+    # The importable module for the TAPPAS Core Python binding is 'hailo'
+    # (not 'hailo_platform', which is the PyHailoRT/HailoRT binding module).
+    if python3 -c 'import hailo' >/dev/null 2>&1; then
         # Try to get version from the module (but don't overwrite pip version)
-        module_ver=$(python3 -c 'import hailo_platform; print(getattr(hailo_platform, "__version__", "unknown"))' 2>/dev/null)
+        module_ver=$(python3 -c 'import hailo; print(getattr(hailo, "__version__", "unknown"))' 2>/dev/null)
         if [[ "$module_ver" != "unknown" && -n "$module_ver" ]]; then
             # Only use module version if we don't have a pip version
             if [[ -z "$found_version" || "$tappas_python_version" == "-1" ]]; then
                 tappas_python_version="$module_ver"
-                echo "[OK]   Python import 'hailo_platform' succeeded, version: $tappas_python_version (from module)"
+                echo "[OK]   Python import 'hailo' succeeded, version: $tappas_python_version (from module)"
             else
                 # Pip version takes precedence, but show module version for reference
-                echo "[OK]   Python import 'hailo_platform' succeeded"
+                echo "[OK]   Python import 'hailo' succeeded"
                 echo "[INFO] Module reports version: $module_ver (pip package version: $tappas_python_version)"
             fi
         else
-            echo "[OK]   Python import 'hailo_platform' succeeded, version: $tappas_python_version"
+            echo "[OK]   Python import 'hailo' succeeded, version: $tappas_python_version"
         fi
     else
         if [[ -n "$hailo_all_ver" || -n "$found_version" ]]; then
-            echo "[WARNING] TAPPAS Python package is installed but 'hailo_platform' module cannot be imported"
+            echo "[WARNING] TAPPAS Python package is installed but 'hailo' module cannot be imported"
             # Don't reset version to -1 if package is installed
         else
-            echo "[MISSING] Python import 'hailo_platform', version: -1"
+            echo "[MISSING] Python import 'hailo', version: -1"
             tappas_python_version="-1"
         fi
     fi

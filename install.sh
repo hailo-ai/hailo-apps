@@ -979,8 +979,10 @@ ensure_gstreamer_resources() {
     # Skip the download if already importable (e.g. pre-installed in the
     # Suite Docker's active venv), to avoid a version mismatch against the
     # already-installed TAPPAS Core package.
-    if as_original_user python3 -c 'import hailo_platform' >/dev/null 2>&1; then
-        log_success "TAPPAS Core Python binding already importable (hailo_platform), skipping download"
+    # NOTE: The TAPPAS Core Python binding module is `hailo` (not `hailo_platform`,
+    # which is the PyHailoRT/HailoRT binding module).
+    if as_original_user python3 -c 'import hailo' >/dev/null 2>&1; then
+        log_success "TAPPAS Core Python binding already importable (hailo), skipping download"
         return 0
     fi
 
