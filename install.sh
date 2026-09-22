@@ -19,6 +19,25 @@
 
 set -uo pipefail
 
+# Self-elevate to root if not already running as one, preserving the caller's
+# environment (PATH, VIRTUAL_ENV, etc.) via `sudo -E`. This must happen before
+# any other sudo call, since environment variables lost to a plain `sudo`
+# (without -E) cannot be recovered afterwards. This lets an already-active
+# virtual environment (e.g. pre-activated inside the Hailo AI Software Suite
+# Docker) remain visible to the installer, without users needing to
+# remember to pass `-E` themselves.
+# Skip elevation for --help/-h, which doesn't need root.
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+    _skip_elevation=false
+    for _arg in "$@"; do
+        [[ "$_arg" == "-h" || "$_arg" == "--help" ]] && _skip_elevation=true && break
+    done
+    if [[ "${_skip_elevation}" != true ]]; then
+        exec sudo -E -- "$0" "$@"
+    fi
+    unset _skip_elevation _arg
+fi
+
 #===============================================================================
 # CONSTANTS
 #===============================================================================
@@ -233,10 +252,15 @@ disable_error_trap() {
 #===============================================================================
 
 # Execute command as the original user (not root)
+# Preserves PATH and VIRTUAL_ENV so an already-active virtual environment
+# (e.g. pre-activated inside the Hailo AI Software Suite Docker) is still
+# visible to the original user's shell instead of being wiped by sudo's
+# default env_reset behavior. Run the installer with 'sudo -E ./install.sh'
+# to make sure these variables are available to preserve in the first place.
 as_original_user() {
     if [[ ${EUID:-$(id -u)} -eq 0 && -n "${SUDO_USER:-}" ]]; then
         log_debug "Running as user ${SUDO_USER}: $*"
-        sudo -n -u "$SUDO_USER" -H -- "$@"
+        sudo -n -u "$SUDO_USER" -H --preserve-env=PATH,VIRTUAL_ENV -- "$@"
     else
         "$@"
     fi
@@ -679,7 +703,11 @@ show_help() {
 ${BOLD}Hailo Apps Infrastructure - Single-File Installer${NC}
 
 ${BOLD}USAGE:${NC}
-    sudo $SCRIPT_NAME [OPTIONS]
+    ./$SCRIPT_NAME [OPTIONS]
+
+    The script self-elevates with 'sudo -E' if not already run as root,
+    preserving your environment (e.g. an active virtual environment).
+    Running it directly with 'sudo $SCRIPT_NAME' also works.
 
 ${BOLD}OPTIONS:${NC}
     -n, --venv-name NAME        Virtual environment name (default: from config or venv_hailo_apps)
@@ -700,12 +728,12 @@ ${BOLD}CONFIGURATION:${NC}
     CLI arguments override config file values.
 
 ${BOLD}EXAMPLES:${NC}
-    sudo $SCRIPT_NAME                          # Standard installation
-    sudo $SCRIPT_NAME --dry-run                # Preview what would be done
-    sudo $SCRIPT_NAME --all                    # Install with all models
-    sudo $SCRIPT_NAME -x                       # Skip Python package installation
-    sudo $SCRIPT_NAME -n my_venv --all         # Custom venv name + all models
-    sudo $SCRIPT_NAME --force-cleanup          # Clean stale artifacts then install
+    ./$SCRIPT_NAME                              # Standard installation
+    ./$SCRIPT_NAME --dry-run                    # Preview what would be done
+    ./$SCRIPT_NAME --all                        # Install with all models
+    ./$SCRIPT_NAME -x                           # Skip Python package installation
+    ./$SCRIPT_NAME -n my_venv --all             # Custom venv name + all models
+    ./$SCRIPT_NAME --force-cleanup              # Clean stale artifacts then install
 
 ${BOLD}LOG FILES:${NC}
     Installation logs: ${LOG_DIR}/
@@ -803,9 +831,9 @@ detect_user_and_group() {
 
     # Check if running as root directly (not via sudo)
     if [[ -z "${SUDO_USER:-}" ]]; then
-        log_error "This script must be run with sudo, not as root directly"
+        log_error "This script must be run as a regular user (it self-elevates via sudo), not as root directly"
         echo ""
-        echo "Please run with: sudo $SCRIPT_NAME"
+        echo "Please run with: ./$SCRIPT_NAME"
         echo "Do not use: su -c or login as root"
         record_step_result "FAILED" "Running as root directly"
         return 1
@@ -919,6 +947,15 @@ ensure_gstreamer_resources() {
     # --- TAPPAS Core Python binding .whl ---
     if [[ -n "${PYTAPPAS_PATH}" ]]; then
         log_debug "Custom PyTappas wheel provided (--pytappas ${PYTAPPAS_PATH}), skipping auto-download"
+        return 0
+    fi
+
+    # Skip the download if the binding is already importable in the original
+    # user's Python environment (e.g. pre-installed in the Suite Docker's
+    # active venv). Downloading a newer wheel here would otherwise create a
+    # version mismatch against the already-installed TAPPAS Core package.
+    if as_original_user python3 -c 'import hailo_platform' >/dev/null 2>&1; then
+        log_success "TAPPAS Core Python binding already importable (hailo_platform), skipping download"
         return 0
     fi
 

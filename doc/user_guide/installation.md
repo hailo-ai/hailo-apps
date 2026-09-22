@@ -40,13 +40,15 @@ It supports:
 For **Hailo AI Software Suite Docker**, **HailoRT Docker container**, and **Raspberry Pi 5**:
 
 ```bash
-sudo ./install.sh
+./install.sh
 ```
+
+> The script requests sudo privileges itself (via `sudo -E`), preserving your current environment — including an already-active virtual environment, such as the one pre-activated inside the Hailo AI Software Suite Docker.
 
 For a **clean Python environment on Ubuntu x86_64**, provide the PyHailoRT wheel downloaded during the prerequisite setup:
 
 ```bash
-sudo ./install.sh --pyhailort /path/to/hailort-*.whl
+./install.sh --pyhailort /path/to/hailort-*.whl
 ```
 
 Add `--skip-gstreamer` if you only need Python standalone or GenAI apps.
@@ -234,7 +236,7 @@ From the repository root:
 
 ```bash
 git pull
-sudo ./install.sh --force-cleanup
+./install.sh --force-cleanup
 ```
 
 ---
