@@ -18,14 +18,12 @@ error_exit() {
 # Detect if a Python package is installed via pip and return its version
 detect_pip_pkg_version() {
     local pkg="$1"
-    # Try various methods to get the package version
     pip3 list 2>/dev/null | grep -i "^$pkg " | awk '{print $2}' || \
     python3 -m pip list 2>/dev/null | grep -i "^$pkg " | awk '{print $2}' || \
     python3 -c "import pkg_resources; print(pkg_resources.get_distribution('$pkg').version)" 2>/dev/null || \
     echo ""
 }
 
-# Check if hailo-all pip package is installed
 is_hailo_all_installed() {
     detect_pip_pkg_version "hailo-all"
 }
@@ -62,12 +60,10 @@ detect_hailo_arch() {
     # Method 1: Try hardware detection via PCI devices (works even without packages)
     if command -v lspci >/dev/null 2>&1; then
         local pci_output
-        # Try basic lspci first
         pci_output=$(lspci 2>/dev/null | grep -i "hailo" || true)
         
         if [[ -n "$pci_output" ]]; then
             detection_method="pci"
-            # Check PCI output for architecture hints
             if echo "$pci_output" | grep -qiE "hailo-8|hailo8"; then
                 # Try to distinguish between Hailo8L and Hailo8
                 if echo "$pci_output" | grep -qiE "hailo-8l|hailo8l"; then
@@ -116,11 +112,9 @@ detect_hailo_arch() {
             if echo "$fw_output" | grep -qi "HAILO8L"; then
                 arch="hailo8l"
                 echo "[OK]   Detected Hailo architecture: HAILO8L (via hailortcli)"
-            # Check for Hailo8
             elif echo "$fw_output" | grep -qi "HAILO8"; then
                 arch="hailo8"
                 echo "[OK]   Detected Hailo architecture: HAILO8 (via hailortcli)"
-            # Check for Hailo10H or Hailo15H
             elif echo "$fw_output" | grep -qiE "HAILO10H|HAILO15H"; then
                 arch="hailo10h"
                 echo "[OK]   Detected Hailo architecture: HAILO10H (via hailortcli)"
@@ -148,20 +142,17 @@ detect_hailo_arch() {
         echo "[INFO] Hailo device files found in /dev/, but cannot determine architecture without PCI info or hailortcli"
     fi
     
-    # Method 4: Fallback - infer architecture from installed package versions
-    # This is useful when packages are installed but no device is connected
+    # Method 4: Fallback - infer architecture from installed package versions (no device connected)
     if [[ "$arch" == "unknown" && -n "$driver_version" && -n "$hailort_version" ]]; then
         if [[ "$driver_version" != "-1" && "$driver_version" != "unknown" && \
               "$hailort_version" != "-1" && "$hailort_version" != "unknown" ]]; then
             detection_method="version_inference"
             
-            # Check if versions indicate Hailo8 (4.22.x, 4.23.x, or 4.24.x)
             if [[ ("$driver_version" == 4.22* || "$driver_version" == 4.23* || "$driver_version" == 4.24*) && \
                   ("$hailort_version" == 4.22* || "$hailort_version" == 4.23* || "$hailort_version" == 4.24*) ]]; then
                 arch="hailo8"
                 echo "[INFO] Inferred Hailo architecture: HAILO8 (from driver/hailort version 4.22.x/4.23.x/4.24.x)"
                 echo "[INFO] Note: This is inferred from package versions. Connect device to confirm via hailortcli."
-            # Check if versions indicate Hailo10H (>= 5.0.0)
             elif compare_versions "$driver_version" "5.0.0" && compare_versions "$hailort_version" "5.0.0"; then
                 arch="hailo10h"
                 echo "[INFO] Inferred Hailo architecture: HAILO10H (from driver/hailort version >= 5.0.0)"
@@ -170,7 +161,6 @@ detect_hailo_arch() {
         fi
     fi
     
-    # If we couldn't detect architecture, provide helpful message
     if [[ "$arch" == "unknown" ]]; then
         if [[ -z "$detection_method" ]]; then
             echo "[INFO] No Hailo packages or hardware detected"
@@ -218,13 +208,10 @@ validate_versions_for_arch() {
     fi
     
     if [[ "$arch" == "hailo8" || "$arch" == "hailo8l" ]]; then
-        # For Hailo8: driver and hailort should be 4.22 or 4.23
         local validations_done=0
         
-        # Check driver version
         if [[ "$driver_version" != "-1" && "$driver_version" != "unknown" && -n "$driver_version" ]]; then
             validations_done=$((validations_done + 1))
-            # Check if version starts with 4.23 or 4.24
             if [[ "$driver_version" == 4.23* || "$driver_version" == 4.24* ]]; then
                 echo "[OK]   Driver version $driver_version is valid for $arch (4.23.x/4.24.x)"
             else
@@ -233,10 +220,8 @@ validate_versions_for_arch() {
             fi
         fi
         
-        # Check hailort version
         if [[ "$hailort_version" != "-1" && "$hailort_version" != "unknown" && -n "$hailort_version" ]]; then
             validations_done=$((validations_done + 1))
-            # Check if version starts with 4.23 or 4.24
             if [[ "$hailort_version" == 4.23* || "$hailort_version" == 4.24* ]]; then
                 echo "[OK]   HailoRT version $hailort_version is valid for $arch (4.23.x/4.24.x)"
             else
@@ -258,11 +243,9 @@ validate_versions_for_arch() {
         fi
         
     elif [[ "$arch" == "hailo10h" ]]; then
-        # For Hailo10H: driver and hailort should be >= 5.0.0
         local min_version="5.0.0"
         local validations_done=0
         
-        # Check driver version
         if [[ "$driver_version" != "-1" && "$driver_version" != "unknown" && -n "$driver_version" ]]; then
             validations_done=$((validations_done + 1))
             if compare_versions "$driver_version" "$min_version"; then
@@ -273,7 +256,6 @@ validate_versions_for_arch() {
             fi
         fi
         
-        # Check hailort version
         if [[ "$hailort_version" != "-1" && "$hailort_version" != "unknown" && -n "$hailort_version" ]]; then
             validations_done=$((validations_done + 1))
             if compare_versions "$hailort_version" "$min_version"; then
@@ -441,7 +423,6 @@ check_hailort_py() {
         pyhailort_version="$ver"
         echo "[OK]   pip 'hailort' version: $pyhailort_version"
         
-        # Additional test - try to import in the current environment.
         # The importable module for the 'hailort' pip package is 'hailo_platform'.
         if python3 -c 'import hailo_platform' >/dev/null 2>&1; then
             echo "[OK]   Python import 'hailo_platform' succeeded"
@@ -459,7 +440,6 @@ check_hailort_py() {
         pyhailort_version="$hailo_all_ver"
         echo "[OK]   pip 'hailort' is part of hailo-all package: $pyhailort_version"
         
-        # Check if it can be imported
         if python3 -c 'import hailo_platform' >/dev/null 2>&1; then
             echo "[OK]   Python import 'hailo_platform' succeeded"
         elif python3 -c 'import hailort' >/dev/null 2>&1; then
@@ -521,7 +501,6 @@ check_tappas_core_py() {
         fi
     fi
     
-    # Check if the module can be imported.
     # The importable module for the TAPPAS Core Python binding is 'hailo'
     # (not 'hailo_platform', which is the PyHailoRT/HailoRT binding module).
     if python3 -c 'import hailo' >/dev/null 2>&1; then
@@ -570,7 +549,6 @@ to_check() {
     local driver_for_arch="$kernel_version_silent"
     [[ "$usb_version_silent" == "$hailort_version_silent" && "$usb_version_silent" != "-1" ]] && driver_for_arch="$usb_version_silent"
 
-    # Detect Hailo architecture
     arch_output=$(detect_hailo_arch "$driver_for_arch" "$hailort_version_silent")
     local hailo_arch=$(echo "$arch_output" | grep "^hailo_arch=" | cut -d'=' -f2)
     echo ""
@@ -648,7 +626,6 @@ to_check() {
         fi
     fi
 
-    # Validate versions based on architecture
     if [[ "$hailo_arch" != "unknown" ]]; then
         echo "Version Validation for $hailo_arch:"
         local _validation_rc=0
@@ -661,5 +638,4 @@ to_check() {
     echo "SUMMARY: hailo_arch=$hailo_arch hailo_pci=$kernel_version hailo_usb_driver=$usb_driver_version driver=$driver_version hailort=$hailort_version pyhailort=$pyhailort_version tappas-core=$tappas_version tappas-python=$tappas_py_version"
 }
 
-# Execute the main function
 to_check
