@@ -255,12 +255,25 @@ disable_error_trap() {
 # Preserves PATH and VIRTUAL_ENV so an already-active virtual environment
 # (e.g. pre-activated inside the Hailo AI Software Suite Docker) is still
 # visible to the original user's shell instead of being wiped by sudo's
-# default env_reset behavior. Run the installer with 'sudo -E ./install.sh'
-# to make sure these variables are available to preserve in the first place.
+# default env_reset behavior. The script self-elevates via 'sudo -E' at
+# startup so these variables are available to preserve in the first place.
+#
+# Note: --preserve-env=PATH is not enough on its own. Most distros set a
+# sudoers "secure_path" default, which unconditionally overrides PATH for the
+# executed command regardless of --preserve-env/env_keep. Without working
+# around this, a bare "python3" resolved through sudo would silently fall
+# back to the system interpreter instead of the active venv's one. Route the
+# call through `env` to re-inject the venv's bin directory into PATH for the
+# child process itself, which sudo's secure_path cannot intercept.
 as_original_user() {
     if [[ ${EUID:-$(id -u)} -eq 0 && -n "${SUDO_USER:-}" ]]; then
         log_debug "Running as user ${SUDO_USER}: $*"
-        sudo -n -u "$SUDO_USER" -H --preserve-env=PATH,VIRTUAL_ENV -- "$@"
+        if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+            sudo -n -u "$SUDO_USER" -H --preserve-env=PATH,VIRTUAL_ENV -- \
+                env "PATH=${VIRTUAL_ENV}/bin:${PATH}" "VIRTUAL_ENV=${VIRTUAL_ENV}" "$@"
+        else
+            sudo -n -u "$SUDO_USER" -H -- "$@"
+        fi
     else
         "$@"
     fi
@@ -351,9 +364,21 @@ detect_container_pyhailort() {
         fi
     fi
 
-    # 3) Fall back to whatever python3 is already active for the original
-    # user (covers an already-active venv, e.g. the Suite Docker, or the
-    # container's system python3 having the binding installed directly).
+    # 3) An already-active virtual environment (e.g. the Suite Docker
+    # pre-activates one). Resolve its interpreter via $VIRTUAL_ENV directly
+    # rather than a bare "python3": sudo's default secure_path setting
+    # overrides PATH even with --preserve-env=PATH, so a bare "python3"
+    # looked up through sudo would silently resolve to the system
+    # interpreter instead of the active venv's one.
+    if [[ -z "$candidate_python" && -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python3" ]]; then
+        if as_original_user "${VIRTUAL_ENV}/bin/python3" -c 'import hailo_platform' >/dev/null 2>&1; then
+            candidate_python="${VIRTUAL_ENV}/bin/python3"
+        fi
+    fi
+
+    # 4) Last resort: whatever "python3" resolves to for the original user
+    # (covers the container's system python3 having the binding installed
+    # directly, without any venv involved).
     if [[ -z "$candidate_python" ]] && as_original_user python3 -c 'import hailo_platform' >/dev/null 2>&1; then
         candidate_python="python3"
     fi
@@ -986,7 +1011,15 @@ ensure_gstreamer_resources() {
     # user's Python environment (e.g. pre-installed in the Suite Docker's
     # active venv). Downloading a newer wheel here would otherwise create a
     # version mismatch against the already-installed TAPPAS Core package.
-    if as_original_user python3 -c 'import hailo_platform' >/dev/null 2>&1; then
+    # Prefer $VIRTUAL_ENV's interpreter directly: sudo's default secure_path
+    # setting overrides PATH even with --preserve-env=PATH, so a bare
+    # "python3" looked up through sudo could resolve to the system
+    # interpreter instead of the active venv's one.
+    local hailo_platform_python="python3"
+    if [[ -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python3" ]]; then
+        hailo_platform_python="${VIRTUAL_ENV}/bin/python3"
+    fi
+    if as_original_user "${hailo_platform_python}" -c 'import hailo_platform' >/dev/null 2>&1; then
         log_success "TAPPAS Core Python binding already importable (hailo_platform), skipping download"
         return 0
     fi
