@@ -1392,6 +1392,25 @@ setup_virtual_environment() {
     enable_error_trap
     log_debug "Build artifacts cleaned"
 
+    # Resolve which python3 interpreter to use for creating the new venv.
+    # If a virtualenv is already active (e.g. the Hailo AI Software Suite
+    # Docker pre-activates its own venv), building a venv from that
+    # interpreter nests it inside the active one, which can produce a
+    # broken or incomplete environment. Bypass it and use the underlying
+    # base/system interpreter instead.
+    local python_bin="python3"
+    if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+        log_warning "An active virtual environment was detected: ${VIRTUAL_ENV}"
+        local base_prefix
+        base_prefix=$(python3 -c 'import sys; print(getattr(sys, "base_prefix", sys.prefix))' 2>/dev/null) || base_prefix=""
+        if [[ -n "$base_prefix" && -x "${base_prefix}/bin/python3" ]]; then
+            python_bin="${base_prefix}/bin/python3"
+            log_info "Using the base system interpreter instead: ${python_bin}"
+        else
+            log_warning "Could not resolve a base system interpreter; proceeding with 'python3' (may create a nested venv)"
+        fi
+    fi
+
     # Create virtual environment
     local venv_args=""
     if [[ "${USE_SYSTEM_SITE_PACKAGES}" == true && "${NO_SYSTEM_PYTHON}" != true ]]; then
@@ -1402,12 +1421,12 @@ setup_virtual_environment() {
     fi
 
     if [[ "${DRY_RUN}" == true ]]; then
-        log_dry_run "python3 -m venv ${venv_args} '${venv_path}'"
+        log_dry_run "${python_bin} -m venv ${venv_args} '${venv_path}'"
         record_step_result "SKIPPED" "Dry-run mode"
         return 0
     fi
 
-    if ! run_as_user python3 -m venv ${venv_args} "${venv_path}"; then
+    if ! run_as_user "${python_bin}" -m venv ${venv_args} "${venv_path}"; then
         log_error "Failed to create virtual environment"
         log_info "Troubleshooting:"
         log_info "  • Ensure python3-venv is installed: sudo apt install python3-venv"
