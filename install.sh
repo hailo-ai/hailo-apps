@@ -869,7 +869,22 @@ ensure_gstreamer_resources() {
     fi
 
     # --- TAPPAS Core .deb ---
+    # Check dpkg first (native .deb install), then fall back to pkg-config
+    # (e.g. the Hailo AI Software Suite Docker builds/registers TAPPAS Core
+    # without a dpkg entry).
+    local tappas_found=false
     if dpkg -l 2>/dev/null | grep -qE "^ii\s+(hailo-apps-core|hailo-tappas-core|hailo-tappas|tappas-core|tappas)\b"; then
+        tappas_found=true
+    elif command_exists pkg-config; then
+        for pc in hailo-apps-core hailo-tappas-core hailo_tappas tappas-core tappas; do
+            if pkg-config --exists "$pc" 2>/dev/null; then
+                tappas_found=true
+                break
+            fi
+        done
+    fi
+
+    if [[ "${tappas_found}" == true ]]; then
         log_success "TAPPAS Core already installed, skipping download"
     else
         local deb_url=""
