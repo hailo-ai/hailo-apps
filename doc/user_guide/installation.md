@@ -4,6 +4,12 @@
 
 Complete the [Prerequisites](./prerequisites.md) for your platform. This sets up HailoRT, the device driver, and any platform specific components required by Hailo Apps.
 
+On Ubuntu, make sure `git` is installed to clone the repository:
+
+```bash
+sudo apt-get update && sudo apt-get install -y git
+```
+
 ## Clone Hailo-Apps
 
 The Hailo Apps repository is required for all installation methods:
@@ -36,6 +42,13 @@ It supports:
 * GStreamer pipeline apps
 * Python standalone apps
 * GenAI apps
+
+On Ubuntu, make sure the following packages are installed:
+
+```bash
+sudo apt-get update && sudo apt-get install -y curl wget python3-venv gir1.2-gtk-3.0
+```
+
 
 For **Hailo AI Software Suite Docker**, **HailoRT Docker container**, and **Raspberry Pi 5**:
 

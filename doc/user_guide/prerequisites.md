@@ -44,31 +44,20 @@ Follow the **HailoRT Docker installation instructions** in the [Hailo documentat
 
 The HailoRT PCIe driver must be installed on the host. HailoRT and PyHailoRT are already available inside the container.
 
-Before starting the container, edit `run_hailort_docker.sh`:
+### Enable X11 forwarding
 
-* Remove this line:
-
-  ```text
-  -v /lib/udev/rules.d:/lib/udev/rules.d \
-  ```
-
-
-* Add these lines, required to display the GStreamer video window from inside the container:
-
-  ```text
-  -e DISPLAY="${DISPLAY}" \
-  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-  ```
-
-Install the following packages, required by Hailo Apps but not included in these Docker images (Suite Docker or HailoRT Docker container):
+To enable GUI output from Hailo Apps, allow Docker to access the host X server:
 
 ```bash
-apt-get update && apt-get install -y git curl wget python3-venv gir1.2-gtk-3.0
+xhost +SI:localuser:root
 ```
 
-* `git`, `curl`, `wget` — clone the repository and download resources
-* `python3-venv` — required by `install.sh` to create the shared virtual environment
-* `gir1.2-gtk-3.0` — required for the GStreamer video display window
+Then add the following lines to `DOCKER_ARGS` in `run_hailort_docker.sh`:
+
+```bash
+-e DISPLAY=${DISPLAY} \
+-v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+```
 
 ## Windows
 
