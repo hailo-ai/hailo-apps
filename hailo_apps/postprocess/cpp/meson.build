@@ -282,11 +282,13 @@ shared_library('ocr_postprocess',
 
 ################################################
 # HAILOOVERLAY_COMMUNITY (custom overlay GStreamer element)
-# Only built when yaml-cpp and GStreamer dependencies are available.
+# Only built when yaml-cpp, GStreamer, and libhailo_gst_image are available.
+# gsthailooverlay_community.cpp calls get_mat_by_format()/get_hailo_main_roi(),
+# which only exist in libhailo_gst_image.
 ################################################
 yaml_cpp_dep = dependency('yaml-cpp', required : false)
 
-if yaml_cpp_dep.found() and gst_dep.found() and gst_base_dep.found() and gst_video_dep.found()
+if yaml_cpp_dep.found() and gst_dep.found() and gst_base_dep.found() and gst_video_dep.found() and hailo_gst_image_available
     overlay_community_inc = include_directories('overlay_community')
 
     overlay_community_deps = [postprocess_dep, gst_dep, gst_base_dep, gst_video_dep, yaml_cpp_dep]
@@ -305,5 +307,5 @@ if yaml_cpp_dep.found() and gst_dep.found() and gst_base_dep.found() and gst_vid
         install_dir: '/usr/local/hailo/resources/so',
     )
 else
-    message('Skipping hailooverlay_community (missing yaml-cpp or GStreamer dependencies)')
+    message('⚠️  Skipping hailooverlay_community: missing yaml-cpp/GStreamer dependencies or libhailo_gst_image')
 endif
