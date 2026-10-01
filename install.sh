@@ -46,7 +46,6 @@ readonly CONFIG_FILE="${SCRIPT_DIR}/hailo_apps/config/config.yaml"
 readonly TAPPAS_RESOURCES_VERSION="5.4.0"
 readonly TAPPAS_DEB_URL_AMD64="https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/installation_files/v${TAPPAS_RESOURCES_VERSION}/hailo-tappas-core_${TAPPAS_RESOURCES_VERSION}_amd64.deb"
 readonly TAPPAS_DEB_URL_ARM64="https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/installation_files/v${TAPPAS_RESOURCES_VERSION}/hailo-tappas-core_${TAPPAS_RESOURCES_VERSION}_arm64.deb"
-readonly TAPPAS_WHL_URL="https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/installation_files/v${TAPPAS_RESOURCES_VERSION}/hailo_tappas_core_python_binding-${TAPPAS_RESOURCES_VERSION}-py3-none-any.whl"
 readonly TAPPAS_DOWNLOAD_DIR="/tmp/hailo_tappas_download"
 
 # Log file path (not readonly - may be updated if log dir not writable)
@@ -925,21 +924,44 @@ ensure_gstreamer_resources() {
     # --- TAPPAS Core .deb ---
     # Check dpkg first (native .deb install), then fall back to pkg-config
     # (e.g. the Hailo AI Software Suite Docker builds/registers TAPPAS Core
-    # without a dpkg entry).
+    # without a dpkg entry). Also capture the installed version so the Python
+    # binding wheel fetched below matches it exactly (e.g. RPi "hailo-all"
+    # installs often ship an older, still-valid TAPPAS Core version).
     local tappas_found=false
-    if dpkg -l 2>/dev/null | grep -qE "^ii\s+(hailo-apps-core|hailo-tappas-core|hailo-tappas|tappas-core|tappas)\b"; then
-        tappas_found=true
-    elif command_exists pkg-config; then
+    local installed_tappas_version=""
+    local _tv pkg
+    for pkg in hailo-apps-core hailo-tappas-core hailo-tappas tappas-core tappas; do
+        _tv=$(dpkg-query -W -f='${Status} ${Version}' "$pkg" 2>/dev/null) || true
+        if [[ "$_tv" == install\ ok\ installed\ * ]]; then
+            tappas_found=true
+            installed_tappas_version="${_tv##* }"
+            break
+        fi
+    done
+    if [[ "${tappas_found}" != true ]] && command_exists pkg-config; then
         for pc in hailo-apps-core hailo-tappas-core hailo_tappas tappas-core tappas; do
             if pkg-config --exists "$pc" 2>/dev/null; then
                 tappas_found=true
+                installed_tappas_version=$(pkg-config --modversion "$pc" 2>/dev/null) || true
                 break
             fi
         done
     fi
+    # Strip any Debian revision suffix (e.g. "5.3.0-1" -> "5.3.0")
+    installed_tappas_version="${installed_tappas_version%%-*}"
+
+    # The Python binding wheel must match the TAPPAS Core version that's
+    # actually installed, not always the newest pinned version — otherwise a
+    # valid-but-older system install (e.g. 5.3.0) gets paired with a newer
+    # wheel (e.g. 5.4.0), which fails the version-match check later.
+    local tappas_whl_version="${TAPPAS_RESOURCES_VERSION}"
+    if [[ "${tappas_found}" == true && -n "${installed_tappas_version}" ]]; then
+        tappas_whl_version="${installed_tappas_version}"
+    fi
+    local tappas_whl_url="https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/installation_files/v${tappas_whl_version}/hailo_tappas_core_python_binding-${tappas_whl_version}-py3-none-any.whl"
 
     if [[ "${tappas_found}" == true ]]; then
-        log_success "TAPPAS Core already installed, skipping download"
+        log_success "TAPPAS Core already installed (v${installed_tappas_version:-unknown}), skipping .deb download"
     else
         local deb_url=""
         case "$arch" in
@@ -986,12 +1008,12 @@ ensure_gstreamer_resources() {
         return 0
     fi
 
-    local whl_path="${TAPPAS_DOWNLOAD_DIR}/$(basename "${TAPPAS_WHL_URL}")"
+    local whl_path="${TAPPAS_DOWNLOAD_DIR}/$(basename "${tappas_whl_url}")"
     mkdir -p "${TAPPAS_DOWNLOAD_DIR}"
 
-    log_info "Downloading TAPPAS Core Python binding (.whl)..."
-    if ! download_file "${TAPPAS_WHL_URL}" "$whl_path"; then
-        log_error "Failed to download TAPPAS Core Python binding: ${TAPPAS_WHL_URL}"
+    log_info "Downloading TAPPAS Core Python binding (.whl, v${tappas_whl_version})..."
+    if ! download_file "${tappas_whl_url}" "$whl_path"; then
+        log_error "Failed to download TAPPAS Core Python binding: ${tappas_whl_url}"
         return 1
     fi
 
