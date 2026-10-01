@@ -83,58 +83,53 @@ if postprocess_dep.found()
         endif
     endif
     
-    # Check if libhailo_opencv_utils.so exists (it may be missing on community installs)
+    # Some TAPPAS installs (e.g. community builds, or the Raspberry Pi
+    # "hailo-all" package) don't ship every library needed for static linking
+    # (e.g. libhailo_opencv_utils, libgsthailometa, libhailo_tracker,
+    # libhailo_gst_image, libhailo_cv_singleton). Filter out any '-l<name>'
+    # flag from pkg-config whose library can't actually be found on this
+    # system, to avoid "cannot find -lXXX" linker errors below.
     cc = meson.get_compiler('c')
-    libhailo_opencv_utils_exists = cc.find_library('hailo_opencv_utils', required: false).found()
-    
-    if not libhailo_opencv_utils_exists
-        message('⚠️  libhailo_opencv_utils.so not found, filtering it out from linker command')
-        # Extract libraries from pkg-config and filter out libhailo_opencv_utils.so
-        # Use --static flag if we want static libraries for 5.2.0+
-        if use_static
-            message('Using static libraries for tappas-core @0@'.format(tappas_version))
-            pkg_libs_result = run_command('pkg-config', '--libs', '--static', pkg_name, check: false)
-        else
-            message('Using dynamic libraries for tappas-core @0@'.format(tappas_version))
-            pkg_libs_result = run_command('pkg-config', '--libs', pkg_name, check: false)
-        endif
-        
-        if pkg_libs_result.returncode() == 0
-            pkg_libs_str = pkg_libs_result.stdout().strip()
-            # Split by spaces, handling multiple spaces
-            pkg_libs_list = pkg_libs_str.split()
-            filtered_libs = []
-            foreach lib : pkg_libs_list
-                if not lib.contains('libhailo_opencv_utils')
-                    filtered_libs += lib
-                endif
-            endforeach
-            
-            # Create a custom dependency with filtered libraries
-            # Preserve the original dependency's properties (include dirs, compile args) but override link_args
-            # This way we keep all the include directories from the original dependency
-            postprocess_dep = declare_dependency(
-                dependencies: postprocess_dep,
-                link_args: filtered_libs
-            )
-        else
-            message('⚠️  Could not extract libraries from pkg-config, using original dependency')
-        endif
-    elif use_static
-        # Library exists, but we want static linking for 5.2.0+
-        message('Using static libraries for tappas-core @0@ (libhailo_opencv_utils.so found)'.format(tappas_version))
-        # Try to get static libraries
+
+    if use_static
+        message('Using static libraries for tappas-core @0@'.format(tappas_version))
         pkg_libs_result = run_command('pkg-config', '--libs', '--static', pkg_name, check: false)
-        if pkg_libs_result.returncode() == 0
-            pkg_libs_str = pkg_libs_result.stdout().strip()
-            pkg_libs_list = pkg_libs_str.split()
-            
-            # Preserve the original dependency's properties but override link_args with static libs
-            postprocess_dep = declare_dependency(
-                dependencies: postprocess_dep,
-                link_args: pkg_libs_list
-            )
+    else
+        message('Using dynamic libraries for tappas-core @0@'.format(tappas_version))
+        pkg_libs_result = run_command('pkg-config', '--libs', pkg_name, check: false)
+    endif
+
+    if pkg_libs_result.returncode() == 0
+        pkg_libs_str = pkg_libs_result.stdout().strip()
+        pkg_libs_list = pkg_libs_str.split()
+
+        filtered_libs = []
+        missing_libs = []
+        foreach lib : pkg_libs_list
+            if lib.startswith('-l')
+                lib_name = lib.substring(2)
+                if cc.find_library(lib_name, required: false).found()
+                    filtered_libs += lib
+                else
+                    missing_libs += lib_name
+                endif
+            else
+                filtered_libs += lib
+            endif
+        endforeach
+
+        if missing_libs.length() > 0
+            message('⚠️  Filtering out unavailable libraries from linker command: @0@'.format(missing_libs))
         endif
+
+        # Preserve the original dependency's properties (include dirs, compile
+        # args) but override link_args with the filtered library list.
+        postprocess_dep = declare_dependency(
+            dependencies: postprocess_dep,
+            link_args: filtered_libs
+        )
+    else
+        message('⚠️  Could not extract libraries from pkg-config, using original dependency')
     endif
 
     # TAPPAS 5.3.0 removed common:: utility functions (get_xtensor, softmax_2D,

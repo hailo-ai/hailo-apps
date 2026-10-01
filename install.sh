@@ -768,9 +768,9 @@ ${BOLD}REQUIREMENTS:${NC}
     - HailoRT Python binding must be available either from the HailoRT container
       environment (${CONTAINER_PYHAILORT_VENV}) or from a supplied .whl
 
-    Unless --skip-gstreamer is passed, TAPPAS Core (.deb) and its Python
-    binding (.whl) are downloaded and installed automatically (v${TAPPAS_RESOURCES_VERSION})
-    if not already present. Use --pytappas to supply a custom wheel instead.
+    Unless --skip-gstreamer is passed, TAPPAS Core (.deb, v${TAPPAS_RESOURCES_VERSION} if not
+    already present) and its matching Python binding (.whl) are downloaded and
+    installed automatically. Use --pytappas to supply a custom wheel instead.
 
     Download the Hailo driver and HailoRT packages from the Hailo Developer Zone:
     https://hailo.ai/developer-zone/
@@ -952,8 +952,8 @@ ensure_gstreamer_resources() {
 
     # The Python binding wheel must match the TAPPAS Core version that's
     # actually installed, not always the newest pinned version — otherwise a
-    # valid-but-older system install (e.g. 5.3.0) gets paired with a newer
-    # wheel (e.g. 5.4.0), which fails the version-match check later.
+    # valid-but-older system install (e.g. 5.3.0 from hailo-all) gets paired
+    # with a newer wheel (e.g. 5.4.0), which fails the version-match check later.
     local tappas_whl_version="${TAPPAS_RESOURCES_VERSION}"
     if [[ "${tappas_found}" == true && -n "${installed_tappas_version}" ]]; then
         tappas_whl_version="${installed_tappas_version}"

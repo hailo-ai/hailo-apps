@@ -79,7 +79,7 @@ This wheel is used during the [per-app Python installation](./installation.md#pe
 
 Set up the AI Kit or AI HAT+ by following the [Raspberry Pi AI documentation](https://www.raspberrypi.com/documentation/computers/ai.html#getting-started).
 
-The recommended setup uses the `hailo-all` package, which installs the HailoRT driver and runtime, GStreamer components, and Python bindings.
+The recommended setup uses the `hailo-all` package, which installs the HailoRT driver, runtime, PyHailoRT, and the TAPPAS Core GStreamer components. The TAPPAS Core Python binding (the `hailo` module) is not always included — if missing, the [Hailo Apps installer](./installation.md) downloads a matching version automatically.
 
 ## Verify the installation
 
