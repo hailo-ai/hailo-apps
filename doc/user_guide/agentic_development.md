@@ -4,6 +4,10 @@
 
 Build complete Hailo AI applications using natural language and AI coding agents. The agents understand the Hailo SDK, GStreamer pipelines, model architectures, and code conventions — so you describe **what** you want and they build **how**.
 
+<img src="../images/agentic_ai.gif" width="600"/>
+
+🎮 See it in action: our [Easter Eggs game](../../hailo_apps/python/pipeline_apps/easter_game/) was built entirely autonomously by AI using this workflow.
+
 ## Prerequisites
 
 - **Hailo development environment** set up ([Installation Guide](./installation.md))
