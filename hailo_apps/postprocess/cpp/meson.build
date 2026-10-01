@@ -90,13 +90,19 @@ if zlib_dep.found()
     face_align_deps += zlib_dep
 endif
 
-shared_library('vms_face_align',
-    face_align_post_sources,
-    dependencies : face_align_deps,
-    gnu_symbol_visibility : 'default',
-    install: true,
-    install_dir: '/usr/local/hailo/resources/so',
-)
+# face_align.cpp calls get_mat_from_gst_frame(), which only exists in
+# libhailo_gst_image — some TAPPAS installs don't ship it at all.
+if hailo_gst_image_available
+    shared_library('vms_face_align',
+        face_align_post_sources,
+        dependencies : face_align_deps,
+        gnu_symbol_visibility : 'default',
+        install: true,
+        install_dir: '/usr/local/hailo/resources/so',
+    )
+else
+    message('⚠️  Skipping vms_face_align: libhailo_gst_image not available in this TAPPAS install')
+endif
 
 ################################################
 # SCRFD SOURCES
@@ -120,13 +126,19 @@ arcface_post_sources = [
     'arcface.cpp',
 ]
 
-shared_library('face_recognition_post',
-    arcface_post_sources,
-    dependencies : [postprocess_dep, hailo_common_compat_dep],
-    gnu_symbol_visibility : 'default',
-    install: true,
-    install_dir: '/usr/local/hailo/resources/so',
-)
+# arcface.cpp calls HailoTracker::GetInstance(), which only exists in
+# libhailo_tracker — some TAPPAS installs don't ship it at all.
+if hailo_tracker_available
+    shared_library('face_recognition_post',
+        arcface_post_sources,
+        dependencies : [postprocess_dep, hailo_common_compat_dep],
+        gnu_symbol_visibility : 'default',
+        install: true,
+        install_dir: '/usr/local/hailo/resources/so',
+    )
+else
+    message('⚠️  Skipping face_recognition_post: libhailo_tracker not available in this TAPPAS install')
+endif
 
 ################################################
 # VMS CROPPERS SOURCES

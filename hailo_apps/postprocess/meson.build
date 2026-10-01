@@ -88,6 +88,12 @@ if postprocess_dep.found()
     # library can't be found, to avoid "cannot find -lXXX" linker errors.
     cc = meson.get_compiler('c')
 
+    # A few targets call symbols (HailoTracker, get_mat_from_gst_frame) that
+    # only exist in these specific libraries. Some TAPPAS installs don't ship
+    # them at all, so cpp/meson.build uses these to skip those targets.
+    hailo_tracker_available = cc.find_library('hailo_tracker', required: false).found()
+    hailo_gst_image_available = cc.find_library('hailo_gst_image', required: false).found()
+
     if use_static
         message('Using static libraries for tappas-core @0@'.format(tappas_version))
         pkg_libs_result = run_command('pkg-config', '--libs', '--static', pkg_name, check: false)
