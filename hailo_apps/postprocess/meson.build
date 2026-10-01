@@ -83,12 +83,9 @@ if postprocess_dep.found()
         endif
     endif
     
-    # Some TAPPAS installs (e.g. community builds, or the Raspberry Pi
-    # "hailo-all" package) don't ship every library needed for static linking
-    # (e.g. libhailo_opencv_utils, libgsthailometa, libhailo_tracker,
-    # libhailo_gst_image, libhailo_cv_singleton). Filter out any '-l<name>'
-    # flag from pkg-config whose library can't actually be found on this
-    # system, to avoid "cannot find -lXXX" linker errors below.
+    # Some TAPPAS installs (e.g. Raspberry Pi "hailo-all") don't ship every
+    # library needed for static linking. Filter out any '-l<name>' flag whose
+    # library can't be found, to avoid "cannot find -lXXX" linker errors.
     cc = meson.get_compiler('c')
 
     if use_static
@@ -122,10 +119,10 @@ if postprocess_dep.found()
             message('⚠️  Filtering out unavailable libraries from linker command: @0@'.format(missing_libs))
         endif
 
-        # Preserve the original dependency's properties (include dirs, compile
-        # args) but override link_args with the filtered library list.
+        # Use partial_dependency() to drop the original dependency's own
+        # link_args — otherwise they'd re-attach the unfiltered libraries.
         postprocess_dep = declare_dependency(
-            dependencies: postprocess_dep,
+            dependencies: postprocess_dep.partial_dependency(compile_args: true, includes: true),
             link_args: filtered_libs
         )
     else
