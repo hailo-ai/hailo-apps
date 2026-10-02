@@ -1,32 +1,23 @@
 cmake_minimum_required(VERSION 3.16)
 project(mono_depth_estimation LANGUAGES C CXX)
 
-# ============================================================
-# Settings
-# ============================================================
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Option: allow advanced users to use system deps instead of submodules
-
-# Third-party directory (submodules live here)
-# <repo>/hailo_apps/cpp/<app>
-# <repo>/hailo_apps/cpp/external/{yaml-cpp,curl}
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../external")
 
-# ============================================================
-# Core dependencies
-# ============================================================
 find_package(Threads REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(HailoRT REQUIRED)
+# Prefer system-installed HailoRT over a separate /usr/local installation.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT HailoRT_DIR)
+    find_package(HailoRT CONFIG QUIET PATHS /usr NO_DEFAULT_PATH)
+endif()
+find_package(HailoRT CONFIG REQUIRED)
+message(STATUS "HailoRT configuration: ${HailoRT_DIR}")
 
 message(STATUS "Found OpenCV includes: ${OpenCV_INCLUDE_DIRS}")
 
-# ============================================================
-# yaml-cpp — system preferred, submodule fallback
-# ============================================================
 find_package(yaml-cpp QUIET)
 
 if(yaml-cpp_FOUND)
@@ -53,10 +44,6 @@ else()
     message(FATAL_ERROR "yaml-cpp target was not created.")
 endif()
 
-
-# ============================================================
-# libcurl — system preferred, HTTP-only submodule fallback
-# ============================================================
 find_package(CURL QUIET)
 
 if(CURL_FOUND)
@@ -106,10 +93,6 @@ if(NOT TARGET CURL::libcurl)
     message(FATAL_ERROR "libcurl target missing. Check curl submodule or system install.")
 endif()
 
-
-# ============================================================
-# Target Sources (keep list style)
-# ============================================================
 set(SOURCES
     ${PROJECT_NAME}.cpp
     ../common/toolbox.cpp
@@ -125,9 +108,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../common
 )
 
-# ============================================================
-# Compile options (Linux vs Windows)
-# ============================================================
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE
         /w /O2
@@ -143,9 +123,6 @@ else()
     )
 endif()
 
-# ============================================================
-# Link
-# ============================================================
 target_link_libraries(${PROJECT_NAME} PRIVATE
     HailoRT::libhailort
     Threads::Threads
@@ -154,10 +131,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     CURL::libcurl
 )
 
-# ============================================================
-# Copy repo-level YAML next to the executable:
-# <exe_dir>/config/resources_config.yaml
-# ============================================================
 set(HAILO_APPS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")  # <app> -> cpp -> hailo_apps
 set(RESOURCES_YAML_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../../config/resources_config.yaml")
 

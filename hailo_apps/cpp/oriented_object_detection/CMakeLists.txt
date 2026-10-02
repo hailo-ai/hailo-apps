@@ -1,32 +1,23 @@
 cmake_minimum_required(VERSION 3.16)
 project(oriented_obj_det LANGUAGES C CXX)
 
-# ============================================================
-# Settings
-# ============================================================
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Option: allow advanced users to use system/vcpkg deps instead of submodules
-
-# Third-party directory (submodules live here)
-# <repo>/hailo_apps/cpp/oriented_object_detection
-# <repo>/hailo_apps/cpp/external/{yaml-cpp,curl}
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../external")
 
-# ============================================================
-# Core dependencies
-# ============================================================
 find_package(Threads REQUIRED)
-find_package(HailoRT REQUIRED)
+# Prefer system-installed HailoRT over a separate /usr/local installation.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT HailoRT_DIR)
+    find_package(HailoRT CONFIG QUIET PATHS /usr NO_DEFAULT_PATH)
+endif()
+find_package(HailoRT CONFIG REQUIRED)
+message(STATUS "HailoRT configuration: ${HailoRT_DIR}")
 find_package(OpenCV REQUIRED)
 
 message(STATUS "Found OpenCV includes: ${OpenCV_INCLUDE_DIRS}")
 
-# ============================================================
-# yaml-cpp — system preferred, submodule fallback
-# ============================================================
 find_package(yaml-cpp QUIET)
 
 if(yaml-cpp_FOUND)
@@ -53,10 +44,6 @@ else()
     message(FATAL_ERROR "yaml-cpp target was not created.")
 endif()
 
-
-# ============================================================
-# libcurl — system preferred, HTTP-only submodule fallback
-# ============================================================
 find_package(CURL QUIET)
 
 if(CURL_FOUND)
@@ -106,10 +93,6 @@ if(NOT TARGET CURL::libcurl)
     message(FATAL_ERROR "libcurl target missing. Check curl submodule or system install.")
 endif()
 
-
-# ============================================================
-# Sources
-# ============================================================
 file(GLOB SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cpp
@@ -130,9 +113,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../common
 )
 
-# ============================================================
-# Compile options (Linux vs Windows)
-# ============================================================
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE
         /w /O2
@@ -143,18 +123,12 @@ if(MSVC)
     )
     target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 else()
-    # Base compilation options (portable on GCC/Clang)
     target_compile_options(${PROJECT_NAME} PRIVATE
         -w -O3
-       
-       
-       
-       
-       
+
         -fopenmp
     )
 
-    # Add AVX2/FMA only if compiler supports them (x86)
     include(CheckCXXCompilerFlag)
     check_cxx_compiler_flag("-mavx2" HAS_AVX2)
     check_cxx_compiler_flag("-mfma"  HAS_FMA)
@@ -166,9 +140,6 @@ else()
     endif()
 endif()
 
-# ============================================================
-# Link
-# ============================================================
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Threads::Threads
     HailoRT::libhailort
@@ -177,10 +148,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     CURL::libcurl
 )
 
-# ============================================================
-# Copy repo-level YAML next to the executable:
-# <exe_dir>/config/resources_config.yaml
-# ============================================================
 set(HAILO_APPS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")  # oriented_object_detection -> cpp -> hailo_apps
 set(RESOURCES_YAML_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../../config/resources_config.yaml")
 

@@ -1,30 +1,23 @@
 cmake_minimum_required(VERSION 3.16)
 project(pose_estimation LANGUAGES C CXX)
 
-# ============================================================
-# Settings
-# ============================================================
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-
-# <repo>/hailo_apps/cpp/pose_estimation
-# <repo>/hailo_apps/cpp/external/{yaml-cpp,curl}
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../external")
 
-# ============================================================
-# Core dependencies
-# ============================================================
 find_package(Threads REQUIRED)
-find_package(HailoRT REQUIRED)
+# Prefer system-installed HailoRT over a separate /usr/local installation.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT HailoRT_DIR)
+    find_package(HailoRT CONFIG QUIET PATHS /usr NO_DEFAULT_PATH)
+endif()
+find_package(HailoRT CONFIG REQUIRED)
+message(STATUS "HailoRT configuration: ${HailoRT_DIR}")
 find_package(OpenCV REQUIRED)
 
 message(STATUS "Found OpenCV includes: ${OpenCV_INCLUDE_DIRS}")
 
-# ============================================================
-# yaml-cpp — system preferred, submodule fallback
-# ============================================================
 find_package(yaml-cpp QUIET)
 
 if(yaml-cpp_FOUND)
@@ -51,10 +44,6 @@ else()
     message(FATAL_ERROR "yaml-cpp target was not created.")
 endif()
 
-
-# ============================================================
-# libcurl — system preferred, HTTP-only submodule fallback
-# ============================================================
 find_package(CURL QUIET)
 
 if(CURL_FOUND)
@@ -104,10 +93,6 @@ if(NOT TARGET CURL::libcurl)
     message(FATAL_ERROR "libcurl target missing. Check curl submodule or system install.")
 endif()
 
-
-# ============================================================
-# xtl / xtensor (KEEP AS BEFORE: ExternalProject)
-# ============================================================
 include(ExternalProject)
 set(EXTERNAL_INSTALL_LOCATION "${CMAKE_BINARY_DIR}/external")
 
@@ -127,12 +112,8 @@ ExternalProject_Add(xtensor_ep
     DEPENDS xtl_ep
 )
 
-# headers only (mostly), but we include the install include dir
 include_directories("${EXTERNAL_INSTALL_LOCATION}/include")
 
-# ============================================================
-# Sources
-# ============================================================
 file(GLOB SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp
 )
@@ -152,9 +133,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../common
 )
 
-# ============================================================
-# Compile options (Linux vs Windows)
-# ============================================================
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE
         /w /O2
@@ -166,15 +144,10 @@ if(MSVC)
 else()
     target_compile_options(${PROJECT_NAME} PRIVATE
         -w -O3
-       
-       
-       
+
     )
 endif()
 
-# ============================================================
-# Link
-# ============================================================
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Threads::Threads
     HailoRT::libhailort
@@ -183,10 +156,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     CURL::libcurl
 )
 
-# ============================================================
-# Copy repo-level YAML next to the executable:
-# <exe_dir>/config/resources_config.yaml
-# ============================================================
 set(HAILO_APPS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")  # pose_estimation -> cpp -> hailo_apps
 set(RESOURCES_YAML_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../../config/resources_config.yaml")
 

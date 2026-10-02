@@ -1,28 +1,24 @@
 cmake_minimum_required(VERSION 3.16)
 project(object_detection LANGUAGES C CXX)
 
-# ============================================================
-# Settings
-# ============================================================
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# ============================================================
-# Core dependencies
-# ============================================================
 find_package(Threads  REQUIRED)
-find_package(HailoRT  REQUIRED)
+# Prefer system-installed HailoRT over a separate /usr/local installation.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT HailoRT_DIR)
+    find_package(HailoRT CONFIG QUIET PATHS /usr NO_DEFAULT_PATH)
+endif()
+find_package(HailoRT CONFIG REQUIRED)
+message(STATUS "HailoRT configuration: ${HailoRT_DIR}")
 find_package(OpenCV   REQUIRED)
 
 message(STATUS "Found OpenCV ${OpenCV_VERSION}")
 
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../external")
 
-# ============================================================
-# yaml-cpp — system preferred, submodule fallback
-# ============================================================
 find_package(yaml-cpp QUIET)
 
 if(yaml-cpp_FOUND)
@@ -49,9 +45,6 @@ else()
     message(FATAL_ERROR "yaml-cpp target was not created.")
 endif()
 
-# ============================================================
-# libcurl — system preferred, HTTP-only submodule fallback
-# ============================================================
 find_package(CURL QUIET)
 
 if(CURL_FOUND)
@@ -97,9 +90,6 @@ else()
     endif()
 endif()
 
-# ============================================================
-# Sources
-# ============================================================
 file(GLOB SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cpp"
@@ -124,9 +114,6 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMENT "Copying config files"
 )
 
-# ============================================================
-# Include dirs
-# ============================================================
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${OpenCV_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -134,9 +121,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../common"
 )
 
-# ============================================================
-# Compile options
-# ============================================================
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /w)
     target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
@@ -144,16 +128,10 @@ else()
     target_compile_options(${PROJECT_NAME} PRIVATE
         -w -O3
         -fconcepts
-       
-       
-       
-       
+
     )
 endif()
 
-# ============================================================
-# Link libs
-# ============================================================
 target_link_libraries(${PROJECT_NAME} PRIVATE
     HailoRT::libhailort
     Threads::Threads

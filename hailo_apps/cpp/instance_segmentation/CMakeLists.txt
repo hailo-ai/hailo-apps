@@ -1,32 +1,23 @@
 cmake_minimum_required(VERSION 3.20)
 project(instance_segmentation LANGUAGES C CXX)
 
-# ============================================================
-# Settings
-# ============================================================
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Option: allow advanced users to use system/vcpkg deps instead of submodules
-
-# Third-party directory (submodules live here)
-# <repo>/hailo_apps/cpp/instance_segmentation
-# <repo>/hailo_apps/cpp/external/{yaml-cpp,curl}
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../external")
 
-# ============================================================
-# Core dependencies
-# ============================================================
 find_package(Threads REQUIRED)
-find_package(HailoRT REQUIRED)
+# Prefer system-installed HailoRT over a separate /usr/local installation.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT HailoRT_DIR)
+    find_package(HailoRT CONFIG QUIET PATHS /usr NO_DEFAULT_PATH)
+endif()
+find_package(HailoRT CONFIG REQUIRED)
+message(STATUS "HailoRT configuration: ${HailoRT_DIR}")
 find_package(OpenCV REQUIRED)
 
 message(STATUS "Found OpenCV includes: ${OpenCV_INCLUDE_DIRS}")
 
-# ============================================================
-# yaml-cpp — system preferred, submodule fallback
-# ============================================================
 find_package(yaml-cpp QUIET)
 
 if(yaml-cpp_FOUND)
@@ -53,10 +44,6 @@ else()
     message(FATAL_ERROR "yaml-cpp target was not created.")
 endif()
 
-
-# ============================================================
-# libcurl — system preferred, HTTP-only submodule fallback
-# ============================================================
 find_package(CURL QUIET)
 
 if(CURL_FOUND)
@@ -106,12 +93,6 @@ if(NOT TARGET CURL::libcurl)
     message(FATAL_ERROR "libcurl target missing. Check curl submodule or system install.")
 endif()
 
-
-# ============================================================
-# xtl + xtensor (header-only)
-# - Use system/vcpkg if exists, otherwise FetchContent into build/_deps
-# - Not "external install" folder (so MSVC always finds headers)
-# ============================================================
 if(HAILO_USE_SYSTEM_DEPS)
     find_package(xtl CONFIG REQUIRED)
     find_package(xtensor CONFIG REQUIRED)
@@ -136,9 +117,6 @@ else()
     set(USE_SYSTEM_XTENSOR OFF)
 endif()
 
-# ============================================================
-# Sources
-# ============================================================
 add_executable(${PROJECT_NAME}
     instance_segmentation.cpp
     instance_seg_postprocess.cpp
@@ -153,7 +131,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../common
 )
 
-# xtensor include path
 if(USE_SYSTEM_XTENSOR)
     target_link_libraries(${PROJECT_NAME} PRIVATE xtl xtensor)
 else()
@@ -163,9 +140,6 @@ else()
     )
 endif()
 
-# ============================================================
-# Compile options (Linux vs Windows)
-# ============================================================
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE
         /w /O2
@@ -177,16 +151,10 @@ if(MSVC)
 else()
     target_compile_options(${PROJECT_NAME} PRIVATE
         -O3 -DNDEBUG -w
-       
-       
-       
-       
+
     )
 endif()
 
-# ============================================================
-# Link
-# ============================================================
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Threads::Threads
     HailoRT::libhailort
@@ -195,10 +163,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     CURL::libcurl
 )
 
-# ============================================================
-# Copy repo-level YAML next to the executable:
-# <exe_dir>/config/resources_config.yaml
-# ============================================================
 set(HAILO_APPS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")  # instance_segmentation -> cpp -> hailo_apps
 set(RESOURCES_YAML_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../../config/resources_config.yaml")
 

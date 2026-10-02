@@ -1,21 +1,12 @@
 cmake_minimum_required(VERSION 3.12)
 project(onnxrt_hailo_pipeline LANGUAGES C CXX)
 
-# ============================================================
-# Settings
-# ============================================================
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Option: allow advanced users to use system/vcpkg deps instead of submodules
-
-# Third-party directory (submodules live here)
-# <repo>/hailo_apps/cpp/onnxrt_hailo_pipeline
-# <repo>/hailo_apps/cpp/external/{yaml-cpp,curl}
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../external")
 
-# ----- Compiler check (GNU only) -----
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0")
         message(FATAL_ERROR
@@ -27,18 +18,17 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     endif()
 endif()
 
-# ============================================================
-# Core dependencies
-# ============================================================
 find_package(Threads REQUIRED)
-find_package(HailoRT REQUIRED)
+# Prefer system-installed HailoRT over a separate /usr/local installation.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT HailoRT_DIR)
+    find_package(HailoRT CONFIG QUIET PATHS /usr NO_DEFAULT_PATH)
+endif()
+find_package(HailoRT CONFIG REQUIRED)
+message(STATUS "HailoRT configuration: ${HailoRT_DIR}")
 find_package(OpenCV REQUIRED)
 
 message(STATUS "Found OpenCV includes: ${OpenCV_INCLUDE_DIRS}")
 
-# ============================================================
-# yaml-cpp — system preferred, submodule fallback
-# ============================================================
 find_package(yaml-cpp QUIET)
 
 if(yaml-cpp_FOUND)
@@ -65,10 +55,6 @@ else()
     message(FATAL_ERROR "yaml-cpp target was not created.")
 endif()
 
-
-# ============================================================
-# libcurl — system preferred, HTTP-only submodule fallback
-# ============================================================
 find_package(CURL QUIET)
 
 if(CURL_FOUND)
@@ -118,12 +104,6 @@ if(NOT TARGET CURL::libcurl)
     message(FATAL_ERROR "libcurl target missing. Check curl submodule or system install.")
 endif()
 
-
-# ============================================================
-# ONNX Runtime
-# - Linux: detect under /opt/*
-# - Windows: allow ONNXRUNTIME_DIR cache var OR env var ONNXRUNTIME_DIR
-# ============================================================
 set(ONNXRUNTIME_DIR "" CACHE PATH "Path to ONNX Runtime root directory (contains include/ and lib/)")
 
 if (NOT ONNXRUNTIME_DIR)
@@ -172,13 +152,8 @@ else()
     message(FATAL_ERROR "Failed to locate ONNX Runtime. Set ONNXRUNTIME_DIR.")
 endif()
 
-# ============================================================
-# xtl + xtensor (header-only) - ExternalProject install (WORKING STYLE)
-# ============================================================
-# ---- ExternalProject for xtl/xtensor (header-only) ----
 include(ExternalProject)
 
-# A single install prefix where headers will land:
 set(EXTERNAL_PREFIX ${CMAKE_BINARY_DIR}/external)
 
 ExternalProject_Add(xtl-test
@@ -200,12 +175,8 @@ ExternalProject_Add(xtensor-test
     INSTALL_DIR ${EXTERNAL_PREFIX}
 )
 
-# xtensor include path (after external install)
 set(XTENSOR_INCLUDE_DIR ${EXTERNAL_PREFIX}/include)
 
-# ============================================================
-# Sources
-# ============================================================
 add_executable(${PROJECT_NAME}
     onnxrt_hailo_pipeline.cpp
     onnx_decode.cpp
@@ -226,9 +197,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_BINARY_DIR}/external/include
 )
 
-# ============================================================
-# Compile options (Linux vs Windows)
-# ============================================================
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE
         /w /O2
@@ -240,16 +208,10 @@ if(MSVC)
 else()
     target_compile_options(${PROJECT_NAME} PRIVATE
         -O3 -DNDEBUG -w
-       
-       
-       
-       
+
     )
 endif()
 
-# ============================================================
-# Link
-# ============================================================
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Threads::Threads
     HailoRT::libhailort
@@ -259,10 +221,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${ONNXRUNTIME_LIB}
 )
 
-# ============================================================
-# Copy repo-level YAML next to the executable:
-# <exe_dir>/config/resources_config.yaml
-# ============================================================
 set(HAILO_APPS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")  # onnxrt_hailo_pipeline -> cpp -> hailo_apps
 set(RESOURCES_YAML_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../../config/resources_config.yaml")
 

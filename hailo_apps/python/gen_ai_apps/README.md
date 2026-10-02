@@ -141,7 +141,7 @@ Components for building voice-enabled applications:
 
 - **Hardware**: Hailo AI GenAI accelerator device (H10 or compatible)
 - **Python**: Python 3.10 or higher
-- **Hailo Platform SDK**: Must be installed and configured
+- **HailoRT runtime library and Python bindings**: Must be installed and configured
 
 ### Step 1: Install GenAI Dependencies
 

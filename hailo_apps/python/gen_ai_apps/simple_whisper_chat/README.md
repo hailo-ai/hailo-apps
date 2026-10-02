@@ -14,7 +14,7 @@ A simple example application demonstrating audio transcription using Hailo's Whi
 
 - Hailo AI accelerator device (H10 or compatible)
 - Python 3.10+
-- Hailo Platform SDK
+- HailoRT runtime library and Python bindings
 
 ## Installation
 
@@ -110,7 +110,7 @@ The example supports WAV files with:
 - Verify the file is readable
 
 ### Import errors
-- Ensure Hailo Platform SDK is properly installed
+- Ensure HailoRT runtime library and Python bindings is properly installed
 - Verify Python environment has all required packages (NumPy)
 
 ## How it works

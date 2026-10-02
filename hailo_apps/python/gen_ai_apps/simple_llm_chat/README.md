@@ -13,7 +13,7 @@ A simple example application demonstrating text-based conversation with Hailo's 
 
 - Hailo AI accelerator device (H10 or compatible)
 - Python 3.10+
-- Hailo Platform SDK
+- HailoRT runtime library and Python bindings
 
 ## Installation
 
@@ -69,7 +69,7 @@ The example uses the `LLM_MODEL_NAME_H10` model which is automatically downloade
 - Check device permissions
 
 ### Import errors
-- Ensure Hailo Platform SDK is properly installed
+- Ensure HailoRT runtime library and Python bindings is properly installed
 - Verify Python environment has all required packages
 
 ## How it works

@@ -18,7 +18,7 @@ It handles audio recording, speech-to-text, text-to-speech, and interaction mana
 
 - **Hardware**: Hailo AI accelerator device (H10 or compatible)
 - **Python**: Python 3.10 or higher
-- **Hailo Platform SDK**: Must be installed and configured
+- **HailoRT runtime library and Python bindings**: Must be installed and configured
 - **System dependencies**: PortAudio development libraries (for sounddevice)
 
 ### Installing GenAI Dependencies

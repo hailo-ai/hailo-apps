@@ -50,7 +50,7 @@ This tool will:
 
 ## Requirements
 
-- Hailo AI processor and SDK
+- Hailo AI processor with the HailoRT runtime library and Python bindings
 - Python 3.10+
 - sounddevice (for audio I/O)
 - NumPy

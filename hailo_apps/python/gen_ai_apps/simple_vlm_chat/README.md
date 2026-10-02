@@ -14,7 +14,7 @@ A simple example application demonstrating image analysis and description using 
 
 - Hailo AI accelerator device (H10 or compatible)
 - Python 3.10+
-- Hailo Platform SDK
+- HailoRT runtime library and Python bindings
 
 ## Installation
 
@@ -90,7 +90,7 @@ The example uses the `VLM_MODEL_NAME_H10` model which is automatically downloade
 - The script uses a relative path from the repository root
 
 ### Import errors
-- Ensure Hailo Platform SDK is properly installed
+- Ensure HailoRT runtime library and Python bindings is properly installed
 - Verify Python environment has all required packages (OpenCV, NumPy)
 
 ## How it works

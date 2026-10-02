@@ -464,7 +464,7 @@ shared_library('depth_postprocess', ...)
 │•Env    │ │•YAML ok  │ │•Dir struct │ │•Functional  │ │•Smoke test │ │•LLM    │
 │•Pkgs   │ │•Cross-   │ │•Models    │ │ tests       │ │•Subprocess │ │•VLM    │
 │•GStr   │ │ validate │ │•Videos    │ │•All apps    │ │•Exit code  │ │•Whisper│
-│•SDK    │ │•Drift    │ │•SO files  │ │             │ │            │ │•Agent  │
+│•RT     │ │•Drift    │ │•SO files  │ │             │ │            │ │•Agent  │
 └────────┘ └──────────┘ └────────────┘ └─────────────┘ └────────────┘ └────────┘
 ```
 

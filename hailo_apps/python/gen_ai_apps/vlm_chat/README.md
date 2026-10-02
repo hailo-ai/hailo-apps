@@ -12,7 +12,7 @@ An interactive computer vision application using Hailo's Vision Language Model (
 
 ## Requirements
 
-- Hailo AI processor and SDK
+- Hailo AI processor with the HailoRT runtime library and Python bindings
 - Python >=3.10
 - OpenCV
 - NumPy
