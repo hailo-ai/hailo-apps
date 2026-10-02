@@ -1031,6 +1031,7 @@ ensure_gstreamer_resources() {
             return 1
         fi
         log_success "TAPPAS Core installed"
+        installed_tappas_version="${target_tappas_version}"
     fi
 
     # --- TAPPAS Core Python binding .whl ---
@@ -1050,11 +1051,23 @@ ensure_gstreamer_resources() {
     if as_original_user python3 -c 'import hailo' >/dev/null 2>&1; then
         local importable_hailo_version
         importable_hailo_version=$(
-            as_original_user python3 -c 'import hailo; print(getattr(hailo, "__version__", ""))' 2>/dev/null
+            as_original_user python3 -c '
+import hailo
+from importlib.metadata import PackageNotFoundError, version
+binding_version = getattr(hailo, "__version__", "")
+if not binding_version or binding_version == "unknown":
+    for package in ("hailo-apps-core-python-binding", "hailo-tappas-core-python-binding", "tappas-core-python-binding", "hailo-tappas-python-binding", "tappas"):
+        try:
+            binding_version = version(package)
+            break
+        except PackageNotFoundError:
+            pass
+print(binding_version)
+' 2>/dev/null
         ) || true
 
-        if [[ -z "${installed_tappas_version}" || -z "${importable_hailo_version}" \
-           || "${importable_hailo_version}" == "${installed_tappas_version}" ]]; then
+        if [[ -n "${installed_tappas_version}" \
+           && "${importable_hailo_version}" == "${installed_tappas_version}" ]]; then
             log_success "TAPPAS Core Python binding already importable (hailo), skipping download"
             return 0
         fi
