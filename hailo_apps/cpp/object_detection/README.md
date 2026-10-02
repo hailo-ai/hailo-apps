@@ -12,6 +12,10 @@ Requirements
   - For Hailo-10: `HailoRT==5.3.0`
 
 - **Linux Dependencies**
+    - yaml-cpp and libcurl development libraries
+        ```shell
+        sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+        ```
     - OpenCV >= 4.5.4
         ```shell script
         sudo apt-get install -y libopencv-dev python3-opencv
@@ -65,13 +69,13 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called object_detection
+    This builds `object_detection` at `build/object_detection` on Linux and `build/Release/object_detection.exe` on Windows.
 
 3. Run the example:
 
     - **Linux**
         ```shell script
-        ./build/Release/object_detection --net <hef_path> --input <image_or_video_or_camera_path>
+        ./build/object_detection --net <hef_path> --input <image_or_video_or_camera_path>
         ```
     - **Windows**
         ```shell script

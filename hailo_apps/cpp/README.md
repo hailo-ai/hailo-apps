@@ -45,7 +45,13 @@ Supported Hailo devices: **Hailo-8**, **Hailo-8L**, **Hailo-10H**
 | GCC / G++ | 9+ | `sudo apt-get install build-essential` |
 | Git | any | `sudo apt-get install git` |
 
-yaml-cpp and libcurl are bundled as submodules and built automatically — no manual installation needed.
+Install the yaml-cpp and libcurl development libraries:
+
+```bash
+sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+```
+
+If these system packages are unavailable, the build scripts build yaml-cpp and libcurl from the bundled submodules.
 
 ### Windows
 
@@ -135,7 +141,7 @@ Each application binary is placed in its own `build/` directory:
 hailo_apps/cpp/
 ├── object_detection/build/object_detection
 ├── instance_segmentation/build/instance_segmentation
-├── classification/build/classification
+├── classification/build/classifier
 └── ...
 ```
 
@@ -187,11 +193,11 @@ At the end of each build, a summary shows which applications succeeded and which
 
 Each application has its own arguments and usage. Refer to the individual README linked in the [Application Reference](#application-reference) table for full details.
 
-To quickly see what a binary accepts, run it with `--help`:
+From `hailo_apps/cpp`, run a binary with `--help` to see its arguments:
 
 ```bash
-./build/object_detection --help
-./build/classification --help
+./object_detection/build/object_detection --help
+./classification/build/classifier --help
 ```
 
 ---

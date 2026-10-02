@@ -9,6 +9,11 @@ The application receives a HEF and images/video/camera as input, and returns the
 Requirements
 ------------
 
+- yaml-cpp and libcurl development libraries (Linux):
+    ```shell
+    sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+    ```
+
 - HailoRT  
   - For Hailo-8: `HailoRT==4.23.0`  
   - For Hailo-10: `HailoRT==5.3.0`
@@ -42,7 +47,7 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called pose_estimation
+    This builds `pose_estimation` at `build/pose_estimation` on Linux and `build/Release/pose_estimation.exe` on Windows.
 
 3. Run the example:
 

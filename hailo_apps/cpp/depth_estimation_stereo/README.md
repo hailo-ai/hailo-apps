@@ -19,6 +19,11 @@ The application receives a HEF file and left/right inputs (images, videos, or ca
 Requirements
 ------------
 
+- yaml-cpp and libcurl development libraries (Linux):
+    ```shell
+    sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+    ```
+
 - HailoRT  
   - For Hailo-8: `HailoRT==4.23.0`  
   - For Hailo-10: `HailoRT==5.3.0`
@@ -51,7 +56,7 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called depth_estimation_stereo
+    This builds `stereo_depth_estimation` at `build/stereo_depth_estimation` on Linux and `build/Release/stereo_depth_estimation.exe` on Windows.
 
 3. Run the example:
 

@@ -8,6 +8,11 @@ It runs on Hailo-8, Hailo-8l and Hailo-10h devices, accepts input from an image,
 Requirements
 ------------
 
+- yaml-cpp and libcurl development libraries (Linux):
+    ```shell
+    sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+    ```
+
 - HailoRT  
   - For Hailo-8: `HailoRT==4.23.0`  
   - For Hailo-10: `HailoRT==5.3.0`
@@ -42,7 +47,7 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called semantic_segmentation
+    This builds `semantic_segmentation` at `build/semantic_segmentation` on Linux and `build/Release/semantic_segmentation.exe` on Windows.
 
 3. Run the example:
 

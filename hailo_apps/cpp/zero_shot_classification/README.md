@@ -6,6 +6,11 @@ This example performs zero-shot classification using a Hailo8 device, allowing y
 Requirements
 ------------
 
+- yaml-cpp and libcurl development libraries (Linux):
+    ```shell
+    sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+    ```
+
 - `hailo_platform` >= 4.19.0
 - `OpenCV` >= 4.2.X
 - `CMake` >= 3.20
@@ -40,7 +45,7 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called zero_shot_classification
+    This builds `zero_shot_classification` at `build/zero_shot_classification` on Linux and `build/Release/zero_shot_classification.exe` on Windows.
 
 3. Run the example:
 

@@ -12,6 +12,11 @@ Oriented object detection extends traditional bounding box detection by adding r
 
 Requirements
 ------------
+
+- yaml-cpp and libcurl development libraries (Linux):
+    ```shell
+    sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+    ```
 - HailoRT==4.23.0
 - OpenCV >= 4.5.4
     ```shell script
@@ -49,7 +54,7 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called oriented_object_detection
+    This builds `oriented_obj_det` at `build/oriented_obj_det` on Linux and `build/Release/oriented_obj_det.exe` on Windows.
 
 3. Run the example:
 
@@ -97,7 +102,7 @@ Example
     
 - For camera, enabling saving the output:
     ```shell script
-    ./build/obj_det --net yolov11s_obb.hef --input /dev/video0 --batch_size 2 -s
+    ./build/oriented_obj_det --net yolov11s_obb.hef --input /dev/video0 --batch_size 2 -s
     ```
     Output video is saved as processed_video.mp4
 

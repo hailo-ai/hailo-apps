@@ -28,6 +28,10 @@ Requirements
     ```
 
 - **Linux Dependencies**
+    - yaml-cpp and libcurl development libraries
+        ```shell
+        sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+        ```
     - OpenCV >= 4.5.4
         ```shell script
         sudo apt-get install -y libopencv-dev python3-opencv
@@ -97,13 +101,13 @@ Usage
         copy "<path-to-onnxruntime>\lib\*.dll" .\build\Release\
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called classifier
+    This builds `onnxrt_hailo_pipeline` at `build/onnxrt_hailo_pipeline` on Linux and `build/Release/onnxrt_hailo_pipeline.exe` on Windows.
 
 3. Run the example:
 
     - **Linux**
         ```shell script
-        ./build/Release/onnxrt_hailo_pipeline --net <hef_path> --onnx <onnx_path> --input <image_or_video_or_camera_path>
+        ./build/onnxrt_hailo_pipeline --net <hef_path> --onnx <onnx_path> --input <image_or_video_or_camera_path>
         ```
     - **Windows**
         ```shell script

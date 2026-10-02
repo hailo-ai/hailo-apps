@@ -18,6 +18,10 @@ Requirements
    ```
 
 - **Linux Dependencies**
+    - yaml-cpp and libcurl development libraries
+        ```shell
+        sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+        ```
     - CMake >= 3.16
     - Gtk
     - g++-9
@@ -62,14 +66,14 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called classifier
+    This builds `classifier` at `build/classifier` on Linux and `build/Release/classifier.exe` on Windows.
 
 
 3. Run the example:
 
     - **Linux**
         ```shell script
-        ./build/Release/classifier --net <hef_path> --input <image_or_video_or_camera_path>
+        ./build/classifier --net <hef_path> --input <image_or_video_or_camera_path>
         ```
     - **Windows**
         ```shell script

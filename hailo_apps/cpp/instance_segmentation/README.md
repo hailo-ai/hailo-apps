@@ -8,6 +8,11 @@ It receives a HEF and images/video/camera as input, and returns the image\video 
 Requirements
 ------------
 
+- yaml-cpp and libcurl development libraries (Linux):
+    ```shell
+    sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+    ```
+
 - HailoRT  
   - For Hailo-8: `HailoRT==4.23.0`  
   - For Hailo-10: `HailoRT==5.3.0`
@@ -61,7 +66,7 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called instance_segmentation
+    This builds `instance_segmentation` at `build/instance_segmentation` on Linux and `build/Release/instance_segmentation.exe` on Windows.
 
 3. Run the example:
 
@@ -95,7 +100,7 @@ Example
 -------------------
 - List supported networks:
     ```shell script
-    ./build/stereo_depth_estimation --list-nets
+    ./build/instance_segmentation --list-nets
     ```
 - List available input resources:
     ```shell script
@@ -155,7 +160,7 @@ Notes
 - There should be no spaces between "=" given in the command line arguments and the file name itself
 - The example only works for instance segmentation models that have the NMS on-Hailo (either on the NN-core or on the CPU)
 - When using camera as input:
-    - To exit gracefully from openCV window, p./build/instance_segmentation_cpp --net yolov5m-seg.hef --input /dev/video0 --batch-size 2 -s
+    - To exit gracefully from openCV window, p./build/instance_segmentation --net yolov5m-seg.hef --input /dev/video0 --batch-size 2 -s
     - In case OpenCV is defaulting to GStreamer for video capture, warnings might occur.
       To solve, force OpenCV to use V4L2 instead of GStreamer by setting these environment variables:
       ```
