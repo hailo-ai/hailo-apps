@@ -1,0 +1,8 @@
+---
+description: "Toolset: GStreamer Elements Reference"
+alwaysApply: false
+---
+
+# Toolset: gstreamer-elements
+
+Read `.hailo/toolsets/gstreamer-elements.md` for the complete API reference.

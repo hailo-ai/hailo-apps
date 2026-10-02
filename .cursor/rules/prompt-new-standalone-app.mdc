@@ -1,0 +1,10 @@
+---
+description: "Prompt template: Build Standalone Inference App"
+alwaysApply: false
+---
+
+# Prompt: new-standalone-app
+
+Build Standalone Inference App
+
+Read `.hailo/prompts/new-standalone-app.md` for the complete prompt template.

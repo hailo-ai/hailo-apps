@@ -43,9 +43,10 @@ readonly TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 readonly CONFIG_FILE="${SCRIPT_DIR}/hailo_apps/config/config.yaml"
 
 # TAPPAS Core GStreamer resources (auto-downloaded when missing, unless --skip-gstreamer)
+# Fallback version used only when no compatible HailoRT version is detected
+# (see select_tappas_version_for_hailort()); otherwise the version is chosen
+# to match the installed HailoRT via valid_combinations in config.yaml.
 readonly TAPPAS_RESOURCES_VERSION="5.4.0"
-readonly TAPPAS_DEB_URL_AMD64="https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/installation_files/v${TAPPAS_RESOURCES_VERSION}/hailo-tappas-core_${TAPPAS_RESOURCES_VERSION}_amd64.deb"
-readonly TAPPAS_DEB_URL_ARM64="https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/installation_files/v${TAPPAS_RESOURCES_VERSION}/hailo-tappas-core_${TAPPAS_RESOURCES_VERSION}_arm64.deb"
 readonly TAPPAS_DOWNLOAD_DIR="/tmp/hailo_tappas_download"
 
 # Log file path (not readonly - may be updated if log dir not writable)
@@ -900,6 +901,29 @@ download_file() {
     fi
 }
 
+# Pick a TAPPAS Core version compatible with the given HailoRT version, using
+# the "hailort:tappas" combos from config.yaml (valid_combinations.*). Looks
+# across all architectures since HailoRT version strings don't overlap
+# between the hailo8/8l family (4.x) and hailo10h (5.x). If multiple TAPPAS
+# versions are valid for a given HailoRT version, the last (newest) match in
+# the combo list wins. Falls back to TAPPAS_RESOURCES_VERSION if the HailoRT
+# version is unknown or has no matching combo (e.g. HailoRT not yet installed).
+select_tappas_version_for_hailort() {
+    local hailort_ver="$1"
+    local best=""
+
+    if [[ -n "$hailort_ver" ]]; then
+        local combo h t
+        for combo in ${VALID_COMBINATIONS_HAILO8:-} ${VALID_COMBINATIONS_HAILO8L:-} ${VALID_COMBINATIONS_HAILO10H:-}; do
+            h="${combo%%:*}"
+            t="${combo#*:}"
+            [[ "$h" == "$hailort_ver" ]] && best="$t"
+        done
+    fi
+
+    echo "${best:-$TAPPAS_RESOURCES_VERSION}"
+}
+
 # Download and install the TAPPAS Core .deb (matching host architecture) and
 # the TAPPAS Core Python binding .whl, unless already installed/provided.
 ensure_gstreamer_resources() {
@@ -919,6 +943,24 @@ ensure_gstreamer_resources() {
             aarch64|arm64) arch="arm64" ;;
             *) arch="$(uname -m)" ;;
         esac
+    fi
+
+    # Detect an already-installed HailoRT version (e.g. via hailo-all on RPi,
+    # or a Suite Docker image) so the TAPPAS version we auto-install below is
+    # actually compatible with it, instead of always installing the newest
+    # pinned TAPPAS_RESOURCES_VERSION regardless of HailoRT.
+    local installed_hailort_version=""
+    installed_hailort_version=$(dpkg-query -W -f='${Status} ${Version}' hailort 2>/dev/null) || true
+    if [[ "$installed_hailort_version" == install\ ok\ installed\ * ]]; then
+        installed_hailort_version="${installed_hailort_version##* }"
+        installed_hailort_version="${installed_hailort_version%%-*}"
+    else
+        installed_hailort_version=""
+    fi
+    local target_tappas_version
+    target_tappas_version="$(select_tappas_version_for_hailort "$installed_hailort_version")"
+    if [[ -n "$installed_hailort_version" ]]; then
+        log_debug "Detected HailoRT ${installed_hailort_version}; selecting compatible TAPPAS Core v${target_tappas_version}"
     fi
 
     # --- TAPPAS Core .deb ---
@@ -954,7 +996,7 @@ ensure_gstreamer_resources() {
     # actually installed, not always the newest pinned version — otherwise a
     # valid-but-older system install (e.g. 5.3.0 from hailo-all) gets paired
     # with a newer wheel (e.g. 5.4.0), which fails the version-match check later.
-    local tappas_whl_version="${TAPPAS_RESOURCES_VERSION}"
+    local tappas_whl_version="${target_tappas_version}"
     if [[ "${tappas_found}" == true && -n "${installed_tappas_version}" ]]; then
         tappas_whl_version="${installed_tappas_version}"
     fi
@@ -963,10 +1005,9 @@ ensure_gstreamer_resources() {
     if [[ "${tappas_found}" == true ]]; then
         log_success "TAPPAS Core already installed (v${installed_tappas_version:-unknown}), skipping .deb download"
     else
-        local deb_url=""
+        local deb_url="https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/installation_files/v${target_tappas_version}/hailo-tappas-core_${target_tappas_version}_${arch}.deb"
         case "$arch" in
-            amd64) deb_url="${TAPPAS_DEB_URL_AMD64}" ;;
-            arm64) deb_url="${TAPPAS_DEB_URL_ARM64}" ;;
+            amd64|arm64) ;;
             *)
                 log_error "No TAPPAS Core package available for architecture: ${arch}"
                 log_error "Install hailo-tappas-core manually or use --skip-gstreamer"
@@ -977,7 +1018,7 @@ ensure_gstreamer_resources() {
         local deb_path="${TAPPAS_DOWNLOAD_DIR}/$(basename "$deb_url")"
         mkdir -p "${TAPPAS_DOWNLOAD_DIR}"
 
-        log_info "Downloading TAPPAS Core (.deb, ${arch})..."
+        log_info "Downloading TAPPAS Core (.deb, ${arch}, v${target_tappas_version})..."
         if ! download_file "$deb_url" "$deb_path"; then
             log_error "Failed to download TAPPAS Core package: ${deb_url}"
             return 1
@@ -998,14 +1039,28 @@ ensure_gstreamer_resources() {
         return 0
     fi
 
-    # Skip the download if already importable (e.g. pre-installed in the
-    # Suite Docker's active venv), to avoid a version mismatch against the
-    # already-installed TAPPAS Core package.
+    # Skip the download only if already importable AND its version matches the
+    # installed TAPPAS Core package (e.g. pre-installed in the Suite Docker's
+    # active venv). A stale/mismatched pre-installed binding (e.g. a container
+    # image shipping "hailo" 5.3.0 alongside a 5.1.0 tappas-core .deb) must NOT
+    # be skipped — otherwise the mismatch is only caught later as a hard
+    # failure instead of being auto-corrected here.
     # NOTE: The TAPPAS Core Python binding module is `hailo` (not `hailo_platform`,
     # which is the PyHailoRT/HailoRT binding module).
     if as_original_user python3 -c 'import hailo' >/dev/null 2>&1; then
-        log_success "TAPPAS Core Python binding already importable (hailo), skipping download"
-        return 0
+        local importable_hailo_version
+        importable_hailo_version=$(
+            as_original_user python3 -c 'import hailo; print(getattr(hailo, "__version__", ""))' 2>/dev/null
+        ) || true
+
+        if [[ -z "${installed_tappas_version}" || -z "${importable_hailo_version}" \
+           || "${importable_hailo_version}" == "${installed_tappas_version}" ]]; then
+            log_success "TAPPAS Core Python binding already importable (hailo), skipping download"
+            return 0
+        fi
+
+        log_warning "TAPPAS Core Python binding version mismatch: installed hailo=${importable_hailo_version}, tappas-core=${installed_tappas_version}"
+        log_info "Downloading matching TAPPAS Core Python binding (v${tappas_whl_version}) to replace it..."
     fi
 
     local whl_path="${TAPPAS_DOWNLOAD_DIR}/$(basename "${tappas_whl_url}")"

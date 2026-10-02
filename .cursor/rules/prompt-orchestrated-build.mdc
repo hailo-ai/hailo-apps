@@ -1,0 +1,10 @@
+---
+description: "Prompt template: Orchestrated Application Build"
+alwaysApply: false
+---
+
+# Prompt: orchestrated-build
+
+Orchestrated Application Build
+
+Read `.hailo/prompts/orchestrated-build.md` for the complete prompt template.

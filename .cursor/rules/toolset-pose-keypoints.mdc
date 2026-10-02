@@ -1,0 +1,8 @@
+---
+description: "Toolset: COCO Pose Keypoints Reference"
+alwaysApply: false
+---
+
+# Toolset: pose-keypoints
+
+Read `.hailo/toolsets/pose-keypoints.md` for the complete API reference.

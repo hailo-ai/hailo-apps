@@ -90,19 +90,13 @@ if zlib_dep.found()
     face_align_deps += zlib_dep
 endif
 
-# face_align.cpp calls get_mat_from_gst_frame(), which only exists in
-# libhailo_gst_image — some TAPPAS installs don't ship it at all.
-if hailo_gst_image_available
-    shared_library('vms_face_align',
-        face_align_post_sources,
-        dependencies : face_align_deps,
-        gnu_symbol_visibility : 'default',
-        install: true,
-        install_dir: '/usr/local/hailo/resources/so',
-    )
-else
-    message('⚠️  Skipping vms_face_align: libhailo_gst_image not available in this TAPPAS install')
-endif
+shared_library('vms_face_align',
+    face_align_post_sources,
+    dependencies : face_align_deps,
+    gnu_symbol_visibility : 'default',
+    install: true,
+    install_dir: '/usr/local/hailo/resources/so',
+)
 
 ################################################
 # SCRFD SOURCES
@@ -126,19 +120,13 @@ arcface_post_sources = [
     'arcface.cpp',
 ]
 
-# arcface.cpp calls HailoTracker::GetInstance(), which only exists in
-# libhailo_tracker — some TAPPAS installs don't ship it at all.
-if hailo_tracker_available
-    shared_library('face_recognition_post',
-        arcface_post_sources,
-        dependencies : [postprocess_dep, hailo_common_compat_dep],
-        gnu_symbol_visibility : 'default',
-        install: true,
-        install_dir: '/usr/local/hailo/resources/so',
-    )
-else
-    message('⚠️  Skipping face_recognition_post: libhailo_tracker not available in this TAPPAS install')
-endif
+shared_library('face_recognition_post',
+    arcface_post_sources,
+    dependencies : [postprocess_dep, hailo_common_compat_dep],
+    gnu_symbol_visibility : 'default',
+    install: true,
+    install_dir: '/usr/local/hailo/resources/so',
+)
 
 ################################################
 # VMS CROPPERS SOURCES
@@ -282,13 +270,11 @@ shared_library('ocr_postprocess',
 
 ################################################
 # HAILOOVERLAY_COMMUNITY (custom overlay GStreamer element)
-# Only built when yaml-cpp, GStreamer, and libhailo_gst_image are available.
-# gsthailooverlay_community.cpp calls get_mat_by_format()/get_hailo_main_roi(),
-# which only exist in libhailo_gst_image.
+# Only built when yaml-cpp and GStreamer dependencies are available.
 ################################################
 yaml_cpp_dep = dependency('yaml-cpp', required : false)
 
-if yaml_cpp_dep.found() and gst_dep.found() and gst_base_dep.found() and gst_video_dep.found() and hailo_gst_image_available
+if yaml_cpp_dep.found() and gst_dep.found() and gst_base_dep.found() and gst_video_dep.found()
     overlay_community_inc = include_directories('overlay_community')
 
     overlay_community_deps = [postprocess_dep, gst_dep, gst_base_dep, gst_video_dep, yaml_cpp_dep]
@@ -307,5 +293,5 @@ if yaml_cpp_dep.found() and gst_dep.found() and gst_base_dep.found() and gst_vid
         install_dir: '/usr/local/hailo/resources/so',
     )
 else
-    message('⚠️  Skipping hailooverlay_community: missing yaml-cpp/GStreamer dependencies or libhailo_gst_image')
+    message('Skipping hailooverlay_community (missing yaml-cpp or GStreamer dependencies)')
 endif

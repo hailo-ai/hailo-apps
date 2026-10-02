@@ -81,8 +81,6 @@ def inference_callback(
                 }
             output_queue.put((input_batch[i], result))
 
-    output_queue.put(None)  # Signal that this batch is done processing
-
 
 def infer(hailo_inference, input_queue, output_queue, stop_event):
     """

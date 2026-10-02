@@ -93,12 +93,17 @@ gst_hailooverlay_community_class_init(GstHailoOverlayCommunityClass *klass)
     const char *description = "Draws post-processing results for networks inferred by hailonet elements."
                               "\n\t\t\t   "
                               "Draws classes contained by HailoROI objects attached to incoming frames.";
+    // Overlay drawing (sprite blending, HUD overlay, text backgrounds) assumes
+    // RGB-like pixel layout (>=3 interleaved bytes/pixel). NV12 (1 channel Y
+    // plane) and YUY2 (2 bytes/pixel packed) are not interleaved RGB and
+    // break those code paths (out-of-bounds writes on NV12, wrong colors /
+    // position drift on YUY2), so only RGB/RGBA are advertised.
     gst_element_class_add_pad_template(GST_ELEMENT_CLASS(klass),
                                        gst_pad_template_new("src", GST_PAD_SRC, GST_PAD_ALWAYS,
-                                                            gst_caps_from_string(GST_VIDEO_CAPS_MAKE("{ RGB, YUY2, RGBA, NV12 }"))));
+                                                            gst_caps_from_string(GST_VIDEO_CAPS_MAKE("{ RGB, RGBA }"))));
     gst_element_class_add_pad_template(GST_ELEMENT_CLASS(klass),
                                        gst_pad_template_new("sink", GST_PAD_SINK, GST_PAD_ALWAYS,
-                                                            gst_caps_from_string(GST_VIDEO_CAPS_MAKE("{ RGB, YUY2, RGBA, NV12 }"))));
+                                                            gst_caps_from_string(GST_VIDEO_CAPS_MAKE("{ RGB, RGBA }"))));
 
     gst_element_class_set_static_metadata(GST_ELEMENT_CLASS(klass),
                                           "hailooverlay_community - overlay element",
@@ -309,8 +314,15 @@ void gst_hailooverlay_community_set_property(GObject *object, guint property_id,
         hailooverlay->sprite_cache = nullptr;
         if (hailooverlay->sprite_config_path && hailooverlay->sprite_config_path[0] != '\0') {
             auto *cache = new SpriteCache();
-            cache->load_config(hailooverlay->sprite_config_path);
-            hailooverlay->sprite_cache = cache;
+            try {
+                cache->load_config(hailooverlay->sprite_config_path);
+                hailooverlay->sprite_cache = cache;
+            } catch (const std::exception &e) {
+                GST_ERROR_OBJECT(hailooverlay, "Failed to load sprite-config '%s': %s",
+                                  hailooverlay->sprite_config_path, e.what());
+                delete cache;
+                hailooverlay->sprite_cache = nullptr;
+            }
         }
         break;
     }
@@ -322,8 +334,15 @@ void gst_hailooverlay_community_set_property(GObject *object, guint property_id,
         hailooverlay->style_config = nullptr;
         if (hailooverlay->style_config_path && hailooverlay->style_config_path[0] != '\0') {
             auto *cfg = new StyleConfig();
-            cfg->load(hailooverlay->style_config_path);
-            hailooverlay->style_config = cfg;
+            try {
+                cfg->load(hailooverlay->style_config_path);
+                hailooverlay->style_config = cfg;
+            } catch (const std::exception &e) {
+                GST_ERROR_OBJECT(hailooverlay, "Failed to load style-config '%s': %s",
+                                  hailooverlay->style_config_path, e.what());
+                delete cfg;
+                hailooverlay->style_config = nullptr;
+            }
         }
         break;
     }

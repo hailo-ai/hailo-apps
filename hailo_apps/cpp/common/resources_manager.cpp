@@ -484,7 +484,8 @@ static bool is_hef_compatible_with_device(const std::filesystem::path &hef_path,
  */
 static std::string modelzoo_version_for(const std::string &hw_arch, const std::string &hailort_ver)
 {
-    // hailo10h: 5.x -> v5.x
+    // hailo10h: 5.x -> v5.x (kept in sync with config.yaml's model_zoo_mapping comment:
+    // HailoRT 5.1.x -> v5.1.0, 5.2.x -> v5.2.0, 5.3.x -> v5.3.0, 5.4.x -> v5.4.0)
     static const std::unordered_map<std::string,std::string> compat_10h = {
         {"5.0.1","v5.0.0"},
         {"5.0.0","v5.0.0"},
@@ -492,14 +493,18 @@ static std::string modelzoo_version_for(const std::string &hw_arch, const std::s
         {"5.1.1","v5.1.0"},
         {"5.1.2","v5.1.0"},
         {"5.2.0","v5.2.0"},
+        {"5.3.0","v5.3.0"},
+        {"5.4.0","v5.4.0"},
     };
 
-    // hailo8/8l: 4.x -> v2.xx
+    // hailo8/8l: 4.x -> v2.xx (kept in sync with config.yaml's model_zoo_mapping comment:
+    // HailoRT 4.23.x -> v2.18.0, HailoRT 4.24.x -> v2.19.0)
     static const std::unordered_map<std::string,std::string> compat_8 = {
         {"4.23.0","v2.18.0"},
         {"4.22.0","v2.16.0"},
         {"4.21.0","v2.15.0"},
         {"4.20.0","v2.14.0"},
+        {"4.24.0","v2.19.0"},
     };
 
     if (hw_arch == "hailo10h") {
@@ -717,20 +722,25 @@ static std::string download_hef_yaml(const YAML::Node &root,
         throw std::runtime_error("Net '" + net + "' does not support hw-arch=" + hw_arch + " (or not found).");
     }
 
-    const std::string hv = hailort_version();
-    if (hv.empty()) {
-        throw std::runtime_error("Cannot parse HailoRT version. Is hailortcli installed?");
-    }
-    const std::string mz_ver = modelzoo_version_for(hw_arch, hv);
-
     const auto m = find_model_entry(root, app, hw_arch, net);
 
     fs::create_directories(dest_dir);
 
+    // Only resolve the installed HailoRT -> Model Zoo version mapping when it's
+    // actually needed to build the download URL. Explicit "url" entries and the
+    // version-less "s3" source don't depend on it, so they must not fail just
+    // because the installed HailoRT version isn't in the (hardcoded) compat map.
     std::string url;
     if (!m.url.empty()) {
         url = m.url; // explicit URL in YAML
+    } else if (m.source == "s3") {
+        url = build_hef_url(m.source, /*mz_ver=*/{}, hw_arch, m.name);
     } else {
+        const std::string hv = hailort_version();
+        if (hv.empty()) {
+            throw std::runtime_error("Cannot parse HailoRT version. Is hailortcli installed?");
+        }
+        const std::string mz_ver = modelzoo_version_for(hw_arch, hv);
         url = build_hef_url(m.source, mz_ver, hw_arch, m.name);
     }
 
@@ -869,15 +879,15 @@ std::string ResourcesManager::resolve_input_arg(const std::string &app,
             if (!fs::exists(candidate)) {
                 throw std::runtime_error("Input path does not exist: " + candidate.string());
             }
-            if (!fs::is_regular_file(candidate)) {
-                throw std::runtime_error("Input path is not a file: " + candidate.string());
+            if (!fs::is_regular_file(candidate) && !fs::is_directory(candidate)) {
+                throw std::runtime_error("Input path is not a file or directory: " + candidate.string());
             }
             return fs::absolute(candidate).string();
         }
 
         // If it's a filename-only and exists in current working directory -> use it.
         fs::path cwd_candidate = fs::current_path() / candidate;
-        if (fs::exists(cwd_candidate) && fs::is_regular_file(cwd_candidate)) {
+        if (fs::exists(cwd_candidate) && (fs::is_regular_file(cwd_candidate) || fs::is_directory(cwd_candidate))) {
             return fs::absolute(cwd_candidate).string();
         }
     }

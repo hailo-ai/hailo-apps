@@ -1367,9 +1367,6 @@ hailo_status run_inference_async(HailoInfer& model,
         );
 
         jobs_submitted = true;
-        for (const auto &[name, q] : named_input_queues) {
-            if (q->is_stopped()) goto done;
-        }
     }
 
 done:

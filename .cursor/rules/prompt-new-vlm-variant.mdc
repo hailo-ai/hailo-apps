@@ -1,0 +1,10 @@
+---
+description: "Prompt template: Create New VLM App Variant"
+alwaysApply: false
+---
+
+# Prompt: new-vlm-variant
+
+Create New VLM App Variant
+
+Read `.hailo/prompts/new-vlm-variant.md` for the complete prompt template.

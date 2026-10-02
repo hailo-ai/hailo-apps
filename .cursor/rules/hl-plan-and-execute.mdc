@@ -1,0 +1,260 @@
+---
+description: "Skill: Plan-and-Execute Loop"
+alwaysApply: false
+---
+
+````instructions
+# Skill: Plan-and-Execute Loop
+
+> Execute complex tasks through a disciplined loop of planning, delegating, implementing, and gating — the core agentic workflow pattern for this repository.
+
+## When to Use This Skill
+
+- Building a new application (any archetype)
+- Refactoring across multiple files
+- Bug fixes that touch 3+ files
+- Any task where the agent should "think before coding"
+
+## The Loop
+
+```
+PLAN → DELEGATE → EXECUTE → GATE → (loop or advance)
+```
+
+---
+
+## Step 1: Plan
+
+### Read Context (Sub-Agent)
+
+Spawn a context-loading sub-agent FIRST. This is the most important step.
+
+```
+runSubagent:
+  description: "Load task context"
+  prompt: |
+    Read the following files and return a structured context brief:
+    
+    MEMORY (always):
+    - .hailo/memory/MEMORY.md
+    - .hailo/memory/common_pitfalls.md
+    
+    DOMAIN (pick relevant):
+    - .hailo/memory/gen_ai_patterns.md       ← for Gen AI apps
+    - .hailo/memory/pipeline_optimization.md  ← for GStreamer apps
+    - .hailo/memory/camera_and_display.md     ← for camera apps
+    - .hailo/memory/hailo_platform_api.md     ← for direct HailoRT
+    
+    SKILL (pick one):
+    - .hailo/skills/<relevant_skill>.md
+    
+    REFERENCE CODE:
+    - <reference_app_main_file>
+    - <reference_app_supporting_files>
+    
+    Return:
+    1. App archetype (pipeline/standalone/gen-ai)
+    2. Modules to reuse (with exact import paths)
+    3. Conventions to follow (top 5)
+    4. Known pitfalls for this task type
+    5. Key function signatures from reference code
+```
+
+### Create the Plan (Todo List)
+
+After receiving the context brief, create a structured todo list:
+
+```python
+manage_todo_list([
+    # Phase 0
+    {"id": 1, "title": "Load context (sub-agent)", "status": "completed"},
+    
+    # Phase 1: Planning & Registration
+    {"id": 2, "title": "Register app in defines.py", "status": "not-started"},
+    {"id": 3, "title": "Create directory + __init__.py", "status": "not-started"},
+    {"id": 4, "title": "GATE: Verify directory exists", "status": "not-started"},
+    
+    # Phase 2: Implementation
+    {"id": 5, "title": "Implement <module_a>", "status": "not-started"},
+    {"id": 6, "title": "Implement <module_b>", "status": "not-started"},
+    {"id": 7, "title": "Implement <main_module>", "status": "not-started"},
+    {"id": 8, "title": "GATE: Validate all imports", "status": "not-started"},
+    
+    # Phase 3: Validation
+    {"id": 9, "title": "Run --help validation", "status": "not-started"},
+    {"id": 10, "title": "Check lint errors", "status": "not-started"},
+    {"id": 11, "title": "GATE: Full validation pass", "status": "not-started"},
+    
+    # Phase 4: Documentation
+    {"id": 12, "title": "Write README.md", "status": "not-started"},
+    {"id": 13, "title": "Update memory if needed", "status": "not-started"},
+    {"id": 14, "title": "GATE: Final review", "status": "not-started"},
+])
+```
+
+**Key pattern**: Include explicit `GATE:` items in the todo list. These are checkpoints, not tasks.
+
+---
+
+## Step 2: Delegate
+
+### Identify Parallelizable Work
+
+Within each phase, find tasks that have NO dependencies on each other:
+
+```
+Phase 2 dependency analysis:
+  - event_tracker.py     → depends on nothing (pure logic)
+  - my_vlm_app.py       → imports from event_tracker.py
+  - README.md            → describes my_vlm_app.py
+
+  Therefore:
+  - event_tracker.py can be a sub-agent (independent)
+  - my_vlm_app.py must wait for event_tracker.py
+  - README.md can be a sub-agent (after implementation done)
+```
+
+### Launch Independent Sub-Agents
+
+```
+# Parallel sub-agents for independent modules
+runSubagent A: "Build event_tracker.py — [full spec with context]"
+runSubagent B: "Search codebase for signal handling patterns — return examples"
+```
+
+Wait for results, then build dependent modules in the main agent.
+
+---
+
+## Step 3: Execute
+
+### Implementation Sequence
+
+```
+For each file to create:
+  1. Write the complete file content
+  2. Include ALL imports at the top
+  3. Include docstrings on every class and public function
+  4. Include type hints on all function signatures
+  5. Handle errors with try/except and logging
+  
+For each file to modify:
+  1. Read the current file content first
+  2. Make minimal, targeted changes
+  3. Preserve existing formatting and style
+  4. Never remove existing functionality
+```
+
+### Code Quality During Execution
+
+While writing each file, apply these inline checks:
+
+```python
+# ✓ Absolute import
+from hailo_apps.python.core.common.hailo_logger import get_logger
+
+# ✗ Relative import — NEVER
+from ...core.common.hailo_logger import get_logger
+
+# ✓ Logger initialization
+logger = get_logger(__name__)
+
+# ✗ Print statements — NEVER in production code
+print("Debug info")
+
+# ✓ HEF resolution
+hef_path = resolve_hef_path(model_path, APP_NAME, arch)
+
+# ✗ Hardcoded path — NEVER
+hef_path = "/home/user/models/model.hef"
+```
+
+---
+
+## Step 4: Gate
+
+### Gate Check Execution
+
+Run these commands at each phase boundary:
+
+```bash
+# Phase 1 Gate: Structure exists
+ls -la hailo_apps/python/gen_ai_apps/<app_name>/
+# Expect: __init__.py and any stub files
+
+# Phase 2 Gate: Code is importable
+python3 -c "
+from hailo_apps.python.gen_ai_apps.<app_name>.<main_module> import <MainClass>
+print('Import OK')
+"
+# Expect: "Import OK"
+
+# Phase 3 Gate: CLI works
+python3 -m hailo_apps.python.gen_ai_apps.<app_name>.<main_module> --help
+# Expect: Help text with all expected arguments
+
+# Phase 4 Gate: Everything is documented
+test -f hailo_apps/python/gen_ai_apps/<app_name>/README.md && echo "README OK"
+```
+
+### Gate Failure Recovery
+
+```
+IF gate fails:
+  1. Read error output carefully
+  2. Check .hailo/memory/common_pitfalls.md
+  3. Add a "Fix: <description>" todo item
+  4. Mark the gate todo as "not-started" (will re-check after fix)
+  5. Implement the fix
+  6. Re-run the gate
+  7. If still failing, try a different approach
+  8. If STILL failing, document the blocker and ask the user
+```
+
+---
+
+## Complete Example: Building a VLM Monitor
+
+```
+Phase 0: Context
+  ├── runSubagent: Load VLM + monitoring context (returns brief)
+  └── Create todo list with all phases
+
+Phase 1: Registration (main agent)
+  ├── Add MY_VLM_APP to defines.py
+  ├── Create my_vlm_app/__init__.py
+  └── GATE: grep defines.py for MY_VLM_APP ✓
+
+Phase 2: Implementation
+  ├── runSubagent: Build event_tracker.py (independent)
+  ├── Main agent: Build my_vlm_app.py (uses Backend + EventTracker)
+  └── GATE: python3 -c "from ...my_vlm_app import MyVlmApp" ✓
+
+Phase 3: Validation
+  ├── Terminal: python3 -m ...my_vlm_app --help
+  ├── get_errors on all .py files
+  ├── Convention checklist (imports, logger, paths)
+  └── GATE: All checks pass ✓
+
+Phase 4: Documentation
+  ├── runSubagent: Write README.md with usage examples
+  ├── Update memory if something new was learned
+  └── GATE: README exists, re-run import validation ✓
+
+DONE: Mark all todos complete, report deliverables to user
+```
+
+---
+
+## Adapting the Loop for Different Scales
+
+### Small Task (< 3 files)
+Skip sub-agents. Run the loop in main agent only. Still use todo list and gates.
+
+### Medium Task (3-6 files)
+Use 1-2 sub-agents for independent modules. Full 4-phase loop.
+
+### Large Task (7+ files or cross-cutting)
+Use 3+ sub-agents. Consider splitting into multiple PRs. Add a "Phase 2.5: Integration sub-phase" where you wire modules together before the full validation.
+
+````

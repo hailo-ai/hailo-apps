@@ -1,0 +1,168 @@
+---
+description: "Skill: Event Detection & Reporting"
+alwaysApply: false
+---
+
+# Skill: Event Detection & Reporting
+
+> Detect specific events from VLM analysis and maintain structured event logs.
+
+## When to Use This Skill
+
+- User wants to **detect specific activities** (person entering, object appearing, etc.)
+- User needs **event counting** and statistics
+- User wants **alerts** when certain events occur
+- User needs **structured event logs** for reporting
+
+## Event Detection Architecture
+
+```
+VLM Response → Event Parser → Event Classifier → Event Log → Reporter
+                                                            → Alert (optional)
+```
+
+## Implementation
+
+### Event Categories
+
+Define events as a structured configuration:
+
+```python
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Optional
+from datetime import datetime
+
+class EventType(Enum):
+    DRINKING = "drinking"
+    EATING = "eating"
+    SLEEPING = "sleeping"
+    PLAYING = "playing"
+    BARKING = "barking"
+    AT_DOOR = "at_door"
+    UNKNOWN = "unknown"
+
+@dataclass
+class Event:
+    event_type: EventType
+    timestamp: datetime
+    description: str
+    confidence: str = "medium"  # low, medium, high
+    frame_path: Optional[str] = None
+
+@dataclass
+class EventLog:
+    events: list[Event] = field(default_factory=list)
+
+    def add(self, event: Event):
+        self.events.append(event)
+
+    def count_by_type(self, event_type: EventType) -> int:
+        return sum(1 for e in self.events if e.event_type == event_type)
+
+    def get_recent(self, minutes: int = 60) -> list[Event]:
+        cutoff = datetime.now() - timedelta(minutes=minutes)
+        return [e for e in self.events if e.timestamp > cutoff]
+
+    def summary(self) -> str:
+        counts = {}
+        for e in self.events:
+            counts[e.event_type.value] = counts.get(e.event_type.value, 0) + 1
+        lines = [f"  {k}: {v} times" for k, v in sorted(counts.items())]
+        return f"Event Summary ({len(self.events)} total):\n" + "\n".join(lines)
+```
+
+### Event Parser (from VLM Response)
+
+```python
+EVENT_KEYWORDS = {
+    EventType.DRINKING: ["drinking", "water", "bowl", "lapping", "hydrat"],
+    EventType.EATING: ["eating", "food", "kibble", "chewing", "munching"],
+    EventType.SLEEPING: ["sleeping", "resting", "lying down", "napping", "asleep"],
+    EventType.PLAYING: ["playing", "running", "jumping", "toy", "fetch"],
+    EventType.BARKING: ["barking", "alert", "vocalizing", "howling"],
+    EventType.AT_DOOR: ["door", "entrance", "waiting", "wants out", "wants in"],
+}
+
+def parse_events(vlm_response: str) -> list[EventType]:
+    """Parse VLM response to identify events."""
+    response_lower = vlm_response.lower()
+    detected = []
+    for event_type, keywords in EVENT_KEYWORDS.items():
+        if any(kw in response_lower for kw in keywords):
+            detected.append(event_type)
+    return detected or [EventType.UNKNOWN]
+```
+
+### Smart Monitoring Prompt
+
+```python
+MONITORING_SYSTEM_PROMPT = """You are a scene monitoring assistant watching a camera.
+Your job is to describe what is happening RIGHT NOW in one concise sentence.
+Focus on these activities: people entering/leaving, objects being moved, unusual activity,
+idle scene, alerts.
+Be specific and factual. If nothing notable is visible, say so."""
+
+MONITORING_USER_PROMPT = "What is happening in the scene right now? Describe the current activity in one sentence."
+```
+
+### Alert System
+
+```python
+class AlertManager:
+    def __init__(self, alert_events: list[EventType] = None):
+        self.alert_events = alert_events or [EventType.AT_DOOR, EventType.BARKING]
+        self.last_alert_time = {}
+        self.alert_cooldown = 60  # seconds between same-type alerts
+
+    def check_alert(self, event: Event) -> bool:
+        """Check if event should trigger an alert."""
+        if event.event_type not in self.alert_events:
+            return False
+        last = self.last_alert_time.get(event.event_type)
+        now = datetime.now()
+        if last and (now - last).seconds < self.alert_cooldown:
+            return False
+        self.last_alert_time[event.event_type] = now
+        return True
+
+    def trigger_alert(self, event: Event):
+        """Trigger alert for detected event."""
+        print(f"\n🚨 ALERT: {event.event_type.value.upper()} detected!")
+        print(f"   {event.description}")
+        print(f"   Time: {event.timestamp.strftime('%H:%M:%S')}\n")
+```
+
+## Event Statistics Display
+
+```python
+def print_status_bar(event_log: EventLog, elapsed_minutes: float):
+    """Print a live status bar in the terminal."""
+    recent = event_log.get_recent(minutes=30)
+    counts = {}
+    for e in recent:
+        counts[e.event_type.value] = counts.get(e.event_type.value, 0) + 1
+
+    status_parts = [f"{k}:{v}" for k, v in counts.items()]
+    status = " | ".join(status_parts) or "No events"
+    print(f"\r[{elapsed_minutes:.0f}m] Events (30min): {status}    ", end="", flush=True)
+```
+
+## Integration with Continuous Monitor
+
+This skill is designed to be combined with the **continuous-monitoring** skill:
+
+```python
+# In the monitoring loop
+result = backend.vlm_inference(frame, MONITORING_USER_PROMPT)
+detected_events = parse_events(result["answer"])
+for event_type in detected_events:
+    event = Event(
+        event_type=event_type,
+        timestamp=datetime.now(),
+        description=result["answer"],
+    )
+    event_log.add(event)
+    if alert_manager.check_alert(event):
+        alert_manager.trigger_alert(event)
+```

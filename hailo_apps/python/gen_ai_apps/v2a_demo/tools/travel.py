@@ -1,5 +1,6 @@
 """Travel tool — geocoding via Nominatim (geopy), routing via OSRM."""
 
+import os
 import requests
 import logging
 from geopy.geocoders import Nominatim
@@ -9,6 +10,13 @@ logger = logging.getLogger("v2a_demo")
 # Required by Nominatim usage policy; requests without it get 403 Forbidden
 HAILO_V2A_USER_AGENT = "HailoVoiceAssistant/1.0"
 _geocoder = Nominatim(user_agent=HAILO_V2A_USER_AGENT, timeout=60)
+
+# "home"/"work" are resolved from these addresses (set by the user), not geocoded literally.
+HOME_ADDRESS = os.getenv("HOME_ADDRESS")
+WORK_ADDRESS = os.getenv("WORK_ADDRESS")
+
+# All the ways the LLM (or a user) might spell "here"/"current_location".
+_CURRENT_LOCATION_ALIASES = {"current_location", "current location", "here"}
 
 TOOL_PROMPT = (
     "Extract parameters from the user's travel time request as a JSON object.\n"
@@ -64,6 +72,58 @@ def _geocode(location: str) -> tuple[float, float] | None:
     return None
 
 
+def _geocode_ip_location() -> tuple[float, float] | None:
+    """Best-effort current location via IP geolocation (no GPS on this device)."""
+    try:
+        response = requests.get("http://ip-api.com/json/", timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("status") == "success":
+            return (data["lon"], data["lat"])
+    except Exception as e:
+        logger.error(f"IP geolocation failed: {e}")
+    return None
+
+
+def _resolve_location(location: str) -> tuple[float, float] | None:
+    """Resolve a location string to (longitude, latitude).
+
+    Handles the "home"/"work"/"current_location" aliases the LLM extracts
+    (see TOOL_PROMPT) before falling back to geocoding literal place names.
+    Passing those aliases straight to Nominatim would never resolve, since
+    they aren't real place names.
+    """
+    key = location.lower().strip()
+
+    if key == "home":
+        return _geocode(HOME_ADDRESS) if HOME_ADDRESS else None
+    if key == "work":
+        return _geocode(WORK_ADDRESS) if WORK_ADDRESS else None
+    if key in _CURRENT_LOCATION_ALIASES:
+        return _geocode_ip_location()
+
+    return _geocode(location)
+
+
+def _unresolved_location_message(location: str) -> str:
+    """User-facing error for a location that couldn't be resolved."""
+    key = location.lower().strip()
+    if key == "home":
+        return "I don't have your home address set. Please set the HOME_ADDRESS environment variable."
+    if key == "work":
+        return "I don't have your work address set. Please set the WORK_ADDRESS environment variable."
+    if key in _CURRENT_LOCATION_ALIASES:
+        return "I couldn't determine your current location."
+    return f"I couldn't find {location}."
+
+
+def _display_name(location: str) -> str:
+    """Human-friendly name for a location when used in the spoken response."""
+    if location.lower().strip() in _CURRENT_LOCATION_ALIASES:
+        return "your current location"
+    return location
+
+
 def _format_duration(seconds: int) -> str:
     """Format seconds into a TTS-friendly duration string."""
     hours = seconds // 3600
@@ -96,13 +156,13 @@ def get_travel_time(origin: str, destination: str, mode: str = "driving") -> str
     if mode not in MODE_TO_OSRM_URL:
         return f"Unknown travel mode: {mode}. You can ask for driving, walking, or cycling."
 
-    orig_geocode = _geocode(origin)
-    dest_geocode = _geocode(destination)
+    orig_geocode = _resolve_location(origin)
+    dest_geocode = _resolve_location(destination)
 
     if not orig_geocode:
-        return f"I couldn't find {origin}."
+        return _unresolved_location_message(origin)
     if not dest_geocode:
-        return f"I couldn't find {destination}."
+        return _unresolved_location_message(destination)
 
     base_url = MODE_TO_OSRM_URL[mode]
     url = (
@@ -122,7 +182,7 @@ def get_travel_time(origin: str, destination: str, mode: str = "driving") -> str
         duration = _format_duration(int(route["duration"]))
         distance = _format_distance(route["distance"])
         return (
-            f"{mode.capitalize()} from {origin} to {destination} "
+            f"{mode.capitalize()} from {_display_name(origin)} to {_display_name(destination)} "
             f"takes about {duration}, covering {distance}."
         )
 

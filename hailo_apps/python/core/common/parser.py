@@ -92,6 +92,7 @@ def get_base_parser() -> argparse.ArgumentParser:
         "--frame-rate",
         "-f",
         type=int,
+        default=30,
         help=(
             "Target frame rate for video processing in frames per second. "
             "Controls the playback speed and processing rate for video sources. "

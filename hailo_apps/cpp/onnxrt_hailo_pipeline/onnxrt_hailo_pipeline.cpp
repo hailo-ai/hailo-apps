@@ -39,6 +39,7 @@ InstanceSegArgs parse_instance_seg_args(int argc, char** argv)
     std::string fps = getCmdOptionWithShortFlag(argc, argv, "--framerate", "-f");
     a.framerate     = fps.empty() ? 30.0 : std::stod(fps);
     a.save_stream_output = has_flag(argc, argv, "-s") || has_flag(argc, argv, "--save-stream-output");
+    a.no_display         = has_flag(argc, argv, "--no-display");
     a.output_dir        = getCmdOptionWithShortFlag(argc, argv, "--output-dir", "-o");
     a.camera_resolution = getCmdOptionWithShortFlag(argc, argv, "--camera-resolution", "-cr");
     

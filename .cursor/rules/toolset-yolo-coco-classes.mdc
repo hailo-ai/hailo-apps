@@ -1,0 +1,8 @@
+---
+description: "Toolset: YOLO COCO Classes Reference"
+alwaysApply: false
+---
+
+# Toolset: yolo-coco-classes
+
+Read `.hailo/toolsets/yolo-coco-classes.md` for the complete API reference.

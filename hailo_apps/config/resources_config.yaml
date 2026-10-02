@@ -1094,8 +1094,9 @@ metadata:
     model_zoo_h8: "https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled"
     gen_ai_mz: "https://dev-public.hailo.ai"
 
-  # Model Zoo version mapping
+  # Model Zoo version mapping (fallback defaults; kept in sync with
+  # config.yaml's model_zoo_mapping and defines.py's VALID_H8/H10_MODEL_ZOO_VERSION)
   model_zoo_versions:
-    hailo8: "v2.18.0"
-    hailo8l: "v2.18.0"
-    hailo10h: "v5.3.0"
+    hailo8: "v2.19.0"
+    hailo8l: "v2.19.0"
+    hailo10h: "v5.4.0"
