@@ -901,6 +901,19 @@ download_file() {
     fi
 }
 
+# Detect supported HailoRT system packages, including the legacy RPi name.
+detect_hailort_package_version() {
+    local pkg package_info
+    for pkg in hailort h10-hailort; do
+        package_info=$(dpkg-query -W -f='${Status} ${Version}' "$pkg" 2>/dev/null) || continue
+        if [[ "$package_info" == install\ ok\ installed\ * ]]; then
+            echo "${package_info##* }"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Pick a TAPPAS Core version compatible with the given HailoRT version, using
 # the "hailort:tappas" combos from config.yaml (valid_combinations.*). Looks
 # across all architectures since HailoRT version strings don't overlap
@@ -908,6 +921,7 @@ download_file() {
 # versions are valid for a given HailoRT version, the last (newest) match in
 # the combo list wins. Falls back to TAPPAS_RESOURCES_VERSION if the HailoRT
 # version is unknown or has no matching combo (e.g. HailoRT not yet installed).
+
 select_tappas_version_for_hailort() {
     local hailort_ver="$1"
     local best=""
@@ -950,9 +964,7 @@ ensure_gstreamer_resources() {
     # actually compatible with it, instead of always installing the newest
     # pinned TAPPAS_RESOURCES_VERSION regardless of HailoRT.
     local installed_hailort_version=""
-    installed_hailort_version=$(dpkg-query -W -f='${Status} ${Version}' hailort 2>/dev/null) || true
-    if [[ "$installed_hailort_version" == install\ ok\ installed\ * ]]; then
-        installed_hailort_version="${installed_hailort_version##* }"
+    if installed_hailort_version=$(detect_hailort_package_version); then
         installed_hailort_version="${installed_hailort_version%%-*}"
     else
         installed_hailort_version=""
@@ -1068,12 +1080,12 @@ print(binding_version)
 
         if [[ -n "${installed_tappas_version}" \
            && "${importable_hailo_version}" == "${installed_tappas_version}" ]]; then
-            log_success "TAPPAS Core Python binding already importable (hailo), skipping download"
+            log_success "TAPPAS Core Python binding v${importable_hailo_version} matches TAPPAS Core, skipping download"
             return 0
         fi
 
-        log_warning "TAPPAS Core Python binding version mismatch: installed hailo=${importable_hailo_version}, tappas-core=${installed_tappas_version}"
-        log_info "Downloading matching TAPPAS Core Python binding (v${tappas_whl_version}) to replace it..."
+        log_warning "TAPPAS version mismatch: installed Python binding=${importable_hailo_version:-unknown}, native Core libraries=${installed_tappas_version:-unknown}"
+        log_info "Downloading TAPPAS Core Python binding v${tappas_whl_version} for installation in the app virtual environment in Step 6..."
     fi
 
     local whl_path="${TAPPAS_DOWNLOAD_DIR}/$(basename "${tappas_whl_url}")"
@@ -1116,6 +1128,17 @@ check_prerequisites() {
         return 0
     fi
 
+    # Post-installation requires a versioned HailoRT system package. A working
+    # hailortcli alone does not establish that this prerequisite is installed.
+    local hailort_version
+    if ! hailort_version=$(detect_hailort_package_version); then
+        log_error "HailoRT system package is missing (checked hailort and h10-hailort)."
+        log_error "Install the HailoRT .deb for your device before running this installer."
+        record_step_result "FAILED" "HailoRT system package missing"
+        return 1
+    fi
+    HAILORT_VERSION="$hailort_version"
+
     # Auto-download and install TAPPAS Core (.deb) and Python binding (.whl)
     # if not already present, before checking installed versions below.
     if ! ensure_gstreamer_resources; then
@@ -1126,7 +1149,6 @@ check_prerequisites() {
     # --- Get installed driver versions from dpkg (always available) ---
     local pcie_driver_version="-1"
     local usb_driver_version="-1"
-    local hailort_version="-1"
     local pyhailort_version="-1"
     local tappas_version="-1"
     local tappas_python_version="-1"
@@ -1137,12 +1159,6 @@ check_prerequisites() {
 
     _v=$(dpkg-query -W -f='${Status} ${Version}' hailort-usb-driver 2>/dev/null) || true
     [[ "$_v" == install\ ok\ installed\ * ]] && usb_driver_version="${_v##* }"
-
-    _v=$(dpkg-query -W -f='${Status} ${Version}' hailort 2>/dev/null) || true
-    if [[ "$_v" == install\ ok\ installed\ * ]]; then
-        hailort_version="${_v##* }"
-        HAILORT_VERSION="$hailort_version"
-    fi
 
     # --- Check 1: hailortcli scan — is any Hailo device physically present? ---
     log_info "Checking for connected Hailo device..."
