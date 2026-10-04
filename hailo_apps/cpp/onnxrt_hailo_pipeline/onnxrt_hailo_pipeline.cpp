@@ -70,7 +70,11 @@ int main(int argc, char** argv)
                       << "Provide --onnx <path> (or -x <path>) pointing to a decode-only "
                       << "ONNX model compatible with the selected HEF's outputs.\n"
                       << "Example: ./build/onnxrt_hailo_pipeline --net /path/to/model.hef "
-                      << "--onnx /path/to/postprocess.onnx --input /path/to/video.mp4\n";
+                      << "--onnx /path/to/postprocess.onnx --input /path/to/video.mp4\n"
+                      << "For the default yolov8m_seg HEF, run the download script "
+                      << "from hailo_apps/cpp/onnxrt_hailo_pipeline to obtain the example ONNX model:\n"
+                      << "  bash ./download_resources.sh\n"
+                      << "Then run: ./build/onnxrt_hailo_pipeline --onnx ./yolov8m-seg_post.onnx\n";
             return HAILO_INVALID_ARGUMENT;
         }
         post_parse_args(APP_NAME, args, argc, argv);
