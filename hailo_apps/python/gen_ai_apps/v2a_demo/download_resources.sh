@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+
+python -m hailo_apps.installation.download_resources --group v2a_demo --arch hailo10h
+
 mkdir -p resources
 cd resources
 

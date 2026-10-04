@@ -22,9 +22,6 @@ This example uses the following models:
 - Stage 3 — LLM: Qwen2.5-Coder-1.5B-Instruct (HEF, Hailo)
 - Stage 5 — TTS: Piper TTS (ONNX, CPU)
 
-HEF resources are resolved via the shared resources catalog and auto-downloaded on first run (same flow as standalone apps).
-Wake-word, TTS, and tool-selection assets must be downloaded separately before running the demo.
-
 ## Linux Installation
 
 ### Existing Shared Installation

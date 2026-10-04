@@ -1,5 +1,12 @@
 $ErrorActionPreference = "Stop"
 
+Set-Location $PSScriptRoot
+
+python -m hailo_apps.installation.download_resources --group v2a_demo --arch hailo10h
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to download the demo HEF resources."
+}
+
 # mkdir resources
 New-Item -ItemType Directory -Force -Path resources | Out-Null
 

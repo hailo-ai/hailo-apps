@@ -223,6 +223,9 @@ def get_model_zoo_version_for_arch(hailo_arch: str) -> tuple[str, str]:
                 # Fallback to newest
                 model_zoo_version = VALID_H8_MODEL_ZOO_VERSION[0]
 
+    if hailo_arch == HAILO10H_ARCH and model_zoo_version.startswith("v5.1."):
+        model_zoo_version = "v5.1.0"
+
     # Validate the version; fall back to the config default if invalid
     if hailo_arch == HAILO10H_ARCH and model_zoo_version not in VALID_H10_MODEL_ZOO_VERSION:
         model_zoo_version = VALID_H10_MODEL_ZOO_VERSION[0]
