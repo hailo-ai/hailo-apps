@@ -46,7 +46,6 @@ class LLMEngine:
         if model_path is None:
             raise RuntimeError("Failed to resolve HEF path for LLM model 'Qwen2.5-Coder-1.5B-Instruct'")
         self.llm = LLM(vdevice, str(model_path))
-        self._cached_contexts = {}  # {tool_name: saved_context}
 
     def run(self, text: str, tool_name: str) -> dict:
         """Extract parameters for the given tool from user text.
@@ -66,10 +65,12 @@ class LLMEngine:
             logger.warning(f"No prompt defined for tool '{tool_name}', returning empty params")
             return {}
 
-        self.llm.load_context(self._cached_contexts[tool_name])
-
+        self.llm.clear_context()
         raw_response = self.llm.generate_all(
-            prompt=[{"role": "user", "content": text.strip()}]
+            prompt=[
+                {"role": "system", "content": TOOL_PROMPTS[tool_name]},
+                {"role": "user", "content": text.strip()},
+            ]
         )
         logger.debug(f"LLM raw response for {tool_name}: {raw_response}")
 
@@ -88,17 +89,6 @@ class LLMEngine:
             self.llm.release()
 
     def __enter__(self):
-        # Pre-cache each tool's system prompt context (skip no-param tools)
-        for tool_name, prompt in TOOL_PROMPTS.items():
-            if tool_name in NO_PARAM_TOOLS:
-                continue
-            self.llm.generate_all(
-                prompt=[{"role": "system", "content": prompt}],
-                max_generated_tokens=0,
-                do_sample=False,
-            )
-            self._cached_contexts[tool_name] = self.llm.save_context()
-            self.llm.clear_context()
         return self
 
     def __exit__(self, *_):

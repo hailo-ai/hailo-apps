@@ -7,14 +7,12 @@ from gi.repository import Gst
 import cv2
 import hailo
 import math
+import multiprocessing
 import numpy as np
 import random
 import time
 
-from hailo_apps.python.core.common.buffer_utils import (
-    get_caps_from_pad,
-    get_numpy_from_buffer,
-)
+from hailo_apps.python.core.common.buffer_utils import get_caps_from_pad
 from hailo_apps.python.core.common.core import get_resource_path
 from hailo_apps.python.core.common.defines import RESOURCES_PHOTOS_DIR_NAME
 from hailo_apps.python.core.common.hailo_logger import get_logger
@@ -35,6 +33,17 @@ EGG_POINTS = 20
 AFIKOMAN_POINTS = 10
 POPUP_DURATION = 0.8        # seconds the "+N" text floats
 RESTART_DELAY = 5           # seconds to show final scores before restart
+
+MAX_FRAME_BYTES = 1920 * 1080 * 3
+
+# Only drop complete frames outside the cropper/aggregator branches.
+LEAKY_QUEUES = (
+    "source_scale_q",
+    "source_convert_q",
+    "inference_wrapper_output_q",
+    "hailo_tracker_q",
+    "identity_callback_q",
+)
 
 # Wrist keypoint indices (COCO 17-keypoint model)
 LEFT_WRIST = 9
@@ -157,7 +166,12 @@ class EasterGameCallback(app_callback_class):
 
     def __init__(self, background_path):
         super().__init__()
-        self.use_frame = True  # will be forced again in app __init__
+        self.use_frame = True
+        self.frame_shm = multiprocessing.RawArray("B", MAX_FRAME_BYTES)
+        self.frame_dims = multiprocessing.RawArray("i", 2)
+        self.frame_lock = multiprocessing.Lock()
+        self.frame_ready = multiprocessing.Event()
+        self.display_stop = multiprocessing.Event()
 
         # Background
         raw = cv2.imread(background_path)
@@ -191,16 +205,16 @@ class EasterGameCallback(app_callback_class):
 
     # --- helpers ---
     def set_frame(self, frame):
-        """Override to drain stale frames so display always shows the latest."""
-        while not self.frame_queue.empty():
-            try:
-                self.frame_queue.get_nowait()
-            except Exception:
-                break
-        try:
-            self.frame_queue.put_nowait(frame)
-        except Exception:
-            pass
+        """Publish the latest BGR frame without serializing it."""
+        h, w = frame.shape[:2]
+        if frame.nbytes > MAX_FRAME_BYTES:
+            logger.warning("Frame %dx%d exceeds shared buffer; dropping", w, h)
+            return
+        with self.frame_lock:
+            shared = np.frombuffer(self.frame_shm, dtype=np.uint8)
+            shared[:frame.size] = frame.reshape(-1)
+            self.frame_dims[:] = h, w
+            self.frame_ready.set()
 
     def _get_bg(self, w, h):
         """Return resized background (RGB) or black frame."""
@@ -243,16 +257,27 @@ class EasterGameCallback(app_callback_class):
         self.game_over_time = None
 
 
+def display_game_frame(user_data):
+    """Display consistent snapshots of the latest shared frame."""
+    shared = np.frombuffer(user_data.frame_shm, dtype=np.uint8)
+    try:
+        while not user_data.display_stop.is_set():
+            if user_data.frame_ready.wait(timeout=0.02):
+                with user_data.frame_lock:
+                    h, w = user_data.frame_dims
+                    frame = shared[:h * w * 3].reshape(h, w, 3).copy()
+                    user_data.frame_ready.clear()
+                cv2.imshow("Easter Hunt", frame)
+            cv2.waitKey(1)
+    finally:
+        cv2.destroyAllWindows()
+
+
 # ─── Callback function ──────────────────────────────────────────────────────
 def app_callback(element, buffer, user_data):
     pad = element.get_static_pad("src")
-    fmt, width, height = get_caps_from_pad(pad)
-
-    frame = None
-    if user_data.use_frame and fmt and width and height:
-        frame = get_numpy_from_buffer(buffer, fmt, width, height)
-
-    if frame is None:
+    _, width, height = get_caps_from_pad(pad)
+    if not (user_data.use_frame and width and height):
         return Gst.FlowReturn.OK
 
     now = time.time()
@@ -515,9 +540,32 @@ class EasterEggsGame(GStreamerPoseEstimationApp):
 
     def __init__(self, app_callback, user_data, parser=None):
         super().__init__(app_callback, user_data, parser)
-        # CRITICAL: force use_frame after parent constructor
-        self.options_menu.use_frame = True
+        self.options_menu.use_frame = False
         user_data.use_frame = True
+        self.pipeline_latency = 0
+        for name in LEAKY_QUEUES:
+            queue = self.pipeline.get_by_name(name)
+            if queue is not None:
+                queue.set_property("leaky", 2)
+                queue.set_property("max-size-buffers", 1)
+        appsrc = self.pipeline.get_by_name("app_source")
+        if appsrc is not None:
+            appsrc.set_property("max-buffers", 1)
+
+    def run(self):
+        self.user_data.display_stop.clear()
+        display_process = multiprocessing.Process(
+            target=display_game_frame, args=(self.user_data,), daemon=True
+        )
+        display_process.start()
+        try:
+            super().run()
+        finally:
+            self.user_data.display_stop.set()
+            display_process.join(timeout=3)
+            if display_process.is_alive():
+                display_process.terminate()
+                display_process.join()
 
 
 def main():

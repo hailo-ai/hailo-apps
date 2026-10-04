@@ -864,7 +864,7 @@ def picamera_thread(pipeline, video_width, video_height, video_format, frame_rat
             # Determine main stream size: must be >= lores for Picamera2.
             # get_camera_resolution returns the nearest standard resolution >= requested.
             main_width, main_height = get_camera_resolution(video_width, video_height)
-            main = {"size": (main_width, main_height), "format": "RGB888"}
+            main = {"size": (main_width, main_height), "format": "BGR888"}
             controls = {"FrameRate": frame_rate}
 
             # If the main and requested sizes match, Picamera2 requires lores < main,
@@ -873,7 +873,7 @@ def picamera_thread(pipeline, video_width, video_height, video_format, frame_rat
                 config = picam2.create_preview_configuration(main=main, controls=controls)
                 capture_stream = "main"
             else:
-                lores = {"size": (video_width, video_height), "format": "RGB888"}
+                lores = {"size": (video_width, video_height), "format": "BGR888"}
                 config = picam2.create_preview_configuration(
                     main=main, lores=lores, controls=controls
                 )
@@ -884,7 +884,10 @@ def picamera_thread(pipeline, video_width, video_height, video_format, frame_rat
 
         picam2.configure(config)
         stream_config = config.get(capture_stream, config["main"])
-        format_str = "RGB" if stream_config["format"] == "RGB888" else video_format
+        # Picamera2 BGR888 stores RGB bytes; RGB888 stores BGR bytes.
+        picam_format = stream_config["format"]
+        needs_channel_swap = picam_format == "RGB888"
+        format_str = "RGB" if picam_format in ("RGB888", "BGR888") else video_format
         width, height = stream_config["size"]
         hailo_logger.debug(f"Picamera2 config: width={width}, height={height}, format={format_str}")
 
@@ -904,7 +907,7 @@ def picamera_thread(pipeline, video_width, video_height, video_format, frame_rat
                 hailo_logger.error("Failed to capture frame")
                 break
 
-            frame = cv2.cvtColor(frame_data, cv2.COLOR_BGR2RGB)
+            frame = cv2.cvtColor(frame_data, cv2.COLOR_BGR2RGB) if needs_channel_swap else frame_data
             buffer = Gst.Buffer.new_wrapped(frame.tobytes())
             buffer_duration = Gst.util_uint64_scale_int(1, Gst.SECOND, frame_rate)
             buffer.pts = frame_count * buffer_duration
