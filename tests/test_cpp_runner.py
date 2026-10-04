@@ -18,6 +18,7 @@ Special handling:
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import subprocess
 import sys
@@ -296,6 +297,15 @@ class _Result:
         self.early_exit = early_exit
 
 
+def _cpp_env() -> Dict[str, str]:
+    """Keep display forwarding while excluding Python OpenCV's bundled Qt paths."""
+    env = os.environ.copy()
+    for key in ("QT_QPA_PLATFORM_PLUGIN_PATH", "QT_QPA_FONTDIR"):
+        if "cv2/qt/" in env.get(key, "").replace("\\", "/"):
+            env.pop(key)
+    return env
+
+
 def _run_timed(cmd: List[str], cwd: Path, run_time: int) -> _Result:
     """Run cmd for up to run_time seconds, then send SIGTERM."""
     proc = subprocess.Popen(
@@ -303,6 +313,7 @@ def _run_timed(cmd: List[str], cwd: Path, run_time: int) -> _Result:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=str(cwd),
+        env=_cpp_env(),
     )
 
     start      = time.monotonic()
@@ -476,6 +487,7 @@ def test_cpp_image(app_name, _resources, _arch, tmp_path):
             cmd,
             capture_output=True,
             cwd=str(_run_cwd(cfg)),
+            env=_cpp_env(),
             timeout=IMAGE_TIMEOUT,
         )
     except subprocess.TimeoutExpired:

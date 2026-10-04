@@ -274,10 +274,8 @@ class DatabaseHandler:
 
     def clear_table(self) -> None:
         """Deletes all records from the LanceDB table."""
-        to_delete = ", ".join(
-            [f"'{record['global_id']}'" for record in self.tbl_records.search().to_list()]
-        )  # Get all records
-        self.tbl_records.delete(f"global_id IN ({to_delete})")
+        # Delete directly so an empty table never produces an invalid IN () clause.
+        self.tbl_records.delete("true")
         # Clear all files from the self.samples_dir folder
         if os.path.exists(self.samples_dir):
             for filename in os.listdir(self.samples_dir):
