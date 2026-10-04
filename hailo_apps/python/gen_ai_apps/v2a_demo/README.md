@@ -23,10 +23,23 @@ This example uses the following models:
 - Stage 5 — TTS: Piper TTS (ONNX, CPU)
 
 HEF resources are resolved via the shared resources catalog and auto-downloaded on first run (same flow as standalone apps).
+Wake-word, TTS, and tool-selection assets must be downloaded separately before running the demo.
 
 ## Linux Installation
 
-This app supports standalone installation only.
+### Existing Shared Installation
+
+If you already installed the repository, activate its environment and install the demo dependencies and required assets:
+
+```bash
+source setup_env.sh
+cd hailo_apps/python/gen_ai_apps/v2a_demo
+python -m pip install -r requirements.txt
+bash download_resources.sh
+python main.py
+```
+
+Run these commands from the repository root. For a separate environment, follow the standalone instructions below.
 
 ### Standalone Installation
 
@@ -50,9 +63,9 @@ To avoid compatibility issues, it's recommended to use a clean virtual environme
     pip install -r requirements.txt
     ```
 
-3. download artifacts:
-    ```powershell
-    download_resources.sh
+3. Download required wake-word, TTS, and tool-selection assets before running:
+    ```bash
+    bash download_resources.sh
     ```
 
 4. (Optional) Set API key for the weather tool:
@@ -98,9 +111,9 @@ To avoid compatibility issues, it's recommended to use a clean virtual environme
     ```powershell
     pip install -r requirements.txt
     ```
-3. download artifacts:
+3. Download required wake-word, TTS, and tool-selection assets before running:
     ```powershell
-    download_resources.ps1
+    .\download_resources.ps1
     ```
 
 4. (Optional) Set API key for the weather tool:

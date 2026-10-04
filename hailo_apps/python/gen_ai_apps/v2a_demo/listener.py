@@ -1,4 +1,5 @@
 import time
+import inspect
 import logging
 import threading
 import queue
@@ -61,10 +62,16 @@ class WakeWordListener:
         if not melspec.exists() or not embed.exists():
             openwakeword.utils.download_models()
 
-        self._wake_word_model = openwakeword.Model(
-            wakeword_models=[wake_word_model],
-            inference_framework="onnx",
-        )
+        # OpenWakeWord 0.4 uses ONNX exclusively and the older argument name.
+        if "wakeword_models" in inspect.signature(openwakeword.Model).parameters:
+            self._wake_word_model = openwakeword.Model(
+                wakeword_models=[wake_word_model],
+                inference_framework="onnx",
+            )
+        else:
+            self._wake_word_model = openwakeword.Model(
+                wakeword_model_paths=[wake_word_model],
+            )
         self._wake_word_name = path.stem
         self._vad = VoiceActivityDetector(sample_rate=SAMPLE_RATE, aggressiveness=VAD_AGGRESSIVENESS)
         self._wake_timeout_s = wake_timeout_s

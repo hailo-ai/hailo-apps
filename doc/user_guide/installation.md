@@ -76,6 +76,20 @@ source setup_env.sh
 
 > If another virtual environment is already active (e.g. the DFC venv pre-activated inside the Hailo AI Software Suite Docker), there's no need to `deactivate` it first — sourcing `setup_env.sh` automatically switches to `venv_hailo_apps`.
 
+### GenAI dependencies
+
+`install.sh` installs base Python dependencies. For GenAI apps, install the optional dependencies from the repository root after activating the environment:
+
+```bash
+python -m pip install -e ".[gen-ai]"
+```
+
+Some apps require additional dependencies; see the app's README. For V2A, also run:
+
+```bash
+python -m pip install -r hailo_apps/python/gen_ai_apps/v2a_demo/requirements.txt
+```
+
 To verify the install, [run an application](running_applications.md).
 
 ---
