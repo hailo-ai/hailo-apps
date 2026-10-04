@@ -16,6 +16,7 @@ from tool_selector import ToolSelector
 from llm import LLMEngine
 from tts import TTSEngine
 from tools import run_tool
+from hailo_apps.python.core.common.defines import SHARED_VDEVICE_GROUP_ID
 
 logger = logging.getLogger("v2a_demo")
 
@@ -33,7 +34,9 @@ class V2APipeline:
 
     def __init__(self, tts_output_path: Optional[str] = None):
         logger.info("Initializing pipeline components...")
-        self.vdevice = VDevice()
+        params = VDevice.create_params()
+        params.group_id = SHARED_VDEVICE_GROUP_ID
+        self.vdevice = VDevice(params)
         self.tts_output_path = tts_output_path
         self.stt = STTEngine(self.vdevice)
         self.tool_selector = ToolSelector(self.vdevice)
