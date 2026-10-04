@@ -15,6 +15,7 @@ import numpy as np
 try:
     from hailo_apps.python.core.common.defines import (
         DEFAULT_COCO_LABELS_PATH,
+        HAILO_ARCH_KEY,
         IMAGE_EXTENSIONS,
         VIDEO_SUFFIXES,
     )
@@ -32,6 +33,7 @@ try:
 except ImportError:
     from .defines import (
         DEFAULT_COCO_LABELS_PATH,
+        HAILO_ARCH_KEY,
         IMAGE_EXTENSIONS,
         VIDEO_SUFFIXES,
     )
@@ -955,14 +957,17 @@ def resolve_arch(arch: Optional[str]) -> str:
 
         detected_arch = detect_hailo_arch()
     except Exception as exc:  # pragma: no cover - defensive
-        logger.debug(f"Failed to auto-detect Hailo architecture: {exc}")
+        hailo_logger.debug(f"Failed to auto-detect Hailo architecture: {exc}")
         detected_arch = None
 
     if detected_arch:
         return detected_arch
 
-    logger.error(
-        "Could not determine Hailo architecture. "
-        "Please specify --arch or set the environment variable 'hailo_arch'."
+    hailo_logger.error(
+        "Could not determine the Hailo device architecture: no --arch value or "
+        "'hailo_arch' environment variable was provided, and automatic detection failed. "
+        "Specify the architecture matching your device with --arch hailo8, "
+        "--arch hailo8l, or --arch hailo10h, or set the 'hailo_arch' environment variable. "
+        "To check whether HailoRT can identify your device, run 'hailortcli fw-control identify'."
     )
     sys.exit(1)
