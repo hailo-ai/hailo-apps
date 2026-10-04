@@ -140,6 +140,28 @@ Available Tools
 | `system_check` | CPU, RAM, disk, temperature report | "Hey Hailo, run a system check" |
 | `explain_tools` | List available capabilities | "Hey Hailo, what can you do?" |
 
+### Travel configuration
+
+Set your addresses before launching the app to use "home" and "work":
+
+```bash
+export HOME_ADDRESS="Alexanderplatz, Berlin, Germany"
+export WORK_ADDRESS="Berlin Hauptbahnhof, Berlin, Germany"
+```
+
+In Windows PowerShell:
+
+```powershell
+$env:HOME_ADDRESS = "Alexanderplatz, Berlin, Germany"
+$env:WORK_ADDRESS = "Berlin Hauptbahnhof, Berlin, Germany"
+```
+
+Replace the examples with your addresses. Variables last for the current shell
+session; restart the app after changes. Addresses cannot be saved by voice.
+
+"Here" or an omitted starting place uses approximate IP location, which may be
+inaccurate with a VPN. Travel requests require internet access.
+
 Arguments
 ---------
 
