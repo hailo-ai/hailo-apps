@@ -63,6 +63,16 @@ int main(int argc, char** argv)
         InputType input_type;
 
         InstanceSegArgs args = parse_instance_seg_args(argc, argv);
+        if (args.decode_onnx.empty() &&
+            !has_flag(argc, argv, "--list-models") &&
+            !has_flag(argc, argv, "--list-inputs")) {
+            std::cerr << "ERROR: Missing ONNX postprocessing model. "
+                      << "Provide --onnx <path> (or -x <path>) pointing to a decode-only "
+                      << "ONNX model compatible with the selected HEF's outputs.\n"
+                      << "Example: ./build/onnxrt_hailo_pipeline --net /path/to/model.hef "
+                      << "--onnx /path/to/postprocess.onnx --input /path/to/video.mp4\n";
+            return HAILO_INVALID_ARGUMENT;
+        }
         post_parse_args(APP_NAME, args, argc, argv);
 
         HailoInfer model(args.net, args.batch_size);
