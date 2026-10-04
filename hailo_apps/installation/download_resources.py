@@ -23,7 +23,7 @@ import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -492,6 +492,24 @@ class ResourceDownloader:
                     except Exception:
                         pass
                 
+                # Fall back only for an unavailable MZ artifact, not network errors.
+                if (
+                    isinstance(e, urllib.error.HTTPError) and e.code in (403, 404)
+                    and task.name == "stereonet" and self.hailo_arch == HAILO10H_ARCH
+                    and self.model_zoo_version.startswith("v5.1.")
+                    and url == f"{MODEL_ZOO_URL}/{self.model_zoo_version}/{self.download_arch}/stereonet{HAILO_FILE_EXTENSION}"
+                ):
+                    latest = max(VALID_H10_MODEL_ZOO_VERSION,
+                                 key=lambda version: tuple(map(int, version.lstrip("v").split("."))))
+                    fallback_url = f"{MODEL_ZOO_URL}/{latest}/{self.download_arch}/stereonet{HAILO_FILE_EXTENSION}"
+                    if fallback_url != url:
+                        hailo_logger.warning(
+                            f"StereoNet unavailable in {self.model_zoo_version}; trying latest Model Zoo {latest}"
+                        )
+                        return self._download_file_with_retry(
+                            replace(task, url=fallback_url, expected_size=None)
+                        )
+
                 # Exponential backoff
                 if attempt < self.download_config.max_retries - 1:
                     delay = self.download_config.retry_delay * (2 ** attempt)
@@ -1132,7 +1150,12 @@ class ResourceDownloader:
             for result in self._results:
                 if not result.success:
                     hailo_logger.warning(f"  - {result.task.name}: {result.message}")
-        
+            failures = "; ".join(
+                f"{result.task.name}: {result.message}"
+                for result in self._results if not result.success
+            )
+            raise RuntimeError(f"{failed} resource download(s) failed: {failures}")
+
         return self._results
     
     def _execute_sequential(self, tasks: list[DownloadTask]) -> list[DownloadResult]:
