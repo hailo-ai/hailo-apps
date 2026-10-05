@@ -1,19 +1,21 @@
-## 26.09.0
+## 26.10.0
 
 ### Fixed
-- Fixed super-resolution post-processing: model output is now kept at its native upscaled resolution (2x for ESRGAN, 4x for ESPCN) and passed through model-specific post-processing (float→uint8 conversion, color handling) before building the side-by-side comparison image
-- Corrected installed-package detection logic in `install.sh` and `scripts/check_installed_packages.sh`
+- Corrected super-resolution scaling, English-only Whisper decoding, and LanceDB table clearing
+- Fixed V2A tool selection, LLM context, wake-word recording, microphone compatibility, and device sharing
+- Corrected Raspberry Pi camera colors and reduced Easter game display latency
+- Aligned Model Zoo resources with HailoRT versions; added StereoNet download fallback and explicit download failures
+- Fixed C++ directory inputs and explicit resource URLs; improved architecture and missing-ONNX errors
 
-### Improved (Installation)
-- `install.sh` now self-elevates to root via `sudo -E`, preserving the caller's environment (including an already-active virtual environment such as the one pre-activated inside the Hailo AI Software Suite Docker) — running `./install.sh` no longer requires prefixing with `sudo`
-- Added detection of an existing PyHailoRT virtual environment and of an already-installed TAPPAS core, avoiding redundant reinstallation
-- Added support for installing inside the Hailo AI Software Suite Docker and the HailoRT Docker container, with corresponding documentation in the prerequisites and installation guides
-- Wheel-supplied PyHailoRT/PyTAPPAS versions (`--pyhailort` / `--pytappas`) are now correctly extracted from the wheel filename and take precedence over stale/absent detected versions
+### Improved
+- Installation: automatic privilege elevation, Docker/venv reuse, package detection, and compatible TAPPAS resources and bindings
+- C++ builds: updated prerequisites, preferred system HailoRT, and skipped overlays with missing dependencies
+- V2A: Raspberry Pi/Python 3.12 support and travel queries using home, work, current location, and nearby destinations
+- C++ tests: reliable subprocess output, Qt environment handling, and device cleanup
 
 ### Documentation
-- Reworked and condensed the [installation guide](./doc/user_guide/installation.md) and [running applications guide](./doc/user_guide/running_applications.md)
-- Added a new [prerequisites guide](./doc/user_guide/prerequisites.md) covering platform/docker requirements
-- Updated README and various app/developer guide READMEs
+- Updated installation, prerequisites, application, and V2A setup/troubleshooting guides
+- Updated GenAI toolsets and added Cursor development rules
 
 ## 26.03.1
 
@@ -23,3 +25,21 @@
 - Refactored USB/Raspberry Pi camera detection with earlier validation when required camera components are unavailable
 - Strengthened installation prerequisite checks and version compatibility validation across supported architectures
 - Removed deprecated resource scripts `get_inputs.sh` and `get_hef.sh`
+
+## 26.03.0
+
+### Added
+- YOLO26 object detection and pose estimation, including the AI Gym example
+- C++ ONNX Runtime pipeline for post-processing unsupported ONNX operations
+- Voice2Action demo with speech recognition, tool selection, speech synthesis, and weather, travel, LED, system-check, and storage tools
+- Agentic AI development framework (Beta) for GitHub Copilot, Claude Code, and Cursor
+- Agent tools example, standalone speech recognition, and Easter Eggs game
+- Instance-segmentation models with built-in NMS and simplified tiling with a 4-class HEF
+- Windows support for GenAI, standalone Python, and C++ applications
+
+### Improved
+- Resource defaults, downloads, input handling, and pipeline helpers
+- Unified mirror/flip handling and fixed missing-framerate handling
+- Voice assistant, VLM chat, and shared terminal/audio diagnostics
+- C++ resource handling and standalone detection, segmentation, OCR, pose, lane, and super-resolution apps
+- Test runners, agent testing, mirror tests, and application/developer documentation

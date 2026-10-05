@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hailo-apps"
-version = "26.09.0"
+version = "26.10.0"
 description = "Hailo AI applications and pipelines package"
 readme = "README.md"
 requires-python = ">=3.10"
