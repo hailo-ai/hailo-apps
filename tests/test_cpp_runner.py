@@ -319,22 +319,19 @@ def _run_timed(cmd: List[str], cwd: Path, run_time: int) -> _Result:
     start      = time.monotonic()
     early_exit = False
 
-    while (time.monotonic() - start) < run_time:
-        time.sleep(0.25)
-        if proc.poll() is not None:
-            early_exit = True
-            break
+    try:
+        # Drain output while the app runs so a full pipe cannot stall inference.
+        stdout, stderr = proc.communicate(timeout=run_time)
+        early_exit = True
+    except subprocess.TimeoutExpired:
+        proc.terminate()  # SIGTERM on Linux/macOS, TerminateProcess on Windows
+        try:
+            stdout, stderr = proc.communicate(timeout=TERM_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()
 
     elapsed = time.monotonic() - start
-
-    if not early_exit:
-        proc.terminate()  # SIGTERM on Linux/macOS, TerminateProcess on Windows
-
-    try:
-        stdout, stderr = proc.communicate(timeout=TERM_TIMEOUT)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        stdout, stderr = proc.communicate()
 
     return _Result(proc.returncode, stdout, stderr, elapsed, early_exit)
 

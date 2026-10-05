@@ -120,6 +120,12 @@ def pytest_runtest_teardown(item, nextitem):
     # Check for USB camera tests
     if 'input_usb' in test_name_lower or '_usb' in test_name_lower:
         delay = max(delay, USB_CAMERA_CLEANUP_DELAY)
+
+    # C++ device tests also need time for HailoRT and camera teardown.
+    if item.get_closest_marker('cpp') and item.get_closest_marker('requires_device'):
+        delay = max(delay, DEFAULT_TEST_CLEANUP_DELAY)
+        if 'test_cpp_camera' in test_name_lower:
+            delay = max(delay, USB_CAMERA_CLEANUP_DELAY)
     
     # Apply default delay for pipeline tests if no other delay was set
     if delay == 0.0 and 'test_pipeline' in test_name_lower:
