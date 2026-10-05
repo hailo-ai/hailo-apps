@@ -1,22 +1,34 @@
 """Travel tool — geocoding via Nominatim (geopy), routing via OSRM."""
 
-import os
-import requests
 import logging
+import os
+
+import requests
+from geopy.extra.rate_limiter import RateLimiter
 from geopy.geocoders import Nominatim
 
 logger = logging.getLogger("v2a_demo")
 
 # Required by Nominatim usage policy; requests without it get 403 Forbidden
 HAILO_V2A_USER_AGENT = "HailoVoiceAssistant/1.0"
-_geocoder = Nominatim(user_agent=HAILO_V2A_USER_AGENT, timeout=60)
+REQUEST_TIMEOUT_S = 10
+_geocoder = Nominatim(user_agent=HAILO_V2A_USER_AGENT, timeout=REQUEST_TIMEOUT_S)
+# Nominatim's usage policy allows at most 1 request/s
+_nominatim = RateLimiter(_geocoder.geocode, min_delay_seconds=1.0, swallow_exceptions=False)
 
 # "home"/"work" are resolved from these addresses (set by the user), not geocoded literally.
 HOME_ADDRESS = os.getenv("HOME_ADDRESS")
 WORK_ADDRESS = os.getenv("WORK_ADDRESS")
+# Where the device is. When unset, IP geolocation is used, which can be tens of km off.
+CURRENT_ADDRESS = os.getenv("CURRENT_ADDRESS")
 
 # All the ways the LLM (or a user) might spell "here"/"current_location".
 _CURRENT_LOCATION_ALIASES = {"current_location", "current location", "here"}
+
+NEARBY_SEARCH_DEG = 0.5  # ~50 km box around the origin for places like "the airport"
+# Global matches of these types, or this prominence, are kept ("London", "Eiffel Tower")
+MAJOR_PLACE_TYPES = {"city", "town", "state", "country", "province", "region"}
+MAJOR_PLACE_IMPORTANCE = 0.6
 
 TOOL_PROMPT = (
     "Extract parameters from the user's travel time request as a JSON object.\n"
@@ -61,10 +73,29 @@ MODE_TO_OSRM_URL = {
     "cycling": "https://routing.openstreetmap.de/routed-bike/route/v1/bicycle",
 }
 
-def _geocode(location: str) -> tuple[float, float] | None:
-    """Geocode a location name to (longitude, latitude) using Nominatim."""
+def _geocode(location: str, near: tuple[float, float] | None = None) -> tuple[float, float] | None:
+    """Geocode a location name to (longitude, latitude) using Nominatim.
+
+    Major places keep their global match ("London"). Anything else ("the airport",
+    "Central Bus Station") resolves to the closest match within ~50 km of ``near``.
+    """
+    query = location.strip()
+    if query.lower().startswith("the "):
+        query = query[4:]  # "the Louvre" matches a peak in Washington, "Louvre" the museum
     try:
-        result = _geocoder.geocode(location)
+        result = _nominatim(query)
+        # Lowercase names ("beach") are generic, even if a town of that name exists.
+        generic = query == query.lower()
+        major = result and (result.raw.get("addresstype") in MAJOR_PLACE_TYPES
+                            or float(result.raw.get("importance", 0)) >= MAJOR_PLACE_IMPORTANCE)
+        if near is not None and (generic or not major):
+            lon, lat = near
+            box = [(lat - NEARBY_SEARCH_DEG, lon - NEARBY_SEARCH_DEG),
+                   (lat + NEARBY_SEARCH_DEG, lon + NEARBY_SEARCH_DEG)]
+            nearby = _nominatim(query, viewbox=box, bounded=True, exactly_one=False, limit=10)
+            if nearby:
+                result = min(nearby, key=lambda c: (c.latitude - lat) ** 2
+                             + (c.longitude - lon) ** 2)
         if result:
             return (result.longitude, result.latitude)
     except Exception as e:
@@ -75,7 +106,7 @@ def _geocode(location: str) -> tuple[float, float] | None:
 def _geocode_ip_location() -> tuple[float, float] | None:
     """Best-effort current location via IP geolocation (no GPS on this device)."""
     try:
-        response = requests.get("http://ip-api.com/json/", timeout=10)
+        response = requests.get("http://ip-api.com/json/", timeout=REQUEST_TIMEOUT_S)
         response.raise_for_status()
         data = response.json()
         if data.get("status") == "success":
@@ -85,7 +116,14 @@ def _geocode_ip_location() -> tuple[float, float] | None:
     return None
 
 
-def _resolve_location(location: str) -> tuple[float, float] | None:
+def _current_location() -> tuple[float, float] | None:
+    """The device location: CURRENT_ADDRESS if set, else approximate IP geolocation."""
+    return _geocode(CURRENT_ADDRESS) if CURRENT_ADDRESS else _geocode_ip_location()
+
+
+def _resolve_location(
+    location: str, near: tuple[float, float] | None = None
+) -> tuple[float, float] | None:
     """Resolve a location string to (longitude, latitude).
 
     Handles the "home"/"work"/"current_location" aliases the LLM extracts
@@ -100,9 +138,9 @@ def _resolve_location(location: str) -> tuple[float, float] | None:
     if key == "work":
         return _geocode(WORK_ADDRESS) if WORK_ADDRESS else None
     if key in _CURRENT_LOCATION_ALIASES:
-        return _geocode_ip_location()
+        return _current_location()
 
-    return _geocode(location)
+    return _geocode(location, near)
 
 
 def _unresolved_location_message(location: str) -> str:
@@ -156,11 +194,11 @@ def get_travel_time(origin: str, destination: str, mode: str = "driving") -> str
     if mode not in MODE_TO_OSRM_URL:
         return f"Unknown travel mode: {mode}. You can ask for driving, walking, or cycling."
 
-    orig_geocode = _resolve_location(origin)
-    dest_geocode = _resolve_location(destination)
-
+    # The origin is searched near the user's location and the destination near the origin.
+    orig_geocode = _resolve_location(origin, near=_current_location())
     if not orig_geocode:
         return _unresolved_location_message(origin)
+    dest_geocode = _resolve_location(destination, near=orig_geocode)
     if not dest_geocode:
         return _unresolved_location_message(destination)
 
@@ -171,7 +209,7 @@ def get_travel_time(origin: str, destination: str, mode: str = "driving") -> str
     )
 
     try:
-        request = requests.get(url, params={"overview": "false"}, timeout=60)
+        request = requests.get(url, params={"overview": "false"}, timeout=REQUEST_TIMEOUT_S)
         request.raise_for_status()
         data = request.json()
 

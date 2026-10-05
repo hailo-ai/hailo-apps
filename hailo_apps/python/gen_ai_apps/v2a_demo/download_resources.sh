@@ -3,7 +3,9 @@ set -e
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
-python -m hailo_apps.installation.download_resources --group v2a_demo --arch hailo10h
+# The repo root makes hailo_apps importable in a standalone (not pip-installed) setup.
+PYTHONPATH="$(cd ../../../.. && pwd)${PYTHONPATH:+:$PYTHONPATH}" \
+    python -m hailo_apps.installation.download_resources --group v2a_demo --arch hailo10h
 
 mkdir -p resources
 cd resources
@@ -15,7 +17,7 @@ FILES=(
     "en_US-joe-medium.onnx.json"
     "go_hailo.onnx"
     "hey_hailo.onnx"
-    "tool_embeddings_cache.npz"
+    "hey_hailo_v3.onnx"
     "word_embeddings_weight.npy"
 )
 

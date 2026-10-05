@@ -14,6 +14,18 @@ The GenAI applications package includes:
 
 ## Applications
 
+### 🗣️ [Voice-to-Action (V2A)](v2a_demo/README.md)
+
+A hands-free voice assistant: say "Hey Hailo" followed by a command, and the app finds the right action, extracts its parameters, runs it and speaks the answer back. Every model runs on-device.
+
+**Features:**
+- "Hey Hailo" wake word and automatic end-of-speech detection
+- Speech recognition (Whisper), tool selection (MiniLM) and parameter extraction (Qwen2.5-Coder) on the Hailo-10H
+- Built-in tools: weather, travel time, Raspberry Pi LED, personal memory, system check
+- Add a new tool with one Python file
+
+**Documentation:** See [v2a_demo/README.md](v2a_demo/README.md) for installation (including Raspberry Pi 5 + AI HAT+ 2), microphone setup and adding tools.
+
 ### 🤖 [Agent Tools Example](agent_tools_example/README.md)
 
 An interactive CLI chat agent that uses Hailo LLM models with function calling capabilities. The agent automatically discovers tools and allows the LLM to call them during conversations.

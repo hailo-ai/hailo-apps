@@ -1,9 +1,9 @@
 import time
-import inspect
 import logging
 import threading
 import queue
 from collections import deque
+from importlib.metadata import version
 from pathlib import Path
 from typing import Generator, List, Optional
 
@@ -25,14 +25,14 @@ STREAM_CONFIG = dict(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype=AUDIO_DTYP
 EMPTY_AUDIO = np.array([], dtype=AUDIO_DTYPE)
 
 # Wake word detection
-WAKE_WORD_THRESHOLD = 0.8
+WAKE_WORD_THRESHOLD = 0.5
 WAKE_WORD_CONSECUTIVE = 2
 WAKE_SMOOTHING_FRAMES = 4
 WAKE_WARMUP_FRAMES = 10  # early frames produce spurious scores
 
 # Recording
 VAD_AGGRESSIVENESS = 3
-SILENCE_DURATION_MS = 800
+SILENCE_DURATION_MS = 1200
 MAX_RECORDING_S = 10.0
 MIN_RECORDING_S = 0.5
 PRE_ROLL_MS = 300
@@ -62,8 +62,10 @@ class WakeWordListener:
         if not melspec.exists() or not embed.exists():
             openwakeword.utils.download_models()
 
-        # OpenWakeWord 0.4 uses ONNX exclusively and the older argument name.
-        if "wakeword_models" in inspect.signature(openwakeword.Model).parameters:
+        # OpenWakeWord 0.4 uses ONNX exclusively and the older argument name. (0.5+ takes
+        # *args/**kwargs, so the version is checked rather than the signature.)
+        oww_version = tuple(int(v) for v in version("openwakeword").split(".")[:2])
+        if oww_version >= (0, 5):
             self._wake_word_model = openwakeword.Model(
                 wakeword_models=[wake_word_model],
                 inference_framework="onnx",
@@ -225,27 +227,28 @@ class WakeWordListener:
 
     def _validate_audio_device(self) -> None:
         """Raise RuntimeError if no usable input device is found."""
+        # Open a stream rather than sd.check_input_settings(): PortAudio's format query
+        # rejects ALSA plug devices (-9993) that resample USB mics to 16 kHz fine.
         try:
-            sd.check_input_settings(
-                device=self._audio_device,
-                channels=STREAM_CONFIG["channels"],
-                dtype=STREAM_CONFIG["dtype"],
-                samplerate=STREAM_CONFIG["samplerate"],
-            )
+            with sd.InputStream(device=self._audio_device, **STREAM_CONFIG):
+                pass
         except sd.PortAudioError as e:
             raise RuntimeError(
                 f"No usable audio input device (device={self._audio_device}). "
-                f"Check that a microphone is connected. PortAudio: {e}"
+                f"Check that a microphone is connected; if it cannot record at 16 kHz mono, "
+                f"see 'Microphone and speaker setup' in the README. PortAudio: {e}"
             ) from e
 
     def _trim_leading_silence(self, audio: np.ndarray) -> np.ndarray:
         """Remove leading silence to prevent Whisper hallucinations on quiet audio."""
         self._vad.reset()
+        # The VAD only reports speech after `speech_threshold` consecutive speech frames, so
+        # step back that far (plus a 2-frame margin) or the command's first word is clipped.
+        margin = (self._vad.speech_threshold + 2) * CHUNK_SIZE
         for i in range(0, len(audio) - CHUNK_SIZE, CHUNK_SIZE):
             chunk = audio[i:i + CHUNK_SIZE]
             if self._vad.process(self._to_int16(chunk)):
-                # Keep a small margin before the first speech frame
-                start = max(0, i - CHUNK_SIZE)
+                start = max(0, i - margin)
                 return audio[start:]
         return audio
 

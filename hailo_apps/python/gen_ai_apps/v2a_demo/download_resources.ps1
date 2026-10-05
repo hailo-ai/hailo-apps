@@ -2,6 +2,8 @@ $ErrorActionPreference = "Stop"
 
 Set-Location $PSScriptRoot
 
+# The repo root makes hailo_apps importable in a standalone (not pip-installed) setup.
+$env:PYTHONPATH = "$((Resolve-Path "$PSScriptRoot\..\..\..\..").Path);$env:PYTHONPATH"
 python -m hailo_apps.installation.download_resources --group v2a_demo --arch hailo10h
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to download the demo HEF resources."
@@ -19,7 +21,7 @@ $files = @(
     "en_US-joe-medium.onnx.json",
     "go_hailo.onnx",
     "hey_hailo.onnx",
-    "tool_embeddings_cache.npz",
+    "hey_hailo_v3.onnx",
     "word_embeddings_weight.npy"
 )
 

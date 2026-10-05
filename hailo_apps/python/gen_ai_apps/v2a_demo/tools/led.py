@@ -117,6 +117,10 @@ def control_led(target: str, state: str, mode: str = "steady",
             _controller.steady(state)
             return f"The board LED has been turned {state}."
         elif mode == "blink":
+            # The LLM sometimes leaves blink fields null; a None would crash the blink thread.
+            blink_on_ms = blink_on_ms or 300
+            blink_off_ms = blink_off_ms or blink_on_ms
+            blink_count = blink_count or 5
             _controller.blink(on_ms=blink_on_ms, off_ms=blink_off_ms, count=blink_count)
             if blink_count == 1:
                 return "The board LED blinked once."

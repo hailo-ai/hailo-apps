@@ -8,10 +8,15 @@ soundfile
 scipy
 
 # Voice Activity Detection
-webrtcvad
+webrtcvad-wheels
 
-# Wake word detection
-openwakeword
+# Wake word detection. Install openwakeword itself with
+#   pip install --no-deps "openwakeword==0.6.0"
+# its Linux dependency tflite-runtime has no wheels for Python >= 3.12; the app runs
+# the ONNX models, which need these:
+onnxruntime
+tqdm
+scikit-learn
 
 # Text-to-Speech
 piper-tts==1.3.0
@@ -30,3 +35,7 @@ transformers
 
 psutil
 setuptools<82
+
+# Shared hailo_apps helpers (HEF resolution and download)
+python-dotenv
+pyyaml

@@ -44,7 +44,7 @@ def create_parser():
 
     parser.add_argument(
         "--wake-word-model",
-        default=str(RESOURCES_DIR / "hey_hailo.onnx"),
+        default=str(RESOURCES_DIR / "hey_hailo_v3.onnx"),
         help="Path to wake word model"
     )
 
@@ -87,7 +87,10 @@ def main():
         if args.audio_input_path:
             logger.info("Processing input audio file...")
             audio = listener.listen_from_file(args.audio_input_path)
-            pipeline.process_audio(audio)
+            if len(audio) > 0:
+                pipeline.process_audio(audio)
+            else:
+                logger.info("No wake word / speech found in the input file")
         else:
             logger.info("Starting continuous listening mode (Ctrl+C to exit)")
             try:
