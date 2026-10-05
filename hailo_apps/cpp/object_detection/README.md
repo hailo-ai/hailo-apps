@@ -12,6 +12,10 @@ Requirements
   - For Hailo-10: `HailoRT==5.3.0`
 
 - **Linux Dependencies**
+    - yaml-cpp and libcurl development libraries
+        ```shell
+        sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+        ```
     - OpenCV >= 4.5.4
         ```shell script
         sudo apt-get install -y libopencv-dev python3-opencv
@@ -49,7 +53,7 @@ Usage
 
 1. Clone the repository:
     ```shell script
-    git clone https://github.com/hailo-ai/hailo-apps.git
+    git clone --recurse-submodules https://github.com/hailo-ai/hailo-apps.git
     cd hailo-apps/hailo_apps/cpp/object_detection
     ``` 
 
@@ -65,13 +69,13 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called object_detection
+    This builds `object_detection` at `build/object_detection` on Linux and `build/Release/object_detection.exe` on Windows.
 
 3. Run the example:
 
     - **Linux**
         ```shell script
-        ./build/Release/object_detection --net <hef_path> --input <image_or_video_or_camera_path>
+        ./build/object_detection --net <hef_path> --input <image_or_video_or_camera_path>
         ```
     - **Windows**
         ```shell script
@@ -91,6 +95,7 @@ Arguments
     - On Linux, you can also use /dev/vidoeX (e.g., `/dev/video0`) to select a specific camera.
     - On Windows, you can also use a camera index (`0`, `1`, `2`, ...) to select a specific camera.
     - On Raspberry Pi, you can also use `rpi` to enable the Raspberry Pi camera.
+    - On Astrial/IMX8 (Yocto-based systems), use `csi` to auto-detect and open the CSI camera. The ISP must be initialized first: `cd /opt/imx8-isp/bin && ./run.sh -lm -c dual_imx219_1080p60 &`
   - A **predefined input name** from `resources_config.yaml` (e.g., `bus`, `street`).
     - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
     - Use `--list-inputs` to display all available predefined inputs.
@@ -109,33 +114,33 @@ Example
 -------------------
 - List supported networks:
     ```shell script
-    ./build/x86_64/object_detection --list-nets
+    ./build/object_detection --list-nets
     ```
 - List available input resources:
     ```shell script
-    ./build/x86_64/object_detection --list-inputs
+    ./build/object_detection --list-inputs
     ```
 - For a video:
     ```shell script
-	./build/x86_64/object_detection --net yolov8n.hef --input full_mov_slow.mp4 --batch-size 16
+	./build/object_detection --net yolov8n.hef --input full_mov_slow.mp4 --batch-size 16
     ```
     Output video is saved as processed_video.mp4
 
 - For a single image:
     ```shell script
-    ./build/x86_64/object_detection -n yolov8n.hef -i bus.jpg
+    ./build/object_detection -n yolov8n.hef -i bus.jpg
     ```
     Output image is saved as processed_image_0.jpg
 
 - For a directory of images:
     ```shell script
-    ./build/x86_64/object_detection -n yolov8n.hef -i images -b 4
+    ./build/object_detection -n yolov8n.hef -i images -b 4
     ````
     Each image is saved as processed_image_i.jpg
     
 - For camera, enabling saving the output:
     ```shell script
-    ./build/x86_64/object_detection --net yolov8n.hef --input /dev/video0 --batch-size 2 -s
+    ./build/object_detection --net yolov8n.hef --input /dev/video0 --batch-size 2 -s
     ```
     Output video is saved as processed_video.mp4
 

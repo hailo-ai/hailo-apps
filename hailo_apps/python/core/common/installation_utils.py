@@ -26,6 +26,7 @@ from .defines import (
     HAILO10H_ARCH_CAPS,
     HAILO15H_ARCH_CAPS,
     HAILO_FW_CONTROL_CMD,
+    HAILO_APPS_CORE,
     HAILO_TAPPAS_CORE,
     HAILO_TAPPAS_CORE_PYTHON_NAMES,
     HAILORT_PACKAGE_NAME,
@@ -274,14 +275,16 @@ def auto_detect_hailort_version() -> str:
 
 
 def auto_detect_tappas_installed() -> bool:
-    """Check if hailo-tappas-core is installed.
+    """Check if hailo-apps-core (or hailo-tappas-core) is installed.
 
     Returns:
         bool: True if TAPPAS core is installed, False otherwise
     """
     hailo_logger.debug("Checking if TAPPAS core is installed.")
     if (
-        detect_pkg_installed(HAILO_TAPPAS_CORE)
+        detect_pkg_installed(HAILO_APPS_CORE)
+        or detect_pkg_installed(HAILO_TAPPAS_CORE)
+        or _auto_detect_pkg_config(HAILO_APPS_CORE)
         or _auto_detect_pkg_config(HAILO_TAPPAS_CORE)
         or _auto_detect_pkg_config("hailo-all")
     ):
@@ -320,6 +323,9 @@ def auto_detect_tappas_version() -> str:
         str: Version string or None if not detected
     """
     hailo_logger.debug("Detecting TAPPAS core version")
+    version = _detect_pkg_config_version(HAILO_APPS_CORE)
+    if version:
+        return version
     version = _detect_pkg_config_version(HAILO_TAPPAS_CORE)
     if version:
         return version
@@ -334,12 +340,16 @@ def auto_detect_tappas_postproc_dir() -> str:
         str: Path to the postproc directory or empty string if not found
     """
     hailo_logger.debug("Detecting TAPPAS post-processing directory")
-    try:
-        return _run_command_with_output(
-            ["pkg-config", "--variable=tappas_postproc_lib_dir", HAILO_TAPPAS_CORE]
-        )
-    except Exception as e:
-        hailo_logger.error(f"Could not detect TAPPAS postproc directory: {e}")
-        return ""
+    for pkg_name in (HAILO_APPS_CORE, HAILO_TAPPAS_CORE):
+        try:
+            result = _run_command_with_output(
+                ["pkg-config", "--variable=tappas_postproc_lib_dir", pkg_name]
+            )
+            if result:
+                return result
+        except Exception:
+            continue
+    hailo_logger.error("Could not detect TAPPAS postproc directory")
+    return ""
 
 

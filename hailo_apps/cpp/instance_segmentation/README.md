@@ -8,6 +8,11 @@ It receives a HEF and images/video/camera as input, and returns the image\video 
 Requirements
 ------------
 
+- yaml-cpp and libcurl development libraries (Linux):
+    ```shell
+    sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+    ```
+
 - HailoRT  
   - For Hailo-8: `HailoRT==4.23.0`  
   - For Hailo-10: `HailoRT==5.3.0`
@@ -38,6 +43,8 @@ Because of that, the following instance segmentation models are supported:
 - YOLOv8m-Seg
 - Other instance segmentation models
 
+**Hailo-10H:** The with-NMS model (`yolov5m_seg_with_nms`) is not supported yet.
+
 
 Usage
 -----
@@ -45,7 +52,7 @@ Usage
 
 1. Clone the repository:
     ```shell script
-    git clone https://github.com/hailo-ai/hailo-apps.git
+    git clone --recurse-submodules https://github.com/hailo-ai/hailo-apps.git
     cd hailo-apps/hailo_apps/cpp/instance_segmentation
     ``` 
 
@@ -61,12 +68,12 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called instance_segmentation
+    This builds `instance_segmentation` at `build/instance_segmentation` on Linux and `build/Release/instance_segmentation.exe` on Windows.
 
 3. Run the example:
 
 	```shell script
-    ./build/x86_64/instance_segmentation --net <hef_path> --input <image_or_video_or_camera_path>
+    ./build/instance_segmentation --net <hef_path> --input <image_or_video_or_camera_path>
     ```
 
 Arguments
@@ -78,6 +85,7 @@ Arguments
 - `-i, --input`:
   - An **input source** such as an image (`bus.jpg`), a video (`video.mp4`), a directory of images, or `usb` to use the system camera.
     - On Raspberry Pi, you can also use `rpi` to enable the Raspberry Pi camera.
+    - On Astrial/IMX8 (Yocto-based systems), use `csi` to auto-detect and open the CSI camera. The ISP must be initialized first: `cd /opt/imx8-isp/bin && ./run.sh -lm -c dual_imx219_1080p60 &`
   - A **predefined input name** from `inputs.json` (e.g., `bus`, `street`).
     - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
 - `-b, --batch-size`: [optional] Number of images in one batch. Defaults to 1.
@@ -94,33 +102,33 @@ Example
 -------------------
 - List supported networks:
     ```shell script
-    ./build/x86_64/stereo_depth_estimation --list-nets
+    ./build/instance_segmentation --list-nets
     ```
 - List available input resources:
     ```shell script
-    ./build/x86_64/instance_segmentation --list-inputs
+    ./build/instance_segmentation --list-inputs
     ```
 - For a video:
     ```shell script
-	./build/x86_64/instance_segmentation --net yolov5m-seg.hef --input full_mov_slow.mp4 --batch-size 16
+	./build/instance_segmentation --net yolov5m-seg.hef --input full_mov_slow.mp4 --batch-size 16
     ```
     Output video is saved as processed_video.mp4
 
 - For a single image:
     ```shell script
-    ./build/x86_64/instance_segmentation -n yolov5m-seg.hef -i image.jpg
+    ./build/instance_segmentation -n yolov5m-seg.hef -i image.jpg
     ```
     Output image is saved as processed_image_0.jpg
 
 - For a directory of images:
     ```shell script
-    ./build/x86_64/instance_segmentation -n yolov5m-seg.hef -i images -b 4
+    ./build/instance_segmentation -n yolov5m-seg.hef -i images -b 4
     ````
     Each image is saved as processed_image_i.jpg
     
 - For camera, enabling saving the output:
     ```shell script
-    ./build/x86_64/instance_segmentation --net yolov5m-seg.hef --input /dev/video0 --batch-size 2 -s
+    ./build/instance_segmentation --net yolov5m-seg.hef --input /dev/video0 --batch-size 2 -s
     ```
     Output video is saved as processed_video.mp4
 
@@ -154,7 +162,7 @@ Notes
 - There should be no spaces between "=" given in the command line arguments and the file name itself
 - The example only works for instance segmentation models that have the NMS on-Hailo (either on the NN-core or on the CPU)
 - When using camera as input:
-    - To exit gracefully from openCV window, p./build/instance_segmentation_cpp --net yolov5m-seg.hef --input /dev/video0 --batch-size 2 -s
+    - To exit gracefully from openCV window, p./build/instance_segmentation --net yolov5m-seg.hef --input /dev/video0 --batch-size 2 -s
     - In case OpenCV is defaulting to GStreamer for video capture, warnings might occur.
       To solve, force OpenCV to use V4L2 instead of GStreamer by setting these environment variables:
       ```
@@ -176,4 +184,3 @@ Disclaimer
 This code example is provided by Hailo solely on an "AS IS" basis and "with all faults". No responsibility or liability is accepted or shall be imposed upon Hailo regarding the accuracy, merchantability, completeness or suitability of the code example. Hailo shall not have any liability or responsibility for errors or omissions in, or any business decisions made by you in reliance on this code example or any part of it. If an error occurs when running this example, please open a ticket in the "Issues" tab.
 
 This example was tested on specific versions and we can only guarantee the expected results using the exact version mentioned above on the exact environment. The example might work for other versions, other environment or other HEF file, but there is no guarantee that it will.
-

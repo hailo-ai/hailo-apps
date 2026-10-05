@@ -28,8 +28,8 @@ try:
         normalized_preprocess,
         infer_debug_ref_onnx,
     )
-    from hailo_apps.python.standalone_apps.onnxrt_hailo_pipeline.pose_estimation_onnx_postproc.pose_estimation_utils import PoseEstPostProcessing
-    from hailo_apps.python.standalone_apps.onnxrt_hailo_pipeline.pose_estimation_onnx_postproc.aigym import AIGymCallback, make_tracker_args, EXERCISE_PRESETS
+    from hailo_apps.python.standalone_apps.yolo26.pose_estimation.pose_estimation_utils import PoseEstPostProcessing
+    from hailo_apps.python.standalone_apps.yolo26.pose_estimation.aigym import AIGymCallback, make_tracker_args, EXERCISE_PRESETS
     from hailo_apps.python.core.common.defines import (
         MAX_INPUT_QUEUE_SIZE,
         MAX_OUTPUT_QUEUE_SIZE,
@@ -68,8 +68,8 @@ except ImportError:
         normalized_preprocess,
         infer_debug_ref_onnx,
     )
-    from hailo_apps.python.standalone_apps.onnxrt_hailo_pipeline.pose_estimation_onnx_postproc.pose_estimation_utils import PoseEstPostProcessing
-    from hailo_apps.python.standalone_apps.onnxrt_hailo_pipeline.pose_estimation_onnx_postproc.aigym import AIGymCallback, make_tracker_args, EXERCISE_PRESETS
+    from hailo_apps.python.standalone_apps.yolo26.pose_estimation.pose_estimation_utils import PoseEstPostProcessing
+    from hailo_apps.python.standalone_apps.yolo26.pose_estimation.aigym import AIGymCallback, make_tracker_args, EXERCISE_PRESETS
 
 
 APP_NAME = Path(__file__).stem

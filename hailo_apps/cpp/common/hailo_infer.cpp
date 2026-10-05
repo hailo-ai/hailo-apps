@@ -51,7 +51,7 @@ HailoInfer::HailoInfer(const std::string &hef_path,
                        hailo_format_type_t input_type,
                        hailo_format_type_t output_type)
 {
-    hailo_vdevice_params_t vdevice_params = {0};
+    hailo_vdevice_params_t vdevice_params{};
     hailo_init_vdevice_params(&vdevice_params);
     vdevice_params.group_id = group_id.c_str();
     vdevice_params.scheduling_algorithm = HAILO_SCHEDULING_ALGORITHM_ROUND_ROBIN;

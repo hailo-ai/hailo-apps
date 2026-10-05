@@ -113,6 +113,7 @@ int main(int argc, char** argv)
                                     std::ref(args.output_dir),
                                     std::ref(args.output_resolution),
                                     results_queue,
+                                    input_queues,
                                     postprocess_callback);
 
         hailo_status status = wait_and_check_threads(

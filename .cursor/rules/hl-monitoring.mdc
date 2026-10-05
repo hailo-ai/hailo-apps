@@ -1,0 +1,171 @@
+---
+description: "Skill: Build Continuous Monitoring Application"
+alwaysApply: false
+---
+
+# Skill: Build Continuous Monitoring Application
+
+> Create an application that continuously captures and analyzes video, reporting observations over time.
+
+## When to Use This Skill
+
+- User wants **automated, continuous video monitoring** (not interactive Q&A)
+- User needs **periodic VLM analysis** of camera feed at configurable intervals
+- User wants **event logging** with timestamps
+- User wants **summary reports** of what happened over a time period
+
+## Pattern: Continuous VLM Monitor
+
+Unlike the interactive VLM Chat (which waits for user input), a continuous monitor:
+1. Captures frames automatically at set intervals
+2. Sends each frame to VLM with a monitoring-specific prompt
+3. Logs structured observations (timestamp, description, confidence)
+4. Optionally triggers alerts or saves frames when events are detected
+
+## Architecture
+
+```
+Camera → [capture every N seconds] → VLM Backend → Parse Response → Event Log
+                                                                  → Alert (optional)
+                                                                  → Frame Save (optional)
+```
+
+## Implementation Template
+
+```python
+import os
+import sys
+import cv2
+import time
+import json
+import signal
+import threading
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+os.environ["QT_QPA_PLATFORM"] = 'xcb'
+
+from hailo_apps.python.gen_ai_apps.vlm_chat.backend import Backend
+from hailo_apps.python.core.common.core import (
+    get_standalone_parser, resolve_hef_path, handle_list_models_flag
+)
+from hailo_apps.python.core.common.defines import HAILO10H_ARCH, SHARED_VDEVICE_GROUP_ID
+from hailo_apps.python.core.common.camera_utils import get_usb_video_devices
+from hailo_apps.python.core.common.hailo_logger import get_logger
+
+logger = get_logger(__name__)
+
+# Monitoring Configuration
+CAPTURE_INTERVAL = 10          # Seconds between captures
+MAX_TOKENS = 300               # Tokens per VLM response
+TEMPERATURE = 0.1              # Low temperature for consistent outputs
+MONITORING_PROMPT = "Describe what is happening in this scene. Focus on activities and events."
+
+class ContinuousMonitor:
+    def __init__(self, camera, camera_type, hef_path, capture_interval=CAPTURE_INTERVAL):
+        self.camera = camera
+        self.camera_type = camera_type
+        self.hef_path = hef_path
+        self.capture_interval = capture_interval
+        self.running = True
+        self.event_log = []
+        self.backend = None
+        signal.signal(signal.SIGINT, self.signal_handler)
+
+    def signal_handler(self, sig, frame):
+        logger.info("Shutting down monitor...")
+        self.stop()
+
+    def stop(self):
+        self.running = False
+        if self.backend:
+            self.backend.close()
+
+    def log_event(self, description: str, frame: Optional[object] = None):
+        """Log an observed event with timestamp."""
+        event = {
+            "timestamp": datetime.now().isoformat(),
+            "description": description,
+        }
+        self.event_log.append(event)
+        logger.info(f"[{event['timestamp']}] {description}")
+
+        # Optional: save frame
+        if frame is not None:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            cv2.imwrite(f"events/frame_{ts}.jpg", frame)
+
+    def get_summary(self) -> str:
+        """Generate summary of all logged events."""
+        if not self.event_log:
+            return "No events recorded."
+        lines = [f"  [{e['timestamp']}] {e['description']}" for e in self.event_log]
+        return f"Events recorded ({len(self.event_log)}):\n" + "\n".join(lines)
+
+    def run(self):
+        """Main monitoring loop."""
+        # Initialize camera
+        cap = cv2.VideoCapture(self.camera)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+        # Initialize backend
+        self.backend = Backend(
+            hef_path=str(self.hef_path),
+            max_tokens=MAX_TOKENS,
+            temperature=TEMPERATURE,
+            system_prompt="You are a monitoring assistant. Describe activities concisely."
+        )
+
+        last_capture = 0
+        try:
+            while self.running:
+                ret, frame = cap.read()
+                if not ret:
+                    continue
+
+                # Display live feed
+                cv2.imshow("Monitor", frame)
+                if cv2.waitKey(25) & 0xFF == ord('q'):
+                    break
+
+                # Periodic capture + analysis
+                now = time.time()
+                if now - last_capture >= self.capture_interval:
+                    last_capture = now
+                    result = self.backend.vlm_inference(frame, MONITORING_PROMPT)
+                    self.log_event(result.get("answer", ""), frame)
+
+        finally:
+            cap.release()
+            cv2.destroyAllWindows()
+            print("\n" + self.get_summary())
+            self.stop()
+```
+
+## Key Design Decisions
+
+| Decision | Recommendation |
+|---|---|
+| Capture interval | 5-30 seconds (balance detail vs resource usage) |
+| VLM prompt | Be specific about what to watch for |
+| Frame saving | Save only on interesting events to conserve storage |
+| Display | Show live feed with status overlay |
+| Logging | Use structured JSON events for later analysis |
+| Alert threshold | Parse VLM response for keywords to trigger alerts |
+
+## Extending with Event Detection
+
+Combine with the **event-detection** skill to add:
+- Keyword-based event triggers
+- Consecutive-frame confirmation
+- Alert notifications
+- Event counting and statistics
+
+## Extending with Summary Reports
+
+After monitoring session, use the event log to generate:
+- Hourly activity summaries
+- Event frequency charts
+- Anomaly detection (unusual patterns)

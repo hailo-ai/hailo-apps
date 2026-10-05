@@ -8,9 +8,12 @@ HAILO8L_ARCH = "hailo8l"
 HAILO10H_ARCH = "hailo10h"
 AUTO_DETECT = "auto"
 HAILO_TAPPAS_CORE = "hailo-tappas-core"
+HAILO_APPS_CORE = "hailo-apps-core"  # New name since TAPPAS 5.4
 HAILO_TAPPAS_CORE_PYTHON_NAMES = [
+    "hailo-apps-core-python-binding",  # New name since TAPPAS 5.4
     "hailo-tappas-core-python-binding",
     "tappas-core-python-binding",
+    HAILO_APPS_CORE,
     HAILO_TAPPAS_CORE,
 ]
 HAILORT_PACKAGE_NAME = "hailort"
@@ -102,10 +105,10 @@ DEFAULT_DOTENV_PATH = "/usr/local/hailo/resources/.env"  # your env file lives h
 DEFAULT_LOCAL_RESOURCES_PATH = _get_local_resources_path()  # bundled GIFs, JSON, etc.
 
 # Supported config options (used for validation in config_utils.py)
-VALID_HAILORT_VERSION = [AUTO_DETECT, "4.23.0", "5.1.1", "5.2.0", "5.3.0"]
-VALID_TAPPAS_VERSION = [AUTO_DETECT, "5.1.0", "5.2.0", "5.3.0"]
-VALID_H10_MODEL_ZOO_VERSION = ["v5.1.0", "v5.2.0", "v5.3.0"]  # First element is default
-VALID_H8_MODEL_ZOO_VERSION = ["v2.17.0"]
+VALID_HAILORT_VERSION = [AUTO_DETECT, "4.23.0", "4.24.0", "5.1.1", "5.2.0", "5.3.0", "5.4.0"]
+VALID_TAPPAS_VERSION = [AUTO_DETECT, "5.1.0", "5.2.0", "5.3.0", "5.3.1", "5.4.0"]
+VALID_H10_MODEL_ZOO_VERSION = ["v5.4.0", "v5.3.0", "v5.2.0", "v5.1.0"]  # First element is default
+VALID_H8_MODEL_ZOO_VERSION = ["v2.19.0", "v2.18.0", "v2.17.0"]
 VALID_MODEL_ZOO_VERSION = VALID_H10_MODEL_ZOO_VERSION + VALID_H8_MODEL_ZOO_VERSION
 VALID_HOST_ARCH = [AUTO_DETECT, "x86", "rpi", "arm"]
 VALID_HAILO_ARCH = [AUTO_DETECT, HAILO8_ARCH, HAILO8L_ARCH, HAILO10H_ARCH]
@@ -139,12 +142,12 @@ HAILORT_VERSION_DEFAULT = AUTO_DETECT
 TAPPAS_VERSION_DEFAULT = AUTO_DETECT
 HOST_ARCH_DEFAULT = AUTO_DETECT
 HAILO_ARCH_DEFAULT = AUTO_DETECT
-MODEL_ZOO_VERSION_DEFAULT = "v2.17.0"
+MODEL_ZOO_VERSION_DEFAULT = "v2.18.0"
 RESOURCES_PATH_DEFAULT = RESOURCES_ROOT_PATH_DEFAULT
 VIRTUAL_ENV_NAME_DEFAULT = "venv_hailo_apps"
 
 # Default TAPPAS post-processing directory - set via environment variable during installation
-# The installer runs: pkg-config --variable=tappas_postproc_lib_dir hailo-tappas-core
+# The installer runs: pkg-config --variable=tappas_postproc_lib_dir hailo-apps-core (or hailo-tappas-core)
 # and stores the result in the .env file as TAPPAS_POSTPROC_PATH
 TAPPAS_POSTPROC_PATH_DEFAULT = ""  # Will be populated from environment at runtime
 

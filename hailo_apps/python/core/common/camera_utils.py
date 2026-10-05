@@ -1,13 +1,13 @@
 import os
 import signal
 import subprocess
+import threading
 import time
 import platform
 import cv2
 import sys
 from enum import Enum
 from typing import Any, Optional
-import subprocess
 from .defines import UDEV_CMD, CAMERA_RESOLUTION_MAP
 from .hailo_logger import get_logger
 

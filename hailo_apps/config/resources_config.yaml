@@ -36,6 +36,7 @@ videos:
       - object_detection_onnx_postproc
       - simple_detection
       - instance_segmentation
+      - onnxrt_hailo_pipeline
       - pose_estimation
       - pose_estimation_onnx_postproc
       - semantic_segmentation
@@ -53,6 +54,7 @@ videos:
       - object_detection_onnx_postproc
       - simple_detection
       - instance_segmentation
+      - onnxrt_hailo_pipeline
       - pose_estimation
       - pose_estimation_onnx_postproc
       - semantic_segmentation
@@ -119,18 +121,6 @@ videos:
 # Shared images for all apps
 # Tags use app names only (no _p/_s suffixes)
 images:
-  - name: zidane.jpg
-    url: https://ultralytics.com/images/zidane.jpg
-    tag:
-      - detection
-      - object_detection
-      - object_detection_onnx_postproc
-      - simple_detection
-      - instance_segmentation
-      - pose_estimation
-      - pose_estimation_onnx_postproc
-      - classifier
-      - semantic_segmentation
   - name: dog_bicycle.jpg
     source: s3
     tag:
@@ -139,6 +129,7 @@ images:
       - object_detection_onnx_postproc
       - simple_detection
       - instance_segmentation
+      - onnxrt_hailo_pipeline
       - pose_estimation
       - pose_estimation_onnx_postproc
       - classifier
@@ -151,6 +142,7 @@ images:
       - object_detection_onnx_postproc
       - simple_detection
       - instance_segmentation
+      - onnxrt_hailo_pipeline
       - pose_estimation
       - pose_estimation_onnx_postproc
       - classifier
@@ -163,6 +155,7 @@ images:
       - object_detection_onnx_postproc
       - simple_detection
       - instance_segmentation
+      - onnxrt_hailo_pipeline
       - pose_estimation
       - pose_estimation_onnx_postproc
       - classifier
@@ -400,10 +393,10 @@ detection: &detection_app
   models:
     hailo8:
       default:
-        - name: yolov8m
+        - name: yolov5m_wo_spp
           source: mz
       extra:
-        - name: yolov5m_wo_spp
+        - name: yolov8m
           source: mz
         - name: yolov8s
           source: mz
@@ -448,11 +441,22 @@ detection: &detection_app
         - name: yolov8s-hailo8-barcode
           url: https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/hefs/h8l_rpi/yolov8s-hailo8l-barcode.hef
           source: s3
+        - name: yolo26m
+          source: mz
+          app_type: [standalone]
+        - name: yolo26n
+          source: mz
+          app_type: [standalone]
+        - name: yolo26s
+          source: mz
+          app_type: [standalone]
     hailo8l:
       default:
-        - name: yolov8s
+        - name: yolov5m_wo_spp
           source: mz
       extra:
+        - name: yolov8s
+          source: mz
         - name: yolov5s
           source: mz
         - name: yolov5m
@@ -494,12 +498,21 @@ detection: &detection_app
         - name: yolov8s-hailo8l-barcode
           url: https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/hefs/h8l_rpi/yolov8s-hailo8l-barcode.hef
           source: s3
+        - name: yolo26m
+          source: mz
+          app_type: [standalone]
+        - name: yolo26n
+          source: mz
+          app_type: [standalone]
+        - name: yolo26s
+          source: mz
+          app_type: [standalone]
     hailo10h:
       default:
-        - name: yolov8m
+        - name: yolov5m_wo_spp
           source: mz
       extra:
-        - name: yolov5m_wo_spp
+        - name: yolov8m
           source: mz
         - name: yolov5s
           source: mz
@@ -539,6 +552,15 @@ detection: &detection_app
           source: mz
         - name: yolov11x
           source: mz
+        - name: yolo26m
+          source: mz
+          app_type: [standalone]
+        - name: yolo26n
+          source: mz
+          app_type: [standalone]
+        - name: yolo26s
+          source: mz
+          app_type: [standalone]
 
 # Standalone app uses the same model set and defaults as the pipeline app
 object_detection: *detection_app
@@ -548,12 +570,12 @@ object_detection_onnx_postproc:
     hailo8:
       default:
         - name: yolo26n
-          source: s3
+          source: mz
           app_type: [standalone]
     hailo8l:
       default:
         - name: yolo26n
-          source: s3
+          source: mz
           app_type: [standalone]
 
 simple_detection: &simple_detection_app
@@ -653,22 +675,10 @@ instance_segmentation: &instance_segmentation_app
           app_type: [standalone]
     hailo10h:
       default:
-        - name: yolov5m_seg_with_nms
-          source: s3
-          app_type: [standalone]
         - name: yolov5m_seg
           source: mz
-          app_type: [pipeline]
+          app_type: [pipeline, standalone]
       extra:
-        - name: yolov5n_seg_with_nms
-          source: s3
-          app_type: [standalone]
-        - name: yolov5s_seg_with_nms
-          source: s3
-          app_type: [standalone]
-        - name: yolov5m_seg
-          source: mz
-          app_type: [standalone]
         - name: yolov5l_seg
           source: mz
           app_type: [standalone]
@@ -748,13 +758,13 @@ depth_estimation_stereo: &depth_estimation_stereo_app
     hailo8:
       default:
         - name: stereonet
-          source: s3
+          source: mz
     hailo8l:
       default: None
     hailo10h:
       default:
         - name: stereonet
-          source: s3
+          source: mz
 
 onnxrt_hailo_pipeline: &onnxrt_hailo_pipeline_app
   models:
@@ -767,7 +777,9 @@ onnxrt_hailo_pipeline: &onnxrt_hailo_pipeline_app
         - name: yolov8m_seg
           source: mz
     hailo10h:
-      default: None
+      default:
+        - name: yolov8m_seg
+          source: mz
 
 zero_shot_classification: &zero_shot_classification
   models:
@@ -1070,8 +1082,9 @@ metadata:
     model_zoo_h8: "https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled"
     gen_ai_mz: "https://dev-public.hailo.ai"
 
-  # Model Zoo version mapping
+  # Model Zoo version mapping (fallback defaults; kept in sync with
+  # config.yaml's model_zoo_mapping and defines.py's VALID_H8/H10_MODEL_ZOO_VERSION)
   model_zoo_versions:
-    hailo8: "v2.17.0"
-    hailo8l: "v2.17.0"
-    hailo10h: "v5.2.0"
+    hailo8: "v2.19.0"
+    hailo8l: "v2.19.0"
+    hailo10h: "v5.4.0"

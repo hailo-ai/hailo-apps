@@ -351,24 +351,37 @@ def INFERENCE_PIPELINE_WRAPPER(
     return inference_wrapper_pipeline
 
 
-def OVERLAY_PIPELINE(name="hailo_overlay"):
+def OVERLAY_PIPELINE(name="hailo_overlay", community=False, **extra_props):
     """Creates a GStreamer pipeline string for the hailooverlay element.
     This pipeline is used to draw bounding boxes and labels on the video.
 
     Args:
         name (str, optional): The prefix name for the pipeline elements. Defaults to 'hailo_overlay'.
+        community (bool, optional): Use hailooverlay_community plugin instead. Defaults to False.
+        **extra_props: Additional GStreamer properties to set on the overlay element.
+            Only applied when community=True. Example: use_custom_colors=True,
+            style_config="/path/to/style.yaml", sprite_config="/path/to/sprites.yaml".
 
     Returns:
         str: A string representing the GStreamer pipeline for the hailooverlay element.
     """
-    # Construct the overlay pipeline string
-    overlay_pipeline = f"{QUEUE(name=f'{name}_q')} ! hailooverlay name={name} "
+    element = "hailooverlay_community" if community else "hailooverlay"
+    props = ""
+    if community and extra_props:
+        for key, value in extra_props.items():
+            prop_name = key.replace("_", "-")
+            if isinstance(value, bool):
+                props += f" {prop_name}={'true' if value else 'false'}"
+            else:
+                props += f" {prop_name}={value}"
+    overlay_pipeline = f"{QUEUE(name=f'{name}_q')} ! {element} name={name}{props} "
 
     return overlay_pipeline
 
 
 def DISPLAY_PIPELINE(
-    video_sink=GST_VIDEO_SINK, sync="true", show_fps="false", name="hailo_display"
+    video_sink=GST_VIDEO_SINK, sync="true", show_fps="false", name="hailo_display",
+    community_overlay=False, overlay_props=None,
 ):
     """Creates a GStreamer pipeline string for displaying the video.
     It includes the hailooverlay plugin to draw bounding boxes and labels on the video.
@@ -378,13 +391,16 @@ def DISPLAY_PIPELINE(
         sync (str, optional): The sync property for the video sink. Defaults to 'true'.
         show_fps (str, optional): Whether to show the FPS on the video sink. Should be 'true' or 'false'. Defaults to 'false'.
         name (str, optional): The prefix name for the pipeline elements. Defaults to 'hailo_display'.
+        community_overlay (bool, optional): Use hailooverlay_community plugin. Defaults to False.
+        overlay_props (dict, optional): Extra properties for the overlay element (community only).
 
     Returns:
         str: A string representing the GStreamer pipeline for displaying the video.
     """
     # Construct the display pipeline string
+    extra = overlay_props or {}
     display_pipeline = (
-        f"{OVERLAY_PIPELINE(name=f'{name}_overlay')} ! "
+        f"{OVERLAY_PIPELINE(name=f'{name}_overlay', community=community_overlay, **extra)} ! "
         f"{QUEUE(name=f'{name}_videoconvert_q')} ! "
         f"videoconvert name={name}_videoconvert n-threads=2 qos=false ! "
         f"{QUEUE(name=f'{name}_q')} ! "

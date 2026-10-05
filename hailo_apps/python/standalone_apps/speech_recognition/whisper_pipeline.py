@@ -22,15 +22,6 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Whisper forced decoder prefix — language + task + no-timestamps
-# These must be set before free token generation starts.
-FORCED_DECODER_IDS = [
-    50258,  # <|startoftranscript|>
-    50259,  # <|en|>
-    50359,  # <|transcribe|>
-    50363,  # <|notimestamps|>
-]
-
 
 class WhisperPipeline:
     """Encoder–decoder Whisper pipeline running on any Hailo accelerator."""
@@ -60,6 +51,15 @@ class WhisperPipeline:
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(f"openai/whisper-{variant}")
 
+        # Forced decoder prefix, derived from the actual tokenizer in use.
+        # Multilingual checkpoints (base, small, medium, large, ...) expect
+        # <|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>.
+        # English-only checkpoints (tiny.en, base.en, small.en, medium.en) have
+        # no language/task tokens in their vocabulary at all, so forcing the
+        # multilingual prefix there produces garbage text. Their prefix is just
+        # <|startoftranscript|> <|notimestamps|>.
+        self.forced_decoder_ids = self._build_forced_decoder_ids()
+
         # Query encoder input shape to determine chunk length in seconds
         encoder_hef = HEF(self.encoder_path)
         self.input_audio_length = int(
@@ -72,6 +72,18 @@ class WhisperPipeline:
         self._running = True
         self._thread = Thread(target=self._inference_loop, daemon=True)
         self._thread.start()
+
+    def _build_forced_decoder_ids(self):
+        """Build the forced decoder prefix, tokenizer/variant aware (see __init__)."""
+        bos = self.tokenizer.convert_tokens_to_ids("<|startoftranscript|>")
+        notimestamps = self.tokenizer.convert_tokens_to_ids("<|notimestamps|>")
+
+        if self.variant.endswith(".en"):
+            return [bos, notimestamps]
+
+        lang = self.tokenizer.convert_tokens_to_ids("<|en|>")
+        task = self.tokenizer.convert_tokens_to_ids("<|transcribe|>")
+        return [bos, lang, task, notimestamps]
 
     def _tokenization(self, decoder_input_ids):
         """Manual token embedding lookup (replaces embedding layer on host).
@@ -143,10 +155,10 @@ class WhisperPipeline:
                     # --- Decoder (autoregressive) ---
                     seq_len = self.decoding_sequence_length
                     dec_ids = np.zeros((1, seq_len), dtype=np.int64)
-                    for k, tok in enumerate(FORCED_DECODER_IDS):
+                    for k, tok in enumerate(self.forced_decoder_ids):
                         dec_ids[0][k] = tok
                     # Free generation starts after the forced prefix
-                    free_start = len(FORCED_DECODER_IDS) - 1
+                    free_start = len(self.forced_decoder_ids) - 1
                     generated = []
 
                     for i in range(free_start, seq_len - 1):

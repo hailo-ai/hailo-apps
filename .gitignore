@@ -56,6 +56,5 @@ resources
 
 # IDE configuration files (user-specific)
 .vscode/launch.json
-.cursor/
 .vscode/
 docs/superpowers/

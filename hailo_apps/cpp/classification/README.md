@@ -18,6 +18,10 @@ Requirements
    ```
 
 - **Linux Dependencies**
+    - yaml-cpp and libcurl development libraries
+        ```shell
+        sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+        ```
     - CMake >= 3.16
     - Gtk
     - g++-9
@@ -46,7 +50,7 @@ Usage
 
 1. Clone the repository:
     ```shell script
-    git clone https://github.com/hailo-ai/hailo-apps.git
+    git clone --recurse-submodules https://github.com/hailo-ai/hailo-apps.git
     cd hailo-apps/hailo_apps/cpp/classification
     ``` 
 
@@ -62,14 +66,14 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called classifier
+    This builds `classifier` at `build/classifier` on Linux and `build/Release/classifier.exe` on Windows.
 
 
 3. Run the example:
 
     - **Linux**
         ```shell script
-        ./build/Release/classifier --net <hef_path> --input <image_or_video_or_camera_path>
+        ./build/classifier --net <hef_path> --input <image_or_video_or_camera_path>
         ```
     - **Windows**
         ```shell script
@@ -87,6 +91,7 @@ Arguments
     - On Linux, you can also use /dev/vidoeX (e.g., `/dev/video0`) to select a specific camera.
     - On Windows, you can also use a camera index (`0`, `1`, `2`, ...) to select a specific camera.
     - On Raspberry Pi, you can also use `rpi` to enable the Raspberry Pi camera.
+    - On Astrial/IMX8 (Yocto-based systems), use `csi` to auto-detect and open the CSI camera. The ISP must be initialized first: `cd /opt/imx8-isp/bin && ./run.sh -lm -c dual_imx219_1080p60 &`
   - A **predefined input name** from `resources_config.yaml` (e.g., `bus`, `street`).
     - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
     - Use `--list-inputs` to display all available predefined inputs.
@@ -105,34 +110,34 @@ Example
 -------------------
 - List supported networks:
     ```shell script
-    ./build/x86_64/classifier --list-nets
+    ./build/classifier --list-nets
     ```
 
 - List available input resources:
     ```shell script
-    ./build/x86_64/classifier --list-inputs
+    ./build/classifier --list-inputs
     ```
 - For a video:
     ```shell script
-    ./build/x86_64/classifier --net resnet_v1_50.hef --input full_mov_slow.mp4 --batch-size 16
+    ./build/classifier --net resnet_v1_50.hef --input full_mov_slow.mp4 --batch-size 16
     ```
     Output video is saved as processed_video.mp4
 
 - For a single image:
     ```shell script
-    ./build/x86_64/classifier -n resnet_v1_50.hef -i zidane.jpg
+    ./build/classifier -n resnet_v1_50.hef -i dog_bicycle.jpg
     ```
     Output image is saved as processed_image_0.jpg
 
 - For a directory of images:
     ```shell script
-    ./build/x86_64/classifier -n resnet_v1_50.hef -i images -b 4
+    ./build/classifier -n resnet_v1_50.hef -i images -b 4
     ````
     Each image is saved as processed_image_i.jpg
     
 - For camera, enabling saving the output:
     ```shell script
-    ./build/x86_64/classifier --net resnet_v1_50.hef --input /dev/video0 --batch-size 2 -s
+    ./build/classifier --net resnet_v1_50.hef --input /dev/video0 --batch-size 2 -s
     ```
     Output video is saved as processed_video.mp4
 

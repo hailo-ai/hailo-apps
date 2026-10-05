@@ -14,6 +14,19 @@ TIMEOUT_DEFAULT = 60
 TIMEOUT_LONG = 120
 REPO_ROOT = Path(__file__).parent.parent
 
+# Skip all gen_ai tests unless running on Hailo-10H
+try:
+    from hailo_apps.python.core.common.installation_utils import detect_hailo_arch
+    from hailo_apps.python.core.common.defines import HAILO10H_ARCH
+    _is_hailo10h = detect_hailo_arch() == HAILO10H_ARCH
+except Exception:
+    _is_hailo10h = False
+
+pytestmark = pytest.mark.skipif(
+    not _is_hailo10h,
+    reason="Gen AI tests require Hailo-10H architecture",
+)
+
 def run_app_subprocess(module_path, args=None, input_text=None, timeout=TIMEOUT_DEFAULT, check_retcode=True):
     """
     Runs a python module as a subprocess.

@@ -1,0 +1,10 @@
+---
+description: "Prompt template: Create New Agent Tool"
+alwaysApply: false
+---
+
+# Prompt: new-agent-tool
+
+Create New Agent Tool
+
+Read `.hailo/prompts/new-agent-tool.md` for the complete prompt template.

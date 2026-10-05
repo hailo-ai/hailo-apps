@@ -13,6 +13,11 @@ It receives a HEF file and a video as input, and produces a processed depth map 
 Requirements
 ------------
 
+- yaml-cpp and libcurl development libraries (Linux):
+    ```shell
+    sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+    ```
+
 - HailoRT  
   - For Hailo-8: `HailoRT==4.23.0`  
   - For Hailo-10: `HailoRT==5.3.0`
@@ -29,7 +34,7 @@ Usage
 
 1. Clone the repository:
     ```shell script
-    git clone https://github.com/hailo-ai/hailo-apps.git
+    git clone --recurse-submodules https://github.com/hailo-ai/hailo-apps.git
     cd hailo-apps/hailo_apps/cpp/depth_estimation_mono
     ``` 
 
@@ -45,7 +50,7 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called depth_estimation_mono
+    This builds `mono_depth_estimation` at `build/mono_depth_estimation` on Linux and `build/Release/mono_depth_estimation.exe` on Windows.
 
 3. Run the example:
 
@@ -61,6 +66,7 @@ Arguments
 - `-i, --input`:
   - An **input source** such as an image (`bus.jpg`), a video (`video.mp4`), a directory of images, or `usb` to use the system camera.
     - On Raspberry Pi, you can also use `rpi` to enable the Raspberry Pi camera.
+    - On Astrial/IMX8 (Yocto-based systems), use `csi` to auto-detect and open the CSI camera. The ISP must be initialized first: `cd /opt/imx8-isp/bin && ./run.sh -lm -c dual_imx219_1080p60 &`
   - A **predefined input name** from `inputs.json` (e.g., `bus`, `street`).
     - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
 - `-b, --batch-size`: [optional] Number of images in one batch. Defaults to 1.
@@ -77,34 +83,34 @@ Example
 -------------------
 - List supported networks:
     ```shell script
-    ./build/x86_64/mono_depth_estimation --list-nets
+    ./build/mono_depth_estimation --list-nets
     ```
 
 - List available input resources:
     ```shell script
-    ./build/x86_64/mono_depth_estimation --list-inputs
+    ./build/mono_depth_estimation --list-inputs
     ```
 - For a video:
     ```shell script
-    ./build/x86_64/mono_depth_estimation --net scdepthv3.hef --input input_video.mp4 --batch-size 16
+    ./build/mono_depth_estimation --net scdepthv3.hef --input input_video.mp4 --batch-size 16
     ```
     Output video is saved as processed_video.mp4
 
 - For a single image:
     ```shell script
-    ./build/x86_64/mono_depth_estimation -n scdepthv3.hef -i image.jpg
+    ./build/mono_depth_estimation -n scdepthv3.hef -i image.jpg
     ```
     Output image is saved as processed_image_0.jpg
 
 - For a directory of images:
     ```shell script
-    ./build/x86_64/mono_depth_estimation -n scdepthv3.hef -i images -b 4
+    ./build/mono_depth_estimation -n scdepthv3.hef -i images -b 4
     ````
     Each image is saved as processed_image_i.jpg
     
 - For camera, enabling saving the output:
     ```shell script
-    ./build/x86_64/mono_depth_estimation --net scdepthv3.hef --input /dev/video0 --batch-size 2 -s
+    ./build/mono_depth_estimation --net scdepthv3.hef --input /dev/video0 --batch-size 2 -s
     ```
     Output video is saved as processed_video.mp4
 

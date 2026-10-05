@@ -1,0 +1,53 @@
+# hailooverlay_community style configuration
+#
+# Usage:
+#   gst-launch-1.0 ... ! hailooverlay_community style-config=/path/to/overlay_style.yaml ! ...
+#
+# Each entry under 'styles' is keyed by detection label (e.g. "person", "car")
+# or by numeric class_id (e.g. "0", "2"). Label matches take priority over class_id.
+#
+# Available per-class overrides:
+#   color: [R, G, B]           - Bounding box color (0-255). Overridden by overlay_color metadata.
+#   text_color: [R, G, B]      - Label text color. Defaults to bbox color if not set.
+#   line_thickness: <int>       - Override global line-thickness for this class.
+#   show_bbox: true/false       - Override global show-bbox for this class.
+#   show_label: true/false      - Override global show-labels-text for this class.
+#   show_landmarks: true/false  - Override global show-landmarks for this class.
+#   sprite_key: <string>        - Sprite key (from sprite-config) to draw on this class's bbox.
+#   keypoint_sprites:           - Map of keypoint index to sprite key.
+#                                 Replaces the keypoint dot with a sprite image.
+#                                 Skeleton lines between two sprite-replaced keypoints are hidden.
+#                                 COCO pose indices: 0=nose, 1=left_eye, 2=right_eye, 3=left_ear,
+#                                 4=right_ear, 5=left_shoulder, 6=right_shoulder, ...
+
+styles:
+  person:
+    color: [0, 200, 255]       # cyan
+    show_landmarks: true
+    show_bbox: true
+    show_label: true
+    # Replace eyes with star sprites in pose skeleton
+    keypoint_sprites:
+      1: star_eye               # left eye → star
+      2: star_eye               # right eye → star
+
+  car:
+    color: [255, 100, 0]       # orange
+    show_landmarks: false
+    text_color: [255, 255, 255] # white text
+
+  truck:
+    color: [255, 50, 50]       # red
+    show_landmarks: false
+
+  bicycle:
+    color: [50, 255, 50]       # green
+    line_thickness: 2
+
+  cat:
+    color: [255, 0, 255]       # magenta
+    sprite_key: cat_icon
+
+  dog:
+    color: [0, 255, 128]       # spring green
+    sprite_key: dog_icon

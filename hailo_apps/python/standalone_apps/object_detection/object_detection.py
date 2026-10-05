@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from pathlib import Path
 import collections
 import numpy as np
+from hailo_platform import HEF
 
 # -----------------------------------------------------------------------------
 # Ensure repository root is available in sys.path
@@ -136,7 +137,9 @@ def run_inference_pipeline(
         draw_trail=draw_trail,
     )
 
-    hailo_inference = HailoInfer(net, input_context.batch_size)
+    num_outputs = len(HEF(str(net)).get_output_vstream_infos())
+    output_type = "FLOAT32" if num_outputs > 1 else None
+    hailo_inference = HailoInfer(net, input_context.batch_size, output_type=output_type)
     height, width, _ = hailo_inference.get_input_shape()
 
     preprocess_thread = threading.Thread(

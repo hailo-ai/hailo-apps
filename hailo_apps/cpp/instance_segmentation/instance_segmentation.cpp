@@ -150,6 +150,7 @@ int main(int argc, char** argv)
         VisualizationParams vis_param = load_visualization_params("visualization_config.yaml");
         validate_visualization_params(vis_param, AppVisMode::object_detection);
 
+        auto model_shape = model.get_model_shape();
         input_type = determine_input_type(std::ref(args.input),
                                         std::ref(capture),
                                         std::ref(org_height),
@@ -200,6 +201,7 @@ int main(int argc, char** argv)
                                     std::ref(args.output_dir),
                                     std::ref(args.output_resolution),
                                     results_queue,
+                                    input_queues,
                                     post_cb);
 
         hailo_status status = wait_and_check_threads(

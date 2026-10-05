@@ -1,5 +1,6 @@
 #include "toolbox.hpp"
 #include "hailo_infer.hpp"
+#include "hailo/hailort.hpp"
 #include "utils.hpp"
 
 using namespace hailo_utils;
@@ -67,9 +68,14 @@ void postprocess_callback(
     const std::vector<std::pair<uint8_t*, hailo_vstream_info_t>> &output_data_and_infos,
     const VisualizationParams &vis)
 {
-    const size_t class_count = 80;
-    auto bboxes = parse_nms_data(output_data_and_infos[0].first, class_count);
-
+    std::vector<NamedBbox> bboxes;
+    if (output_data_and_infos.size() == 1) {
+        // NMS-embedded model (e.g. yolov8m): single packed output
+        bboxes = parse_nms_data(output_data_and_infos[0].first, 80);
+    } else {
+        // Raw anchor-free model (e.g. yolo26n/s/m): 6 FLOAT32 tensors
+        bboxes = decode_anchor_free(output_data_and_infos, vis);
+    }
     draw_bounding_boxes(frame_to_draw, bboxes, vis);
 }
 
@@ -88,7 +94,19 @@ int main(int argc, char** argv)
 
         CommandLineArgs args = parse_command_line_arguments(argc, argv);
         post_parse_args(APP_NAME, args, argc, argv);
-        HailoInfer model(args.net, args.batch_size);
+
+        // Inspect the HEF file (no VDevice needed) to count outputs.
+        // Raw anchor-free models (yolo26n/s/m) have 6 outputs and need FLOAT32
+        // so HailoRT dequantizes the tensors before we receive them.
+        // NMS-embedded models have 1 output and work fine with AUTO.
+        auto hef_inspect = hailort::Hef::create(args.net);
+        if (!hef_inspect) throw std::runtime_error("Failed to parse HEF: " + args.net);
+        size_t num_outputs = hef_inspect->get_output_vstream_infos().release().size();
+        bool is_raw_tensor = num_outputs > 1;
+
+        HailoInfer model(args.net, args.batch_size,
+                         HAILO_FORMAT_TYPE_AUTO,
+                         is_raw_tensor ? HAILO_FORMAT_TYPE_FLOAT32 : HAILO_FORMAT_TYPE_AUTO);
 
         // Load visualization config params
         VisualizationParams vis_param = load_visualization_params("visualization_config.yaml");
@@ -141,6 +159,7 @@ int main(int argc, char** argv)
                                     std::ref(args.output_dir),
                                     std::ref(args.output_resolution),
                                     results_queue,
+                                    input_queues,
                                     post_cb);
 
         hailo_status status = wait_and_check_threads(

@@ -171,17 +171,26 @@ def _get_tappas_version() -> str:
 
 def _get_model_zoo_version(hailo_arch: str, hailort_version: str = "") -> str:
     """Get Model Zoo version based on Hailo architecture and HailoRT version.
-    
-    For H10: Derives from HailoRT version (5.1.x -> v5.1.0, 5.2.x -> v5.2.0)
-    For H8/H8L: Uses static mapping v2.17.0
+
+    For H10: Derives from HailoRT version (e.g. 5.3.x -> v5.3.0)
+    For H8/H8L: Derives from HailoRT version (4.24.x -> v2.19.0, 4.23.x -> v2.18.0),
+    falling back to the newest entry in VALID_H8_MODEL_ZOO_VERSION if unrecognized.
     """
     if hailo_arch == HAILO10H_ARCH:
-        # H10: Derive from HailoRT version
-        if hailort_version.startswith("5.2"):
-            return "v5.2.0"
-        return "v5.1.0"  # Default for 5.1.x
-    # H8/H8L always uses v2.17.0
-    return "v2.17.0"
+        # H10: Derive from HailoRT version (e.g. "5.3.1" -> "v5.3.0")
+        parts = hailort_version.split(".")
+        if len(parts) >= 2:
+            return f"v{parts[0]}.{parts[1]}.0"
+        return "v5.1.0"  # fallback
+    # H8/H8L: Derive from HailoRT version. Must match the mapping documented in
+    # config.yaml's model_zoo_mapping (4.23.x -> v2.18.0, 4.24.x -> v2.19.0) so
+    # HailoRT 4.23 installs don't download HEFs built for the newer Model Zoo.
+    if hailort_version.startswith("4.24"):
+        return "v2.19.0"
+    if hailort_version.startswith("4.23"):
+        return "v2.18.0"
+    # Unrecognized HailoRT version: fall back to the newest valid version.
+    return VALID_H8_MODEL_ZOO_VERSION[0]
 
 
 def _get_hailo_arch() -> str | None:
@@ -244,6 +253,10 @@ def configure_environment(config: Dict, env_path: Path) -> None:
     # Get log level from config (default: INFO)
     log_level = config.get('log_level', 'INFO').upper()
     
+    # GStreamer plugin path for community overlay and other plugins installed
+    # to the repo-owned directory (avoids requiring root for system plugin dir).
+    gst_plugin_path = f"{RESOURCES_ROOT_PATH_DEFAULT}/so"
+
     # Build environment variables dict
     env_vars = {
         HOST_ARCH_KEY: host_arch,
@@ -257,6 +270,7 @@ def configure_environment(config: Dict, env_path: Path) -> None:
         VIRTUAL_ENV_NAME_KEY: venv_config.get('name', VIRTUAL_ENV_NAME_DEFAULT),
         HAILO_APPS_PATH_KEY: repo_root,
         HAILO_LOG_LEVEL_KEY: log_level,
+        "GST_PLUGIN_PATH": gst_plugin_path,
     }
     
     # Update os.environ

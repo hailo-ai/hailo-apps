@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hailo-apps"
-version = "26.03.0"
+version = "26.10.0"
 description = "Hailo AI applications and pipelines package"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,7 +17,7 @@ classifiers = [
 ]
 dependencies = [
     # Core dependencies
-    "numpy",
+    "numpy<2",
     "setproctitle",
     "opencv-python<=4.10.0.84",  # Pin to avoid Qt font warnings in newer versions
     "python-dotenv",
@@ -32,6 +32,9 @@ dependencies = [
     "lap",
     "cython_bbox",
     "tqdm",
+
+    # ONNX postprocessing (yolo26 non-NMS apps)
+    "onnxruntime",
 ]
 
 [project.optional-dependencies]
@@ -136,6 +139,7 @@ markers = [
     "pipeline: GStreamer pipeline functional tests",
     "standalone: Standalone app smoke tests",
     "genai: Generative AI app tests",
+    "cpp: C++ application tests",
 ]
 
 [tool.ruff.format]

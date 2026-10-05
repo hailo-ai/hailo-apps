@@ -19,6 +19,20 @@
 
 set -uo pipefail
 
+# Self-elevate via 'sudo -E' if not already root, preserving PATH/VIRTUAL_ENV
+# so an active virtual environment (e.g. Suite Docker) stays visible.
+# Skip elevation for --help/-h, which doesn't need root.
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+    _skip_elevation=false
+    for _arg in "$@"; do
+        [[ "$_arg" == "-h" || "$_arg" == "--help" ]] && _skip_elevation=true && break
+    done
+    if [[ "${_skip_elevation}" != true ]]; then
+        exec sudo -E -- "$0" "$@"
+    fi
+    unset _skip_elevation _arg
+fi
+
 #===============================================================================
 # CONSTANTS
 #===============================================================================
@@ -27,6 +41,13 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 readonly TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 readonly CONFIG_FILE="${SCRIPT_DIR}/hailo_apps/config/config.yaml"
+
+# TAPPAS Core GStreamer resources (auto-downloaded when missing, unless --skip-gstreamer)
+# Fallback version used only when no compatible HailoRT version is detected
+# (see select_tappas_version_for_hailort()); otherwise the version is chosen
+# to match the installed HailoRT via valid_combinations in config.yaml.
+readonly TAPPAS_RESOURCES_VERSION="5.4.0"
+readonly TAPPAS_DOWNLOAD_DIR="/tmp/hailo_tappas_download"
 
 # Log file path (not readonly - may be updated if log dir not writable)
 LOG_DIR="${SCRIPT_DIR}/logs"
@@ -52,11 +73,18 @@ fi
 #===============================================================================
 
 DRY_RUN=false
+FORCE_CLEANUP=false
 NO_INSTALL=false
 NO_SYSTEM_PYTHON=false
-NO_TAPPAS_REQUIRED=false
+SKIP_GSTREAMER=false
 PYHAILORT_PATH=""
 PYTAPPAS_PATH=""
+
+# Reuse PyHailoRT from the HailoRT Docker image when available.
+# The HailoRT release container installs hailo_platform in this dedicated venv.
+CONTAINER_PYHAILORT_VENV="${CONTAINER_PYHAILORT_VENV:-/local/workspace/hailo_platform_venv}"
+CONTAINER_PYHAILORT_SITE_PACKAGES=""
+CONTAINER_PYHAILORT_VERSION=""
 
 # Configuration variables (populated from config.yaml)
 VENV_NAME=""
@@ -218,13 +246,34 @@ disable_error_trap() {
 # UTILITY FUNCTIONS
 #===============================================================================
 
-# Execute command as the original user (not root)
+# Execute command as the original user (not root).
+# Preserves PATH/VIRTUAL_ENV so an active virtual environment (e.g. Suite
+# Docker) stays visible. Also re-injects VIRTUAL_ENV/bin into PATH via `env`,
+# since sudo's secure_path default overrides --preserve-env=PATH otherwise.
 as_original_user() {
     if [[ ${EUID:-$(id -u)} -eq 0 && -n "${SUDO_USER:-}" ]]; then
         log_debug "Running as user ${SUDO_USER}: $*"
-        sudo -n -u "$SUDO_USER" -H -- "$@"
+        if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+            sudo -n -u "$SUDO_USER" -H --preserve-env=PATH,VIRTUAL_ENV -- \
+                env "PATH=${VIRTUAL_ENV}/bin:${PATH}" "VIRTUAL_ENV=${VIRTUAL_ENV}" "$@"
+        else
+            sudo -n -u "$SUDO_USER" -H -- "$@"
+        fi
     else
         "$@"
+    fi
+}
+
+# Extract the version number (e.g. 4.24.0) from a wheel filename such as
+# hailort-4.24.0-cp312-cp312-linux_x86_64.whl
+extract_wheel_version() {
+    local whl="$1"
+    local name
+    name="$(basename "$whl")"
+    if [[ "$name" =~ -([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+    else
+        echo ""
     fi
 }
 
@@ -260,6 +309,70 @@ run_as_user() {
 # Check if a command exists
 command_exists() {
     command -v "$1" &>/dev/null
+}
+
+# Detect PyHailoRT preinstalled in a HailoRT/Suite Docker image: either in a
+# dedicated venv, or already importable in the active environment.
+detect_container_pyhailort() {
+    CONTAINER_PYHAILORT_SITE_PACKAGES=""
+    CONTAINER_PYHAILORT_VERSION=""
+
+    local candidate_python=""
+
+    # 1) Known dedicated venv locations for the PyHailoRT binding.
+    local venv_candidates=(
+        "${CONTAINER_PYHAILORT_VENV}"
+        "/local/workspace/hailo_platform_venv"
+        "/opt/hailo_platform_venv"
+        "/root/hailo_platform_venv"
+    )
+    local venv_dir
+    for venv_dir in "${venv_candidates[@]}"; do
+        [[ -n "$venv_dir" && -x "${venv_dir}/bin/python3" ]] || continue
+        if "${venv_dir}/bin/python3" -c 'import hailo_platform' >/dev/null 2>&1; then
+            candidate_python="${venv_dir}/bin/python3"
+            break
+        fi
+    done
+
+    # 2) Search a shallow depth under common container roots as a fallback.
+    if [[ -z "$candidate_python" ]]; then
+        local found_dir
+        found_dir=$(find /local/workspace /opt /root -maxdepth 3 -type d -iname "hailo_platform_venv" 2>/dev/null | head -1) || true
+        if [[ -n "$found_dir" && -x "${found_dir}/bin/python3" ]] \
+           && "${found_dir}/bin/python3" -c 'import hailo_platform' >/dev/null 2>&1; then
+            candidate_python="${found_dir}/bin/python3"
+        fi
+    fi
+
+    # 3) Fall back to "python3" for the original user (covers an already-active
+    # venv, e.g. Suite Docker, or the container's system python3).
+    if [[ -z "$candidate_python" ]] && as_original_user python3 -c 'import hailo_platform' >/dev/null 2>&1; then
+        candidate_python="python3"
+    fi
+
+    if [[ -z "$candidate_python" ]]; then
+        return 1
+    fi
+
+    CONTAINER_PYHAILORT_SITE_PACKAGES=$(
+        as_original_user "${candidate_python}" -c 'import site; print(site.getsitepackages()[0])' 2>/dev/null
+    ) || true
+
+    if [[ -z "${CONTAINER_PYHAILORT_SITE_PACKAGES}" \
+       || ! -d "${CONTAINER_PYHAILORT_SITE_PACKAGES}" ]]; then
+        CONTAINER_PYHAILORT_SITE_PACKAGES=""
+        return 1
+    fi
+
+    # Fall back to the detected HailoRT .deb version if metadata is unavailable.
+    CONTAINER_PYHAILORT_VERSION=$(
+        as_original_user "${candidate_python}" -c \
+            'import importlib.metadata as m; print(m.version("hailort"))' \
+            2>/dev/null
+    ) || true
+
+    return 0
 }
 
 # Validate detected versions against config
@@ -355,15 +468,24 @@ get_model_zoo_version() {
 
     case "$arch" in
         hailo8|hailo8l)
-            # H8/H8L always uses v2.17.0
-            mz_version="v2.17.0"
+            # H8/H8L: Derive from HailoRT version
+            # HailoRT 4.24.x -> Model Zoo v2.19.0
+            # HailoRT 4.23.x (default) -> Model Zoo v2.18.0
+            if [[ "$hailort_ver" == 4.24.* ]]; then
+                mz_version="v2.19.0"
+            else
+                mz_version="v2.18.0"
+            fi
             ;;
         hailo10h)
             # H10: Derive from HailoRT version
+            # HailoRT 5.4.x -> Model Zoo v5.4.0
             # HailoRT 5.3.x -> Model Zoo v5.3.0
             # HailoRT 5.2.x -> Model Zoo v5.2.0
             # HailoRT 5.1.x (default) -> Model Zoo v5.1.0
-            if [[ "$hailort_ver" == 5.3.* ]]; then
+            if [[ "$hailort_ver" == 5.4.* ]]; then
+                mz_version="v5.4.0"
+            elif [[ "$hailort_ver" == 5.3.* ]]; then
                 mz_version="v5.3.0"
             elif [[ "$hailort_ver" == 5.2.* ]]; then
                 mz_version="v5.2.0"
@@ -531,22 +653,24 @@ load_config() {
     # Parse YAML config using bash
     log_debug "Parsing config.yaml..."
 
-    # Extract venv settings
-    VENV_NAME=$(yaml_get "venv.name" "${CONFIG_FILE}")
+    # Extract venv settings (CLI args take precedence over config values)
+    VENV_NAME="${VENV_NAME:-$(yaml_get "venv.name" "${CONFIG_FILE}")}"
     local cfg_use_system_site_packages
     cfg_use_system_site_packages=$(yaml_get "venv.use_system_site_packages" "${CONFIG_FILE}")
 
-    # Handle boolean for use_system_site_packages
-    case "${cfg_use_system_site_packages,,}" in
-        true|yes|1) USE_SYSTEM_SITE_PACKAGES=true ;;
-        false|no|0) USE_SYSTEM_SITE_PACKAGES=false ;;
-        *) USE_SYSTEM_SITE_PACKAGES=true ;;
-    esac
+    # Handle boolean for use_system_site_packages (only if not already set by CLI)
+    if [[ -z "${USE_SYSTEM_SITE_PACKAGES}" ]]; then
+        case "${cfg_use_system_site_packages,,}" in
+            true|yes|1) USE_SYSTEM_SITE_PACKAGES=true ;;
+            false|no|0) USE_SYSTEM_SITE_PACKAGES=false ;;
+            *) USE_SYSTEM_SITE_PACKAGES=true ;;
+        esac
+    fi
 
-    # Extract resources settings
+    # Extract resources settings (CLI args take precedence over config values)
     RESOURCES_ROOT=$(yaml_get "resources.root" "${CONFIG_FILE}")
     RESOURCES_SYMLINK_NAME=$(yaml_get "resources.path" "${CONFIG_FILE}")
-    DOWNLOAD_GROUP=$(yaml_get "resources.download_group" "${CONFIG_FILE}")
+    DOWNLOAD_GROUP="${DOWNLOAD_GROUP:-$(yaml_get "resources.download_group" "${CONFIG_FILE}")}"
     ENV_FILE=$(yaml_get "resources.env_file" "${CONFIG_FILE}")
 
     # Extract system packages (list)
@@ -602,7 +726,11 @@ show_help() {
 ${BOLD}Hailo Apps Infrastructure - Single-File Installer${NC}
 
 ${BOLD}USAGE:${NC}
-    sudo $SCRIPT_NAME [OPTIONS]
+    ./$SCRIPT_NAME [OPTIONS]
+
+    The script self-elevates with 'sudo -E' if not already run as root,
+    preserving your environment (e.g. an active virtual environment).
+    Running it directly with 'sudo $SCRIPT_NAME' also works.
 
 ${BOLD}OPTIONS:${NC}
     -n, --venv-name NAME        Virtual environment name (default: from config or venv_hailo_apps)
@@ -611,9 +739,11 @@ ${BOLD}OPTIONS:${NC}
     --all                       Download all available models/resources
     -x, --no-install            Skip Python package installation
     --no-system-python          Don't use system site-packages in venv
-    --no-tappas-required        Skip TAPPAS checks, Python TAPPAS install, compile, and post_install
+    --skip-gstreamer             Skip TAPPAS checks, Python TAPPAS install, compile, and post_install
                                 (downloads resources directly, no C++ compilation)
     --dry-run                   Show what would be done without executing
+    --force-cleanup             Run cleanup script before installation (removes venv,
+                                build caches, and resources — useful for upgrades)
     -h, --help                  Show this help message
 
 ${BOLD}CONFIGURATION:${NC}
@@ -621,11 +751,12 @@ ${BOLD}CONFIGURATION:${NC}
     CLI arguments override config file values.
 
 ${BOLD}EXAMPLES:${NC}
-    sudo $SCRIPT_NAME                     # Standard installation
-    sudo $SCRIPT_NAME --dry-run           # Preview what would be done
-    sudo $SCRIPT_NAME --all               # Install with all models
-    sudo $SCRIPT_NAME -x                  # Skip Python package installation
-    sudo $SCRIPT_NAME -n my_venv --all    # Custom venv name + all models
+    ./$SCRIPT_NAME                              # Standard installation
+    ./$SCRIPT_NAME --dry-run                    # Preview what would be done
+    ./$SCRIPT_NAME --all                        # Install with all models
+    ./$SCRIPT_NAME -x                           # Skip Python package installation
+    ./$SCRIPT_NAME -n my_venv --all             # Custom venv name + all models
+    ./$SCRIPT_NAME --force-cleanup              # Clean stale artifacts then install
 
 ${BOLD}LOG FILES:${NC}
     Installation logs: ${LOG_DIR}/
@@ -635,11 +766,14 @@ ${BOLD}REQUIREMENTS:${NC}
     - Must be run with sudo (not as root directly)
     - Hailo PCI driver must be installed (.deb)
     - HailoRT must be installed (.deb)
-    - TAPPAS Core must be installed (.deb) — unless --no-tappas-required
-    - HailoRT Python binding must be installed (.whl)
-    - TAPPAS Core Python binding must be installed (.whl) — unless --no-tappas-required
+    - HailoRT Python binding must be available either from the HailoRT container
+      environment (${CONTAINER_PYHAILORT_VENV}) or from a supplied .whl
 
-    Download all required packages from the Hailo Developer Zone:
+    Unless --skip-gstreamer is passed, TAPPAS Core (.deb, v${TAPPAS_RESOURCES_VERSION} if not
+    already present) and its matching Python binding (.whl) are downloaded and
+    installed automatically. Use --pytappas to supply a custom wheel instead.
+
+    Download the Hailo driver and HailoRT packages from the Hailo Developer Zone:
     https://hailo.ai/developer-zone/
 
 EOF
@@ -677,8 +811,12 @@ parse_arguments() {
                 USE_SYSTEM_SITE_PACKAGES=false
                 shift
                 ;;
-            --no-tappas-required)
-                NO_TAPPAS_REQUIRED=true
+            --skip-gstreamer)
+                SKIP_GSTREAMER=true
+                shift
+                ;;
+            --force-cleanup)
+                FORCE_CLEANUP=true
                 shift
                 ;;
             --dry-run)
@@ -714,14 +852,17 @@ detect_user_and_group() {
         return 1
     fi
 
-    # Check if running as root directly (not via sudo)
+    # No SUDO_USER means root was invoked directly, e.g. in a container with
+    # no unprivileged user (like the HailoRT Docker container). Proceed as
+    # root instead of failing, since there's no other user to drop to.
     if [[ -z "${SUDO_USER:-}" ]]; then
-        log_error "This script must be run with sudo, not as root directly"
-        echo ""
-        echo "Please run with: sudo $SCRIPT_NAME"
-        echo "Do not use: su -c or login as root"
-        record_step_result "FAILED" "Running as root directly"
-        return 1
+        log_warning "Running as root with no SUDO_USER (e.g. a container with only a root user)"
+        log_warning "Proceeding as root for the rest of the installation"
+        ORIGINAL_USER="root"
+        ORIGINAL_GROUP="$(id -gn root 2>/dev/null || echo root)"
+        export ORIGINAL_USER ORIGINAL_GROUP
+        record_step_result "SUCCESS" "User: ${ORIGINAL_USER} (root-only environment), Group: ${ORIGINAL_GROUP}"
+        return 0
     fi
 
     ORIGINAL_USER="${SUDO_USER}"
@@ -738,6 +879,229 @@ detect_user_and_group() {
 
     export ORIGINAL_USER ORIGINAL_GROUP
     record_step_result "SUCCESS" "User: ${ORIGINAL_USER}, Group: ${ORIGINAL_GROUP}"
+    return 0
+}
+
+#===============================================================================
+# TAPPAS GSTREAMER RESOURCES (auto-download)
+#===============================================================================
+
+# Download a file from a URL to a destination path using curl or wget
+download_file() {
+    local url="$1"
+    local dest="$2"
+
+    if command_exists curl; then
+        curl -fsSL --retry 3 --connect-timeout 15 -o "$dest" "$url"
+    elif command_exists wget; then
+        wget -q --tries=3 --timeout=15 -O "$dest" "$url"
+    else
+        log_error "Neither curl nor wget is available to download files"
+        return 1
+    fi
+}
+
+# Detect supported HailoRT system packages, including the legacy RPi name.
+detect_hailort_package_version() {
+    local pkg package_info
+    for pkg in hailort h10-hailort; do
+        package_info=$(dpkg-query -W -f='${Status} ${Version}' "$pkg" 2>/dev/null) || continue
+        if [[ "$package_info" == install\ ok\ installed\ * ]]; then
+            echo "${package_info##* }"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Pick a TAPPAS Core version compatible with the given HailoRT version, using
+# the "hailort:tappas" combos from config.yaml (valid_combinations.*). Looks
+# across all architectures since HailoRT version strings don't overlap
+# between the hailo8/8l family (4.x) and hailo10h (5.x). If multiple TAPPAS
+# versions are valid for a given HailoRT version, the last (newest) match in
+# the combo list wins. Falls back to TAPPAS_RESOURCES_VERSION if the HailoRT
+# version is unknown or has no matching combo (e.g. HailoRT not yet installed).
+
+select_tappas_version_for_hailort() {
+    local hailort_ver="$1"
+    local best=""
+
+    if [[ -n "$hailort_ver" ]]; then
+        local combo h t
+        for combo in ${VALID_COMBINATIONS_HAILO8:-} ${VALID_COMBINATIONS_HAILO8L:-} ${VALID_COMBINATIONS_HAILO10H:-}; do
+            h="${combo%%:*}"
+            t="${combo#*:}"
+            [[ "$h" == "$hailort_ver" ]] && best="$t"
+        done
+    fi
+
+    echo "${best:-$TAPPAS_RESOURCES_VERSION}"
+}
+
+# Download and install the TAPPAS Core .deb (matching host architecture) and
+# the TAPPAS Core Python binding .whl, unless already installed/provided.
+ensure_gstreamer_resources() {
+    if [[ "${SKIP_GSTREAMER}" == true ]]; then
+        log_debug "Skipping TAPPAS GStreamer resources (--skip-gstreamer)"
+        return 0
+    fi
+
+    log_info "Checking TAPPAS GStreamer resources (v${TAPPAS_RESOURCES_VERSION})..."
+
+    # Detect architecture (amd64/arm64) for the correct .deb
+    local arch
+    arch="$(dpkg --print-architecture 2>/dev/null || true)"
+    if [[ -z "$arch" ]]; then
+        case "$(uname -m)" in
+            x86_64) arch="amd64" ;;
+            aarch64|arm64) arch="arm64" ;;
+            *) arch="$(uname -m)" ;;
+        esac
+    fi
+
+    # Detect an already-installed HailoRT version (e.g. via hailo-all on RPi,
+    # or a Suite Docker image) so the TAPPAS version we auto-install below is
+    # actually compatible with it, instead of always installing the newest
+    # pinned TAPPAS_RESOURCES_VERSION regardless of HailoRT.
+    local installed_hailort_version=""
+    if installed_hailort_version=$(detect_hailort_package_version); then
+        installed_hailort_version="${installed_hailort_version%%-*}"
+    else
+        installed_hailort_version=""
+    fi
+    local target_tappas_version
+    target_tappas_version="$(select_tappas_version_for_hailort "$installed_hailort_version")"
+    if [[ -n "$installed_hailort_version" ]]; then
+        log_debug "Detected HailoRT ${installed_hailort_version}; selecting compatible TAPPAS Core v${target_tappas_version}"
+    fi
+
+    # --- TAPPAS Core .deb ---
+    # Check dpkg first (native .deb install), then fall back to pkg-config
+    # (e.g. the Hailo AI Software Suite Docker builds/registers TAPPAS Core
+    # without a dpkg entry). Also capture the installed version so the Python
+    # binding wheel fetched below matches it exactly (e.g. RPi "hailo-all"
+    # installs often ship an older, still-valid TAPPAS Core version).
+    local tappas_found=false
+    local installed_tappas_version=""
+    local _tv pkg
+    for pkg in hailo-apps-core hailo-tappas-core hailo-tappas tappas-core tappas; do
+        _tv=$(dpkg-query -W -f='${Status} ${Version}' "$pkg" 2>/dev/null) || true
+        if [[ "$_tv" == install\ ok\ installed\ * ]]; then
+            tappas_found=true
+            installed_tappas_version="${_tv##* }"
+            break
+        fi
+    done
+    if [[ "${tappas_found}" != true ]] && command_exists pkg-config; then
+        for pc in hailo-apps-core hailo-tappas-core hailo_tappas tappas-core tappas; do
+            if pkg-config --exists "$pc" 2>/dev/null; then
+                tappas_found=true
+                installed_tappas_version=$(pkg-config --modversion "$pc" 2>/dev/null) || true
+                break
+            fi
+        done
+    fi
+    # Strip any Debian revision suffix (e.g. "5.3.0-1" -> "5.3.0")
+    installed_tappas_version="${installed_tappas_version%%-*}"
+
+    # The Python binding wheel must match the TAPPAS Core version that's
+    # actually installed, not always the newest pinned version — otherwise a
+    # valid-but-older system install (e.g. 5.3.0 from hailo-all) gets paired
+    # with a newer wheel (e.g. 5.4.0), which fails the version-match check later.
+    local tappas_whl_version="${target_tappas_version}"
+    if [[ "${tappas_found}" == true && -n "${installed_tappas_version}" ]]; then
+        tappas_whl_version="${installed_tappas_version}"
+    fi
+    local tappas_whl_url="https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/installation_files/v${tappas_whl_version}/hailo_tappas_core_python_binding-${tappas_whl_version}-py3-none-any.whl"
+
+    if [[ "${tappas_found}" == true ]]; then
+        log_success "TAPPAS Core already installed (v${installed_tappas_version:-unknown}), skipping .deb download"
+    else
+        local deb_url="https://hailo-csdata.s3.eu-west-2.amazonaws.com/resources/installation_files/v${target_tappas_version}/hailo-tappas-core_${target_tappas_version}_${arch}.deb"
+        case "$arch" in
+            amd64|arm64) ;;
+            *)
+                log_error "No TAPPAS Core package available for architecture: ${arch}"
+                log_error "Install hailo-tappas-core manually or use --skip-gstreamer"
+                return 1
+                ;;
+        esac
+
+        local deb_path="${TAPPAS_DOWNLOAD_DIR}/$(basename "$deb_url")"
+        mkdir -p "${TAPPAS_DOWNLOAD_DIR}"
+
+        log_info "Downloading TAPPAS Core (.deb, ${arch}, v${target_tappas_version})..."
+        if ! download_file "$deb_url" "$deb_path"; then
+            log_error "Failed to download TAPPAS Core package: ${deb_url}"
+            return 1
+        fi
+
+        log_info "Installing TAPPAS Core package"
+        apt-get update -qq 2>/dev/null || log_warning "apt-get update had warnings (continuing anyway)"
+        if ! apt-get install -y "${deb_path}"; then
+            log_error "Failed to install TAPPAS Core package: ${deb_path}"
+            return 1
+        fi
+        log_success "TAPPAS Core installed"
+        installed_tappas_version="${target_tappas_version}"
+    fi
+
+    # --- TAPPAS Core Python binding .whl ---
+    if [[ -n "${PYTAPPAS_PATH}" ]]; then
+        log_debug "Custom PyTappas wheel provided (--pytappas ${PYTAPPAS_PATH}), skipping auto-download"
+        return 0
+    fi
+
+    # Skip the download only if already importable AND its version matches the
+    # installed TAPPAS Core package (e.g. pre-installed in the Suite Docker's
+    # active venv). A stale/mismatched pre-installed binding (e.g. a container
+    # image shipping "hailo" 5.3.0 alongside a 5.1.0 tappas-core .deb) must NOT
+    # be skipped — otherwise the mismatch is only caught later as a hard
+    # failure instead of being auto-corrected here.
+    # NOTE: The TAPPAS Core Python binding module is `hailo` (not `hailo_platform`,
+    # which is the PyHailoRT/HailoRT binding module).
+    if as_original_user python3 -c 'import hailo' >/dev/null 2>&1; then
+        local importable_hailo_version
+        importable_hailo_version=$(
+            as_original_user python3 -c '
+import hailo
+from importlib.metadata import PackageNotFoundError, version
+binding_version = getattr(hailo, "__version__", "")
+if not binding_version or binding_version == "unknown":
+    for package in ("hailo-apps-core-python-binding", "hailo-tappas-core-python-binding", "tappas-core-python-binding", "hailo-tappas-python-binding", "tappas"):
+        try:
+            binding_version = version(package)
+            break
+        except PackageNotFoundError:
+            pass
+print(binding_version)
+' 2>/dev/null
+        ) || true
+
+        if [[ -n "${installed_tappas_version}" \
+           && "${importable_hailo_version}" == "${installed_tappas_version}" ]]; then
+            log_success "TAPPAS Core Python binding v${importable_hailo_version} matches TAPPAS Core, skipping download"
+            return 0
+        fi
+
+        log_warning "TAPPAS version mismatch: installed Python binding=${importable_hailo_version:-unknown}, native Core libraries=${installed_tappas_version:-unknown}"
+        log_info "Downloading TAPPAS Core Python binding v${tappas_whl_version} for installation in the app virtual environment in Step 6..."
+    fi
+
+    local whl_path="${TAPPAS_DOWNLOAD_DIR}/$(basename "${tappas_whl_url}")"
+    mkdir -p "${TAPPAS_DOWNLOAD_DIR}"
+
+    log_info "Downloading TAPPAS Core Python binding (.whl, v${tappas_whl_version})..."
+    if ! download_file "${tappas_whl_url}" "$whl_path"; then
+        log_error "Failed to download TAPPAS Core Python binding: ${tappas_whl_url}"
+        return 1
+    fi
+
+    # Make readable by the original (non-root) user for the later pip install
+    chown "${ORIGINAL_USER}:${ORIGINAL_GROUP}" "$whl_path" 2>/dev/null || true
+    PYTAPPAS_PATH="$whl_path"
+    log_success "TAPPAS Core Python binding downloaded to ${whl_path}"
+
     return 0
 }
 
@@ -759,133 +1123,329 @@ check_prerequisites() {
     if [[ "${DRY_RUN}" == true ]]; then
         log_dry_run "Running: ${check_script}"
         log_info "Would check: Hailo driver, HailoRT, TAPPAS, Python bindings"
+        log_dry_run "Would download/install TAPPAS Core .deb and Python binding .whl if missing (v${TAPPAS_RESOURCES_VERSION})"
         record_step_result "SKIPPED" "Dry-run mode"
         return 0
     fi
 
-    log_info "Checking installed Hailo components..."
+    # Post-installation requires a versioned HailoRT system package. A working
+    # hailortcli alone does not establish that this prerequisite is installed.
+    local hailort_version
+    if ! hailort_version=$(detect_hailort_package_version); then
+        log_error "HailoRT system package is missing (checked hailort and h10-hailort)."
+        log_error "Install the HailoRT .deb for your device before running this installer."
+        record_step_result "FAILED" "HailoRT system package missing"
+        return 1
+    fi
+    HAILORT_VERSION="$hailort_version"
 
-    local summary_line
-    disable_error_trap
-    summary_line=$(as_original_user "$check_script" 2>&1 | sed -n 's/^SUMMARY: //p')
-    enable_error_trap
-
-    if [[ -z "$summary_line" ]]; then
-        log_error "Could not get package summary from check script"
-        log_debug "This usually means the check script failed or returned unexpected output"
-        record_step_result "FAILED" "No SUMMARY output"
+    # Auto-download and install TAPPAS Core (.deb) and Python binding (.whl)
+    # if not already present, before checking installed versions below.
+    if ! ensure_gstreamer_resources; then
+        record_step_result "FAILED" "TAPPAS GStreamer resources setup failed"
         return 1
     fi
 
-    log_debug "SUMMARY line: $summary_line"
-
-    # Parse the summary line
-    local driver_version="-1"
-    local hailort_version="-1"
+    # --- Get installed driver versions from dpkg (always available) ---
+    local pcie_driver_version="-1"
+    local usb_driver_version="-1"
     local pyhailort_version="-1"
     local tappas_version="-1"
     local tappas_python_version="-1"
 
-    # Parse key=value pairs
-    for pair in $summary_line; do
-        local key="${pair%%=*}"
-        local value="${pair#*=}"
-        case "$key" in
-            hailo_arch) HAILO_ARCH="$value" ;;
-            hailo_pci|hailo1x_pci) driver_version="$value" ;;
-            hailort) hailort_version="$value"; HAILORT_VERSION="$value" ;;
-            pyhailort) pyhailort_version="$value" ;;
-            tappas-core) tappas_version="$value" ;;
-            tappas-python) tappas_python_version="$value" ;;
-        esac
-    done
+    local _v
+    _v=$(dpkg-query -W -f='${Status} ${Version}' hailort-pcie-driver 2>/dev/null) || true
+    [[ "$_v" == install\ ok\ installed\ * ]] && pcie_driver_version="${_v##* }"
 
-    # Determine Model Zoo version based on architecture
-    if [[ -n "${HAILO_ARCH:-}" && "${HAILO_ARCH}" != "unknown" ]]; then
+    _v=$(dpkg-query -W -f='${Status} ${Version}' hailort-usb-driver 2>/dev/null) || true
+    [[ "$_v" == install\ ok\ installed\ * ]] && usb_driver_version="${_v##* }"
+
+    # --- Check 1: hailortcli scan — is any Hailo device physically present? ---
+    log_info "Checking for connected Hailo device..."
+    local scan_pci_device=""
+    local scan_usb_device=""
+    disable_error_trap
+    if command -v hailortcli >/dev/null 2>&1; then
+        local scan_output=""
+        scan_output=$(hailortcli scan 2>/dev/null) || true
+        # HailoRT 5.x: "pci/0000:04:00.0" or "usb/002:016"
+        # HailoRT 4.x: "0000:04:00.0" (bare PCI BDF, no prefix)
+        scan_pci_device=$(echo "$scan_output" | grep -oE 'pci/[^ ]+' | head -1) || true
+        scan_usb_device=$(echo "$scan_output" | grep -oE 'usb/[^ ]+' | head -1) || true
+        if [[ -z "$scan_pci_device" ]]; then
+            scan_pci_device=$(echo "$scan_output" | grep -oE '[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-9a-fA-F]' | head -1) || true
+        fi
+    fi
+    local device_on_bus=false
+    [[ -n "$scan_pci_device" || -n "$scan_usb_device" ]] && device_on_bus=true
+
+    # --- Check 2: hailortcli fw-control identify — can HailoRT communicate? ---
+    local identify_output=""
+    if [[ "$device_on_bus" == true ]] && command -v hailortcli >/dev/null 2>&1; then
+        identify_output=$(hailortcli fw-control identify 2>/dev/null | tr -d '\000') || true
+    fi
+
+    enable_error_trap
+
+    # =========================================================================
+    # CASE C: Device found by scan AND identify succeeded
+    # =========================================================================
+    if [[ -n "$identify_output" ]]; then
+        # Parse arch from identify output
+        if echo "$identify_output" | grep -qi "HAILO8L"; then
+            HAILO_ARCH="hailo8l"
+        elif echo "$identify_output" | grep -qi "HAILO8"; then
+            HAILO_ARCH="hailo8"
+        elif echo "$identify_output" | grep -qiE "HAILO10H|HAILO15H"; then
+            HAILO_ARCH="hailo10h"
+        fi
+
+        # Select arch-appropriate driver type and version
+        local driver_type="" driver_version="-1"
+        if [[ "$HAILO_ARCH" == "hailo10h" ]]; then
+            if [[ "$usb_driver_version" != "-1" ]]; then
+                driver_type="USB"; driver_version="$usb_driver_version"
+            elif [[ "$pcie_driver_version" != "-1" ]]; then
+                driver_type="PCIe"; driver_version="$pcie_driver_version"
+            fi
+        else
+            if [[ "$pcie_driver_version" != "-1" ]]; then
+                driver_type="PCIe"; driver_version="$pcie_driver_version"
+            elif [[ "$usb_driver_version" != "-1" ]]; then
+                driver_type="USB"; driver_version="$usb_driver_version"
+            fi
+        fi
+
+        log_success "Hailo device detected (scan: ${scan_usb_device:-$scan_pci_device})"
+        log_success "HailoRT ${hailort_version} identified device successfully"
+
+        # Get TAPPAS and Python binding versions from check script
+        local summary_line
+        disable_error_trap
+        summary_line=$(as_original_user "$check_script" 2>&1 | sed -n 's/^SUMMARY: //p')
+        enable_error_trap
+        for pair in $summary_line; do
+            local key="${pair%%=*}" value="${pair#*=}"
+            case "$key" in
+                tappas-core)   tappas_version="$value" ;;
+                pyhailort)     pyhailort_version="$value" ;;
+                tappas-python) tappas_python_version="$value" ;;
+            esac
+        done
+
+        # If the user supplied an explicit wheel via --pyhailort/--pytappas, that
+        # wheel is what will actually be installed later (Step 6), so its version
+        # takes precedence over whatever pyhailort/tappas-python happens to be
+        # detected right now (which may be stale or absent since the venv/wheel
+        # install hasn't happened yet at this point in the flow).
+        if [[ -n "${PYHAILORT_PATH}" ]]; then
+            local whl_ver
+            whl_ver="$(extract_wheel_version "${PYHAILORT_PATH}")"
+            if [[ -n "$whl_ver" ]]; then
+                pyhailort_version="$whl_ver"
+            fi
+        fi
+        if [[ -n "${PYTAPPAS_PATH}" ]]; then
+            local whl_ver
+            whl_ver="$(extract_wheel_version "${PYTAPPAS_PATH}")"
+            if [[ -n "$whl_ver" ]]; then
+                tappas_python_version="$whl_ver"
+            fi
+        fi
+
+        # Load valid combinations for detected arch
         MODEL_ZOO_VER=$(get_model_zoo_version "${HAILO_ARCH}")
-        # Load valid combinations for detected architecture
         case "${HAILO_ARCH}" in
-            hailo8)  VALID_COMBINATIONS="${VALID_COMBINATIONS_HAILO8:-}" ;;
-            hailo8l) VALID_COMBINATIONS="${VALID_COMBINATIONS_HAILO8L:-}" ;;
+            hailo8)   VALID_COMBINATIONS="${VALID_COMBINATIONS_HAILO8:-}" ;;
+            hailo8l)  VALID_COMBINATIONS="${VALID_COMBINATIONS_HAILO8L:-}" ;;
             hailo10h) VALID_COMBINATIONS="${VALID_COMBINATIONS_HAILO10H:-}" ;;
             *) VALID_COMBINATIONS="" ;;
         esac
-    fi
-    local model_zoo_version="${MODEL_ZOO_VER}"
 
-    log_info "Detected versions:"
-    log_info "  Hailo Architecture: ${HAILO_ARCH:-unknown}"
-    log_info "  Driver: ${driver_version}"
-    log_info "  HailoRT: ${hailort_version}"
-    if [[ "${NO_TAPPAS_REQUIRED}" == true ]]; then
-        log_info "  TAPPAS: skipped (--no-tappas-required)"
-    else
-        log_info "  TAPPAS: ${tappas_version}"
-    fi
-    if [[ -n "$model_zoo_version" ]]; then
-        log_info "  Model Zoo Version: ${model_zoo_version} (for ${HAILO_ARCH})"
-    fi
+        log_info "Detected versions:"
+        log_info "  Driver: ${driver_type} ${driver_version}"
+        log_info "  HailoRT: ${hailort_version}"
+        if [[ "${SKIP_GSTREAMER}" == true ]]; then
+            log_info "  TAPPAS: skipped (--skip-gstreamer)"
+        else
+            log_info "  TAPPAS: ${tappas_version}"
+        fi
+        [[ -n "${MODEL_ZOO_VER}" ]] && log_info "  Model Zoo Version: ${MODEL_ZOO_VER} (for ${HAILO_ARCH})"
 
-    # Validate versions against config (including architecture)
-    if [[ "${NO_TAPPAS_REQUIRED}" == true ]]; then
-        if ! validate_versions "$hailort_version" "-1" "${HAILO_ARCH:-}"; then
+        # Validate TAPPAS combo
+        local failed=false
+        if [[ "${SKIP_GSTREAMER}" == true ]]; then
+            validate_versions "$hailort_version" "-1" "${HAILO_ARCH}" || failed=true
+        else
+            validate_versions "$hailort_version" "$tappas_version" "${HAILO_ARCH}" || failed=true
+        fi
+        [[ -n "${MODEL_ZOO_VER}" ]] && validate_model_zoo_version "${HAILO_ARCH}" "${MODEL_ZOO_VER}" || true
+
+        # Reuse PyHailoRT from the HailoRT Docker image when no explicit wheel
+        # was supplied. The release image keeps hailo_platform in a dedicated
+        # venv, so --system-site-packages alone cannot expose it to our new venv.
+        if [[ -z "${PYHAILORT_PATH}" ]] && detect_container_pyhailort; then
+            log_success "Found existing PyHailoRT in ${CONTAINER_PYHAILORT_VENV}"
+            log_debug "PyHailoRT site-packages: ${CONTAINER_PYHAILORT_SITE_PACKAGES}"
+
+            if [[ "$pyhailort_version" == "-1" ]]; then
+                if [[ -n "${CONTAINER_PYHAILORT_VERSION}" ]]; then
+                    pyhailort_version="${CONTAINER_PYHAILORT_VERSION}"
+                else
+                    # The container is a versioned HailoRT release image, so if
+                    # the Python distribution metadata is unavailable, use the
+                    # detected HailoRT package version for compatibility checks.
+                    pyhailort_version="${hailort_version}"
+                fi
+            fi
+        fi
+
+        # Check required components
+        local missing_components=()
+        [[ "$pyhailort_version" == "-1" && -z "${PYHAILORT_PATH}" ]] && missing_components+=("HailoRT Python binding")
+        if [[ "${SKIP_GSTREAMER}" != true ]]; then
+            [[ "$tappas_version" == "-1" ]] && missing_components+=("TAPPAS Core (.deb)")
+            [[ "$tappas_python_version" == "-1" && -z "${PYTAPPAS_PATH}" ]] && missing_components+=("TAPPAS Core Python binding (.whl)")
+        fi
+        if [[ ${#missing_components[@]} -gt 0 ]]; then
+            log_error "Missing required components:"
+            for c in "${missing_components[@]}"; do log_error "  • ${c}"; done
+            failed=true
+        fi
+
+        # Cross-check: deb and Python wheel versions should match
+        if [[ "$hailort_version" != "-1" && "$pyhailort_version" != "-1" \
+           && "$hailort_version" != "$pyhailort_version" ]]; then
+            log_warning "HailoRT version mismatch: system package=$hailort_version, Python wheel=$pyhailort_version"
+            log_warning "The HailoRT deb and Python binding should have matching versions."
+            failed=true
+        fi
+        if [[ "${SKIP_GSTREAMER}" != true \
+           && "$tappas_version" != "-1" && "$tappas_python_version" != "-1" \
+           && "$tappas_version" != "$tappas_python_version" ]]; then
+            log_warning "TAPPAS version mismatch: system package=$tappas_version, Python wheel=$tappas_python_version"
+            log_warning "The tappas-core deb and Python binding should have matching versions."
+            failed=true
+        fi
+
+        if [[ "$failed" == true ]]; then
             record_step_result "FAILED" "Version validation failed"
             return 1
         fi
-    else
-        if ! validate_versions "$hailort_version" "$tappas_version" "${HAILO_ARCH:-}"; then
-            record_step_result "FAILED" "Version validation failed"
-            return 1
+
+        log_success "Prerequisites check passed"
+        record_step_result "SUCCESS" "All required components found"
+        return 0
+    fi
+
+    # =========================================================================
+    # CASE N8: Device found by scan but identify failed
+    # =========================================================================
+    if [[ "$device_on_bus" == true ]]; then
+        local found_device found_type found_driver_ver
+        if [[ -n "$scan_usb_device" ]]; then
+            found_device="$scan_usb_device"; found_type="USB"; found_driver_ver="$usb_driver_version"
+        else
+            found_device="$scan_pci_device"; found_type="PCIe"; found_driver_ver="$pcie_driver_version"
         fi
-    fi
 
-    # Validate Model Zoo version if we have both arch and MZ version
-    if [[ -n "$model_zoo_version" && -n "${HAILO_ARCH:-}" ]]; then
-        validate_model_zoo_version "${HAILO_ARCH}" "$model_zoo_version" || true
-    fi
+        log_warning "Hailo ${found_type} device found (${found_device}) but not recognized by HailoRT"
 
-    # Check required components — all 5 packages must be pre-installed
-    local missing_components=()
-
-    if [[ "$driver_version" == "-1" ]]; then
-        missing_components+=("Hailo PCI driver (.deb)")
-    fi
-    if [[ "$hailort_version" == "-1" ]]; then
-        missing_components+=("HailoRT (.deb)")
-    fi
-    if [[ "${NO_TAPPAS_REQUIRED}" != true && "$tappas_version" == "-1" ]]; then
-        missing_components+=("TAPPAS Core (.deb)")
-    fi
-    if [[ "$pyhailort_version" == "-1" ]]; then
-        missing_components+=("HailoRT Python binding (.whl)")
-    fi
-    if [[ "${NO_TAPPAS_REQUIRED}" != true && "$tappas_python_version" == "-1" ]]; then
-        missing_components+=("TAPPAS Core Python binding (.whl)")
-    fi
-
-    if [[ ${#missing_components[@]} -gt 0 ]]; then
-        log_error "Missing required components:"
-        for component in "${missing_components[@]}"; do
-            log_error "  • ${component}"
-        done
-        echo ""
-        log_info "Download and install missing packages from the Hailo Developer Zone:"
-        log_info "    https://hailo.ai/developer-zone/"
-        log_info ""
-        log_info "For system packages (.deb), install with: sudo dpkg -i <package>.deb"
-        log_info "For Python wheels (.whl), install with: pip install <package>.whl"
-        if [[ "${NO_TAPPAS_REQUIRED}" != true ]]; then
-            log_info ""
-            log_info "If you only need standalone/gen-ai apps (no GStreamer pipelines),"
-            log_info "you can skip TAPPAS requirements with: sudo $SCRIPT_NAME --no-tappas-required"
+        if [[ "$found_driver_ver" != "-1" && "$hailort_version" != "-1" && \
+              "$found_driver_ver" != "$hailort_version" ]]; then
+            log_error "HailoRT ${hailort_version} does not match ${found_type} driver ${found_driver_ver}"
+            log_error "Reinstall matching packages"
+        else
+            log_error "Driver version matches but device not responding"
+            log_error "Reconnect device or reboot and retry"
         fi
-        record_step_result "FAILED" "Missing: ${missing_components[*]}"
+
+        record_step_result "FAILED" "Device not recognized by HailoRT"
         return 1
     fi
 
-    log_success "Prerequisites check passed"
-    record_step_result "SUCCESS" "All required components found"
-    return 0
+    # =========================================================================
+    # CASE N: Scan found nothing — software check only
+    # =========================================================================
+    log_error "No Hailo device detected (scan found no devices)"
+    log_warning "Software check only:"
+
+    local any_driver_installed=false
+    local inferred_arch="" inferred_device_name=""
+
+    # Show driver status and infer arch
+    if [[ "$pcie_driver_version" != "-1" && "$usb_driver_version" != "-1" ]]; then
+        log_info "Driver: PCIe ${pcie_driver_version}, USB ${usb_driver_version}"
+        any_driver_installed=true
+        if [[ "$usb_driver_version" == "$hailort_version" ]]; then
+            inferred_arch=$(infer_arch_from_version "$usb_driver_version")
+        else
+            inferred_arch=$(infer_arch_from_version "$pcie_driver_version")
+        fi
+    elif [[ "$usb_driver_version" != "-1" ]]; then
+        log_success "Driver: USB ${usb_driver_version}"
+        any_driver_installed=true
+        inferred_arch=$(infer_arch_from_version "$usb_driver_version")
+    elif [[ "$pcie_driver_version" != "-1" ]]; then
+        log_success "Driver: PCIe ${pcie_driver_version}"
+        any_driver_installed=true
+        inferred_arch=$(infer_arch_from_version "$pcie_driver_version")
+    else
+        log_error "No Hailo driver installed"
+    fi
+
+    # Map inferred arch to friendly device name
+    case "$inferred_arch" in
+        hailo10h) inferred_device_name="Hailo-10H" ;;
+        hailo8l)  inferred_device_name="Hailo-8L" ;;
+        hailo8)   inferred_device_name="Hailo-8" ;;
+    esac
+
+    # Show HailoRT status and check version match against the matching driver
+    local matched_driver_type="" matched_driver_ver="-1"
+    if [[ "$usb_driver_version" != "-1" && "$hailort_version" == "$usb_driver_version" ]]; then
+        matched_driver_type="USB"; matched_driver_ver="$usb_driver_version"
+    elif [[ "$pcie_driver_version" != "-1" && "$hailort_version" == "$pcie_driver_version" ]]; then
+        matched_driver_type="PCIe"; matched_driver_ver="$pcie_driver_version"
+    fi
+
+    if [[ "$hailort_version" != "-1" ]]; then
+        if [[ "$any_driver_installed" == true && -z "$matched_driver_type" ]]; then
+            local mismatch_ver="${usb_driver_version}"
+            [[ "$mismatch_ver" == "-1" ]] && mismatch_ver="$pcie_driver_version"
+            log_error "HailoRT: ${hailort_version} (does not match driver ${mismatch_ver})"
+        else
+            log_success "HailoRT: ${hailort_version} (matches ${matched_driver_type} driver)"
+        fi
+    else
+        log_error "HailoRT not installed"
+    fi
+
+    # Final error message — include connection type if known
+    local connection_type=""
+    [[ "$matched_driver_type" == "USB" ]] && connection_type=" USB"
+    [[ "$matched_driver_type" == "PCIe" ]] && connection_type=" PCIe"
+
+    if [[ -n "$inferred_device_name" ]]; then
+        log_error "No ${inferred_device_name}${connection_type} device detected — reconnect device or reboot and retry"
+    else
+        log_error "Prerequisites check failed — missing required components"
+    fi
+
+    record_step_result "FAILED" "No Hailo device detected"
+    return 1
+}
+
+# Helper: infer Hailo arch from driver/hailort version string
+infer_arch_from_version() {
+    local ver="$1"
+    if [[ "$ver" == 4.22* || "$ver" == 4.23* || "$ver" == 4.24* ]]; then
+        echo "hailo8"
+    elif [[ "$ver" == 5.* ]]; then
+        echo "hailo10h"
+    else
+        echo ""
+    fi
 }
 
 #===============================================================================
@@ -1002,6 +1562,21 @@ setup_virtual_environment() {
     enable_error_trap
     log_debug "Build artifacts cleaned"
 
+    # If a virtualenv is already active (e.g. Suite Docker), build the new
+    # venv from the base/system interpreter instead of nesting it inside.
+    local python_bin="python3"
+    if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+        log_warning "An active virtual environment was detected: ${VIRTUAL_ENV}"
+        local base_prefix
+        base_prefix=$(python3 -c 'import sys; print(getattr(sys, "base_prefix", sys.prefix))' 2>/dev/null) || base_prefix=""
+        if [[ -n "$base_prefix" && -x "${base_prefix}/bin/python3" ]]; then
+            python_bin="${base_prefix}/bin/python3"
+            log_info "Using the base system interpreter instead: ${python_bin}"
+        else
+            log_warning "Could not resolve a base system interpreter; proceeding with 'python3' (may create a nested venv)"
+        fi
+    fi
+
     # Create virtual environment
     local venv_args=""
     if [[ "${USE_SYSTEM_SITE_PACKAGES}" == true && "${NO_SYSTEM_PYTHON}" != true ]]; then
@@ -1012,12 +1587,12 @@ setup_virtual_environment() {
     fi
 
     if [[ "${DRY_RUN}" == true ]]; then
-        log_dry_run "python3 -m venv ${venv_args} '${venv_path}'"
+        log_dry_run "${python_bin} -m venv ${venv_args} '${venv_path}'"
         record_step_result "SKIPPED" "Dry-run mode"
         return 0
     fi
 
-    if ! run_as_user python3 -m venv ${venv_args} "${venv_path}"; then
+    if ! run_as_user "${python_bin}" -m venv ${venv_args} "${venv_path}"; then
         log_error "Failed to create virtual environment"
         log_info "Troubleshooting:"
         log_info "  • Ensure python3-venv is installed: sudo apt install python3-venv"
@@ -1033,6 +1608,45 @@ setup_virtual_environment() {
         log_error "Expected: ${venv_path}/bin/activate"
         record_step_result "FAILED" "activate script missing"
         return 1
+    fi
+
+    # If PyHailoRT is provided by the HailoRT release container's dedicated
+    # venv, expose that site-packages directory to venv_hailo_apps using a .pth
+    # file. This reuses the existing hailo_platform installation without
+    # copying or reinstalling the wheel.
+    if [[ -n "${CONTAINER_PYHAILORT_SITE_PACKAGES}" && -z "${PYHAILORT_PATH}" ]]; then
+        local venv_python="${venv_path}/bin/python3"
+        local venv_site_packages=""
+        local pyhailort_pth=""
+
+        venv_site_packages=$(
+            run_as_user "${venv_python}" -c 'import site; print(site.getsitepackages()[0])'
+        ) || true
+
+        if [[ -z "${venv_site_packages}" || ! -d "${venv_site_packages}" ]]; then
+            log_error "Could not determine site-packages for ${VENV_NAME}"
+            record_step_result "FAILED" "venv site-packages detection failed"
+            return 1
+        fi
+
+        pyhailort_pth="${venv_site_packages}/hailo_platform_container.pth"
+        log_info "Reusing container PyHailoRT from ${CONTAINER_PYHAILORT_SITE_PACKAGES}"
+
+        if ! run_as_user bash -c \
+            "printf '%s\n' '${CONTAINER_PYHAILORT_SITE_PACKAGES}' > '${pyhailort_pth}'"; then
+            log_error "Failed to expose container PyHailoRT to ${VENV_NAME}"
+            record_step_result "FAILED" "PyHailoRT path setup failed"
+            return 1
+        fi
+
+        if ! run_as_user "${venv_python}" -c 'import hailo_platform' >/dev/null 2>&1; then
+            log_error "Container PyHailoRT is not importable from ${VENV_NAME}"
+            log_error "Source site-packages: ${CONTAINER_PYHAILORT_SITE_PACKAGES}"
+            record_step_result "FAILED" "PyHailoRT import failed in venv"
+            return 1
+        fi
+
+        log_success "Container PyHailoRT available in ${VENV_NAME}"
     fi
 
     log_success "Virtual environment created at ${venv_path}"
@@ -1054,7 +1668,7 @@ install_python_packages() {
         log_dry_run "source ${venv_activate}"
         log_dry_run "pip install --upgrade pip setuptools wheel"
         [[ -n "$PYHAILORT_PATH" ]] && log_dry_run "pip install '${PYHAILORT_PATH}'"
-        if [[ -n "$PYTAPPAS_PATH" && "${NO_TAPPAS_REQUIRED}" != true ]]; then
+        if [[ -n "$PYTAPPAS_PATH" && "${SKIP_GSTREAMER}" != true ]]; then
             log_dry_run "pip install '${PYTAPPAS_PATH}'"
         fi
         log_dry_run "pip install -e ."
@@ -1078,8 +1692,8 @@ install_python_packages() {
     fi
 
     if [[ -n "$PYTAPPAS_PATH" ]]; then
-        if [[ "${NO_TAPPAS_REQUIRED}" == true ]]; then
-            log_warning "Ignoring PyTappas wheel (--no-tappas-required): ${PYTAPPAS_PATH}"
+        if [[ "${SKIP_GSTREAMER}" == true ]]; then
+            log_warning "Ignoring PyTappas wheel (--skip-gstreamer): ${PYTAPPAS_PATH}"
             PYTAPPAS_PATH=""
         fi
     fi
@@ -1098,9 +1712,9 @@ install_python_packages() {
         fi
     fi
 
-    # Install Hailo Python packages into venv (only from user-provided wheels)
-    # Note: If no --pyhailort/--pytappas provided, wheels must already be
-    # installed system-wide as prerequisites.
+    # Install Hailo Python packages into venv (only from user-provided wheels).
+    # Without --pyhailort, PyHailoRT may come from system site-packages or from
+    # the HailoRT release container venv exposed in Step 5 via a .pth file.
 
     # Upgrade pip/setuptools/wheel
     log_info "Upgrading pip, setuptools, and wheel..."
@@ -1178,8 +1792,8 @@ run_post_install() {
     fix_ownership "${SCRIPT_DIR}"
     fix_ownership "${RESOURCES_ROOT}"
 
-    if [[ "${NO_TAPPAS_REQUIRED}" == true ]]; then
-        log_info "Running minimal post-installation (--no-tappas-required)"
+    if [[ "${SKIP_GSTREAMER}" == true ]]; then
+        log_info "Running minimal post-installation (--skip-gstreamer)"
         
         # Create resources symlink
         if ! setup_resources_symlink; then
@@ -1293,6 +1907,7 @@ run_post_install() {
         log_error "Post-installation failed (exit code: ${post_install_exit})"
         echo ""
         log_info "Common causes and solutions:"
+        log_info "  • Stale build cache (upgrade/downgrade): Re-run with: sudo $SCRIPT_NAME --force-cleanup"
         log_info "  • Network issues: Check internet connection for resource downloads"
         log_info "  • Permission issues: Try running: sudo chown -R ${ORIGINAL_USER}:${ORIGINAL_GROUP} ${SCRIPT_DIR}"
         log_info "  • C++ compilation: Ensure meson and ninja-build are installed"
@@ -1358,8 +1973,8 @@ verify_installation() {
 
     # Check TAPPAS binding
     echo -n "  📦 TAPPAS Core Python binding: "
-    if [[ "${NO_TAPPAS_REQUIRED}" == true ]]; then
-        echo -e "${YELLOW}⚠️  Skipped (--no-tappas-required)${NC}"
+    if [[ "${SKIP_GSTREAMER}" == true ]]; then
+        echo -e "${YELLOW}⚠️  Skipped (--skip-gstreamer)${NC}"
     else
         if run_as_user bash -c "source '${venv_activate}' && python3 -c 'import hailo'" 2>/dev/null; then
             echo -e "${GREEN}✅ OK${NC}"
@@ -1535,6 +2150,26 @@ main() {
     fi
     if [[ -n "${MODEL_ZOO_MAPPING:-}" ]]; then
         log_debug "Model Zoo mapping: ${MODEL_ZOO_MAPPING}"
+    fi
+
+    # Force cleanup before installation if requested
+    if [[ "${FORCE_CLEANUP}" == true ]]; then
+        local cleanup_script="${SCRIPT_DIR}/scripts/cleanup_installation.sh"
+        log_info "Running cleanup before installation (--force-cleanup)..."
+        if [[ ! -x "${cleanup_script}" ]]; then
+            log_error "Cleanup script not found or not executable: ${cleanup_script}"
+            exit 1
+        fi
+        if [[ "${DRY_RUN}" == true ]]; then
+            log_dry_run "sudo ${cleanup_script}"
+        else
+            if ! bash "${cleanup_script}" > /dev/null; then
+                log_error "Cleanup script failed. Aborting installation."
+                exit 1
+            fi
+            log_success "Cleanup completed"
+        fi
+        echo ""
     fi
 
     # Run installation steps

@@ -641,6 +641,6 @@ pipeline_string = (
 ## Additional Resources
 
 - [GStreamer Documentation](https://gstreamer.freedesktop.org/documentation/)
-- [Hailo Tappas Elements Documentation](https://github.com/hailo-ai/tappas/tree/master/docs/elements)
+- [Hailo GStreamer Elements Documentation](https://github.com/hailo-ai/tappas/tree/master/docs/elements)
 - [Application Development Guide](./app_development.md)
 

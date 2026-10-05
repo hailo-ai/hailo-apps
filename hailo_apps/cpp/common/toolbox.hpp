@@ -142,7 +142,7 @@ namespace hailo_utils {
     class BoundedTSQueue {
     private:
         std::queue<T> m_queue;
-        std::mutex m_mutex;
+        mutable std::mutex m_mutex;
         std::condition_variable m_cond_not_empty;
         std::condition_variable m_cond_not_full;
         const size_t m_max_size;
@@ -189,6 +189,11 @@ namespace hailo_utils {
         bool empty() const {
             std::lock_guard<std::mutex> lock(m_mutex);
             return m_queue.empty();
+        }
+
+        bool is_stopped() const {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            return m_stopped;
         }
     };
 
@@ -247,7 +252,8 @@ namespace hailo_utils {
         const std::string &output_dir,
         const std::string &output_resolution,
         std::shared_ptr<BoundedTSQueue<InferenceResult>> results_queue,
-        PostprocessCallback postprocess_callback);
+        ModelInputQueuesMap preprocess_queues = {},
+        PostprocessCallback postprocess_callback = nullptr);
 
     hailo_status run_inference_async(
         HailoInfer &model,

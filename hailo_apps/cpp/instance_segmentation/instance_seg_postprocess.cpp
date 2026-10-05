@@ -100,6 +100,10 @@ void draw_detections_and_mask(const uint8_t *src_ptr,
                               cv::Mat &frame,
                               const VisualizationParams &vis)
 {
+    // Ensure frame is BGR (3-channel) — GStreamer on IMX8 delivers BGRx (4-channel)
+    if (frame.channels() == 4)
+        cv::cvtColor(frame, frame, cv::COLOR_BGRA2BGR);
+
     auto detections = get_detections(src_ptr);
 
     // If max_boxes_to_draw <= 0 -> draw all detections
@@ -227,6 +231,10 @@ void draw_masks_and_boxes(
     const std::vector<cv::Mat> &masks,
     const VisualizationParams &vis)
 {
+    // Ensure frame is BGR (3-channel) — GStreamer on IMX8 delivers BGRx (4-channel)
+    if (frame.channels() == 4)
+        cv::cvtColor(frame, frame, cv::COLOR_BGRA2BGR);
+
     // Detections and masks must be 1:1
     CV_Assert(static_cast<int>(dets.size()) == static_cast<int>(masks.size()));
 
@@ -329,9 +337,9 @@ cv::Mat crop_mask(cv::Mat mask, HailoBBox box) {
     return mask;
 }
 
-xt::xarray<float> dot(xt::xarray<float> mask, xt::xarray<float> reshaped_proto, 
+xt::xarray<float> dot(xt::xarray<float> mask, xt::xarray<float> reshaped_proto,
                     size_t proto_height, size_t proto_width, size_t mask_num = 32){
-    
+
     auto shape = {proto_height, proto_width};
     xt::xarray<float> mask_product(shape);
 

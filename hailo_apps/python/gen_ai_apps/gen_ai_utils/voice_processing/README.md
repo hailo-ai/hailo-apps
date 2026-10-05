@@ -18,7 +18,7 @@ It handles audio recording, speech-to-text, text-to-speech, and interaction mana
 
 - **Hardware**: Hailo AI accelerator device (H10 or compatible)
 - **Python**: Python 3.10 or higher
-- **Hailo Platform SDK**: Must be installed and configured
+- **HailoRT runtime library and Python bindings**: Must be installed and configured
 - **System dependencies**: PortAudio development libraries (for sounddevice)
 
 ### Installing GenAI Dependencies
@@ -101,7 +101,6 @@ Piper supports many voice models in different languages and styles. To use a dif
 
 1. **Browse available voices:**
    - Visit: https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/API_PYTHON.md
-   - Or list voices: `python3 -m piper.download_voices --list`
 
 2. **Download your chosen voice:**
    ```bash

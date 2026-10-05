@@ -1,0 +1,10 @@
+---
+description: "Prompt template: Build LLM Chat App"
+alwaysApply: false
+---
+
+# Prompt: new-llm-app
+
+Build LLM Chat App
+
+Read `.hailo/prompts/new-llm-app.md` for the complete prompt template.

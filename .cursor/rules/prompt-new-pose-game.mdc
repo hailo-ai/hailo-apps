@@ -1,0 +1,10 @@
+---
+description: "Prompt template: Create Pose Estimation Game"
+alwaysApply: false
+---
+
+# Prompt: new-pose-game
+
+Create Pose Estimation Game
+
+Read `.hailo/prompts/new-pose-game.md` for the complete prompt template.

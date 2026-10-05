@@ -165,7 +165,7 @@ int main(int argc, char** argv)
         // Determine model name from HEF path or plain name
         const std::string model_name = fs::path(args.net).stem().string();
         // Query JSON metadata to see if softmax should be applied
-        APPLY_SOFTMAX = (get_model_meta_value("classifier", model_name, "apply_softmax") == "true");
+        APPLY_SOFTMAX = (get_model_meta_value("classifier", model_name, "apply-softmax") == "true");
         auto preprocess_thread = std::async(run_preprocess,
                                                 std::ref(args.input),
                                                 std::ref(args.net),
@@ -200,6 +200,7 @@ int main(int argc, char** argv)
                                     std::ref(args.output_dir),
                                     std::ref(args.output_resolution),
                                     results_queue,
+                                    input_queues,
                                     postprocess_callback);
 
         hailo_status status = wait_and_check_threads(

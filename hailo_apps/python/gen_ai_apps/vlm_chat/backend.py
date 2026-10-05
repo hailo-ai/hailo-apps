@@ -206,6 +206,7 @@ class Backend:
     def convert_resize_image(image_array: np.ndarray, target_size: tuple[int, int] = (336, 336)) -> np.ndarray:
         """
         Convert and resize image for VLM using central crop to maintain aspect ratio.
+        Qwen2-VL-2B-Instruct VLM expects 336x336 RGB images, other models may have different requirements
 
         Args:
             image_array (np.ndarray): Input image (BGR).

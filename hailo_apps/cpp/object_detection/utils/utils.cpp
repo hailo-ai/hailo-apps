@@ -1,6 +1,10 @@
 #include "utils.hpp"
 #include "toolbox.hpp"
 #include "labels/coco_eighty.hpp"
+#include <algorithm>
+#include <cmath>
+#include <map>
+#include <numeric>
 
 using namespace hailo_utils;
 
@@ -83,6 +87,135 @@ void draw_bounding_boxes(cv::Mat &frame,
     }
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Anchor-free (raw tensor) decode — yolo26n/s/m style
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+static constexpr float ANCHOR_FREE_INPUT_SIZE = 640.0f;
+
+// Grid height → stride mapping
+static int stride_for_grid(int grid_h) {
+    if (grid_h == 80) return 8;
+    if (grid_h == 40) return 16;
+    if (grid_h == 20) return 32;
+    return static_cast<int>(ANCHOR_FREE_INPUT_SIZE / grid_h);
+}
+
+static inline float clamp_sigmoid(float x) {
+    x = std::max(-88.0f, std::min(88.0f, x));
+    return 1.0f / (1.0f + std::exp(-x));
+}
+
+struct RawDet {
+    float x1, y1, x2, y2, score;
+    int   class_id;
+};
+
+static float box_iou(const RawDet &a, const RawDet &b) {
+    float ix1 = std::max(a.x1, b.x1), iy1 = std::max(a.y1, b.y1);
+    float ix2 = std::min(a.x2, b.x2), iy2 = std::min(a.y2, b.y2);
+    float inter = std::max(0.0f, ix2 - ix1) * std::max(0.0f, iy2 - iy1);
+    float ua = (a.x2-a.x1)*(a.y2-a.y1) + (b.x2-b.x1)*(b.y2-b.y1) - inter;
+    return inter / (ua + 1e-6f);
+}
+
+static std::vector<RawDet> nms(std::vector<RawDet> &dets, float iou_thr) {
+    std::vector<size_t> idx(dets.size());
+    std::iota(idx.begin(), idx.end(), 0);
+    std::sort(idx.begin(), idx.end(), [&](size_t a, size_t b){ return dets[a].score > dets[b].score; });
+
+    std::vector<bool> suppressed(dets.size(), false);
+    std::vector<RawDet> keep;
+    for (size_t i : idx) {
+        if (suppressed[i]) continue;
+        keep.push_back(dets[i]);
+        for (size_t j : idx)
+            if (j != i && !suppressed[j] && box_iou(dets[i], dets[j]) > iou_thr)
+                suppressed[j] = true;
+    }
+    return keep;
+}
+
+} // namespace
+
+std::vector<NamedBbox> decode_anchor_free(
+    const std::vector<std::pair<uint8_t*, hailo_vstream_info_t>> &outputs,
+    const VisualizationParams &vis)
+{
+    // Sort tensors by grid height: C==4 → bbox ltrb, else → class logits
+    std::map<int, const float*> bbox_by_h, cls_by_h;
+    std::map<int, int> cls_ch_by_h;
+
+    for (const auto &[ptr, info] : outputs) {
+        int H = static_cast<int>(info.shape.height);
+        int C = static_cast<int>(info.shape.features);
+        const float *fp = reinterpret_cast<const float*>(ptr);
+        if (C == 4)
+            bbox_by_h[H] = fp;
+        else {
+            cls_by_h[H]    = fp;
+            cls_ch_by_h[H] = C;
+        }
+    }
+
+    std::vector<RawDet> candidates;
+
+    for (auto &[grid_h, bbox_ptr] : bbox_by_h) {
+        auto cls_it = cls_by_h.find(grid_h);
+        if (cls_it == cls_by_h.end()) continue;
+
+        const float *cls_ptr = cls_it->second;
+        int num_cls  = cls_ch_by_h[grid_h];
+        int stride   = stride_for_grid(grid_h);
+        int grid_w   = grid_h; // square grid
+
+        for (int gy = 0; gy < grid_h; ++gy) {
+            for (int gx = 0; gx < grid_w; ++gx) {
+                int si = gy * grid_w + gx;
+
+                // Find best class
+                const float *cls = cls_ptr + si * num_cls;
+                int best_cls = 0;
+                float best_logit = cls[0];
+                for (int c = 1; c < num_cls; ++c)
+                    if (cls[c] > best_logit) { best_logit = cls[c]; best_cls = c; }
+
+                float score = clamp_sigmoid(best_logit);
+                if (score < vis.score_thresh) continue;
+
+                // Decode ltrb (values are in stride units)
+                const float *b = bbox_ptr + si * 4;
+                float cx = (gx + 0.5f) * stride;
+                float cy = (gy + 0.5f) * stride;
+                float x1 = std::max(0.0f, cx - b[0] * stride) / ANCHOR_FREE_INPUT_SIZE;
+                float y1 = std::max(0.0f, cy - b[1] * stride) / ANCHOR_FREE_INPUT_SIZE;
+                float x2 = std::min(ANCHOR_FREE_INPUT_SIZE, cx + b[2] * stride) / ANCHOR_FREE_INPUT_SIZE;
+                float y2 = std::min(ANCHOR_FREE_INPUT_SIZE, cy + b[3] * stride) / ANCHOR_FREE_INPUT_SIZE;
+
+                candidates.push_back({x1, y1, x2, y2, score, best_cls});
+            }
+        }
+    }
+
+    static constexpr float IOU_THRESHOLD = 0.45f;
+    auto kept = nms(candidates, IOU_THRESHOLD);
+
+    int max_draw = (vis.max_boxes_to_draw > 0) ? vis.max_boxes_to_draw : INT_MAX;
+    std::vector<NamedBbox> result;
+    for (int i = 0; i < static_cast<int>(kept.size()) && i < max_draw; ++i) {
+        const auto &d = kept[i];
+        hailo_bbox_float32_t hb;
+        hb.y_min = d.y1; hb.x_min = d.x1;
+        hb.y_max = d.y2; hb.x_max = d.x2;
+        hb.score  = d.score;
+        NamedBbox nb; nb.bbox = hb; nb.class_id = static_cast<size_t>(d.class_id);
+        result.push_back(nb);
+    }
+    return result;
+}
 
 std::vector<NamedBbox> parse_nms_data(uint8_t* data, size_t max_class_count) {
     std::vector<NamedBbox> bboxes;

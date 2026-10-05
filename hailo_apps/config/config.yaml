@@ -11,10 +11,10 @@
 # These values are auto-detected during installation and written to .env file.
 # Set to "auto" for automatic detection, or specify a fixed value.
 
-hailort_version: "auto"       # Options: "auto", "4.23.0", "5.1.1", "5.2.0", "5.3.0"
-tappas_version: "auto"        # Options: "auto", "5.1.0", "5.2.0", "5.3.0"
+hailort_version: "auto"       # Options: "auto", "4.23.0", "4.24.0", "5.1.1", "5.2.0", "5.3.0", "5.4.0"
+tappas_version: "auto"        # Options: "auto", "5.1.0", "5.2.0", "5.3.0", "5.3.1", "5.4.0"
 tappas_postproc_path: "auto"  # Path to TAPPAS postprocess libs (auto from pkg-config)
-model_zoo_version: "auto"     # Options: "auto", "v2.17.0" (H8), "v5.1.0", "v5.2.0" or "v5.3.0" (H10)
+model_zoo_version: "auto"     # Options: "auto", "v2.18.0", "v2.19.0" (H8), "v5.1.0", "v5.2.0", "v5.3.0" or "v5.4.0" (H10)
 host_arch: "auto"             # Options: "auto", "x86", "rpi", "arm"
 hailo_arch: "auto"            # Options: "auto", "hailo8", "hailo8l", "hailo10h"
 multi_processing: "enabled"   # Options: "enabled", "disabled"
@@ -28,13 +28,17 @@ multi_processing: "enabled"   # Options: "enabled", "disabled"
 valid_versions:
   hailort:
     - "4.23.0"
+    - "4.24.0"
     - "5.1.1"
     - "5.2.0"
     - "5.3.0"
+    - "5.4.0"
   tappas:
     - "5.1.0"
     - "5.2.0"
     - "5.3.0"
+    - "5.3.1"
+    - "5.4.0"
   hailo_arch:
     - "hailo8"
     - "hailo8l"
@@ -51,32 +55,35 @@ valid_versions:
 # The installer validates that the detected HailoRT+TAPPAS combo is in this list.
 
 valid_combinations:
-  hailo8: "4.23.0:5.1.0"
-  hailo8l: "4.23.0:5.1.0"
-  hailo10h: "5.1.1:5.1.0 5.2.0:5.2.0 5.3.0:5.3.0"
+  hailo8: "4.23.0:5.1.0 4.23.0:5.2.0 4.23.0:5.3.0 4.24.0:5.3.1 4.24.0:5.4.0"
+  hailo8l: "4.23.0:5.1.0 4.23.0:5.2.0 4.23.0:5.3.0 4.24.0:5.3.1 4.24.0:5.4.0"
+  hailo10h: "5.1.1:5.1.0 5.2.0:5.2.0 5.3.0:5.3.0 5.3.0:5.3.1 5.4.0:5.4.0"
 
 #-------------------------------------------------------------------------------
 # Model Zoo Version Mapping
 #-------------------------------------------------------------------------------
 # Model Zoo version is derived from HailoRT version:
-#   - H8/H8L: Always v2.17.0
-#   - H10: HailoRT 5.1.x -> v5.1.0, HailoRT 5.2.x -> v5.2.0, HailoRT 5.3.x -> v5.3.0
-# Gen-AI Model Zoo version matches HailoRT version (v5.1.1, v5.2.0, or v5.3.0)
+#   - H8/H8L: HailoRT 4.23.x -> v2.18.0, HailoRT 4.24.x -> v2.19.0
+#   - H10: HailoRT 5.1.x -> v5.1.0, HailoRT 5.2.x -> v5.2.0, HailoRT 5.3.x -> v5.3.0, HailoRT 5.4.x -> v5.4.0
+# Gen-AI Model Zoo version matches HailoRT version (v5.1.1, v5.2.0, v5.3.0, or v5.4.0)
 
 # Fallback mapping (used if HailoRT version detection fails)
 model_zoo_mapping:
-  hailo8: "v2.17.0"
-  hailo8l: "v2.17.0"
-  hailo10h: "v5.1.0"
+  hailo8: "v2.19.0"
+  hailo8l: "v2.19.0"
+  hailo10h: "v5.4.0"
 
 # Valid Model Zoo versions by architecture family (for validation)
 valid_model_zoo_versions:
   h8:   # Applies to hailo8 and hailo8l
+    - "v2.19.0"
+    - "v2.18.0"
     - "v2.17.0"
   h10:  # Applies to hailo10h
-    - "v5.1.0"
-    - "v5.2.0"
+    - "v5.4.0"
     - "v5.3.0"
+    - "v5.2.0"
+    - "v5.1.0"
 
 #-------------------------------------------------------------------------------
 # Virtual Environment
@@ -118,6 +125,8 @@ system_packages:
   - "portaudio19-dev"
   - "python3-gi"
   - "python3-gi-cairo"
+  # Required by hailooverlay_community GStreamer plugin
+  - "libyaml-cpp-dev"
   # Static linking dependencies for TAPPAS >= 5.2.0
   - "libbz2-dev"
   - "liblzma-dev"

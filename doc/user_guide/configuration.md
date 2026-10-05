@@ -12,7 +12,7 @@ Here is a breakdown of what each option in the configuration file controls.
 # HailoRT version configuration
 hailort_version: "auto"  # Options: "auto" or a specific version like "5.2.0", "5.3.0"
 
-# TAPPAS framework version
+# GStreamer framework version (TAPPAS)
 tappas_version: "auto"   # Recommended: keep "auto" for detection
 
 # Model zoo version for downloading models
@@ -27,7 +27,7 @@ resources_path: "resources"          # Symlink in repo root
 virtual_env_name: "venv_hailo_apps"  # Default virtual environment created by install.sh
 storage_dir: "hailo_temp_resources"  # Temporary directory for downloads
 
-# TAPPAS configuration
+# GStreamer post-processing configuration
 tappas_postproc_path: "auto"  # The path to the post-processing libraries (auto from pkg-config)
 ```
 

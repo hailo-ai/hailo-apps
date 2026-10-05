@@ -107,6 +107,7 @@ class app_callback_class:
     Attributes:
         frame_count (int): Current frame number (auto-incremented by framework)
         use_frame (bool): Whether to extract frame data in callback
+        window_title (str): Title for the OpenCV display window (default: "User Frame")
         frame_queue (Queue): Queue for passing frames to display thread
         running (bool): Flag to control thread lifecycle
         callback_times (list): Debug mode - stores callback execution times
@@ -116,6 +117,7 @@ class app_callback_class:
         hailo_logger.debug("Initializing app_callback_class")
         self.frame_count = 0
         self.use_frame = False
+        self.window_title = "User Frame"
         self.frame_queue = multiprocessing.Queue(maxsize=3)
         self.running = True
         # Debug mode timing statistics
@@ -480,6 +482,16 @@ class GStreamerApp:
             self.on_eos()
         elif t == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
+            # Ignore errors during pipeline rebuild — the rebuild retry loop
+            # handles failed attempts by tearing down and retrying.
+            if getattr(self, "watchdog_paused", False):
+                hailo_logger.debug(f"Ignoring error during rebuild: {err}")
+                return True
+            # Ignore errors during shutdown — elements may emit transient
+            # errors while transitioning through PAUSED/READY/NULL.
+            if getattr(self, '_shutting_down', False):
+                hailo_logger.debug(f"Ignoring error during shutdown: {err}")
+                return True
             hailo_logger.error(f"GStreamer Error: {err}, debug: {debug}")
             self.error_occurred = True
             self.shutdown()
@@ -498,7 +510,13 @@ class GStreamerApp:
         hailo_logger.debug("on_eos() called")
         if self.source_type == "file":
             hailo_logger.info("File source detected; rebuilding pipeline")
-            # Use GLib.idle_add to defer pipeline rebuild and avoid blocking
+            # Stop the old pipeline immediately to release the HailoRT device
+            # before scheduling the rebuild. Without this, elements in the old
+            # pipeline can error out (e.g., hailonet device conflicts) and
+            # trigger shutdown() via bus_call before the rebuild gets to run.
+            if self.pipeline:
+                self.pipeline.set_state(Gst.State.NULL)
+                self.pipeline.get_state(2 * Gst.SECOND)
             GLib.idle_add(self._rebuild_pipeline)
         else:
             hailo_logger.debug("Non-file source detected; shutting down")
@@ -555,6 +573,15 @@ class GStreamerApp:
         self.rebuild_count += 1
 
         try:
+            # Step 0: Terminate the display process if running — it holds
+            # inherited file descriptors (including /dev/hailo0) from fork(),
+            # which prevents the HailoRT device from being released.
+            if self.display_process is not None and self.display_process.is_alive():
+                hailo_logger.debug("Terminating display process for rebuild")
+                self.display_process.terminate()
+                self.display_process.join(timeout=3)
+                self.display_process = None
+
             # Step 1: Stop and destroy the old pipeline
             hailo_logger.debug("Stopping old pipeline")
             if self.pipeline:
@@ -569,32 +596,69 @@ class GStreamerApp:
 
             hailo_logger.debug("Old pipeline destroyed")
 
-            # Small delay to ensure all resources are released
-            time.sleep(0.2)
+            # Step 2: Wait for the HailoRT device to become available.
+            # Device release is asynchronous — after pipeline destruction,
+            # the driver may need time to free the physical device.
+            # We probe with VDevice() before rebuilding to avoid creating
+            # a broken pipeline (which can segfault during cleanup).
+            max_wait = 10  # seconds
+            poll_interval = 0.5
+            device_ready = False
+            try:
+                from hailo_platform import VDevice
+                elapsed = 0.0
+                while elapsed < max_wait:
+                    time.sleep(poll_interval)
+                    elapsed += poll_interval
+                    try:
+                        vd = VDevice()
+                        del vd
+                        device_ready = True
+                        hailo_logger.debug(
+                            "Hailo device available after %.1fs", elapsed,
+                        )
+                        break
+                    except Exception:
+                        hailo_logger.debug(
+                            "Hailo device not ready after %.1fs, retrying...",
+                            elapsed,
+                        )
+            except ImportError:
+                # hailo_platform not available — fall back to fixed delay
+                hailo_logger.debug("hailo_platform not available, using fixed delay")
+                time.sleep(2.0)
+                device_ready = True
 
-            # Step 2: Rebuild the pipeline from scratch
-            hailo_logger.debug("Creating new pipeline")
+            if not device_ready:
+                hailo_logger.error(
+                    "Hailo device not available after %.1fs — cannot rebuild pipeline",
+                    max_wait,
+                )
+                self.loop.quit()
+                return False
+
+            # Step 3: Build and start the new pipeline
             pipeline_string = self.get_pipeline_string()
             hailo_logger.debug(f"New pipeline string: {pipeline_string}")
 
             self.pipeline = Gst.parse_launch(pipeline_string)
 
-            # Step 3: Reattach bus callback
+            # Step 4: Reattach bus callback
             hailo_logger.debug("Reattaching bus callback")
             bus = self.pipeline.get_bus()
             bus.add_signal_watch()
             bus.connect("message", self.bus_call, self.loop)
 
-            # Step 4: Reattach callback
+            # Step 5: Reattach callback
             self._connect_callback()
 
-            # Step 4b: Call hook for subclass-specific reconnections
+            # Step 5b: Call hook for subclass-specific reconnections
             self._on_pipeline_rebuilt()
 
-            # Step 5: Disable QoS on all elements to prevent frame drops
+            # Step 6: Disable QoS on all elements to prevent frame drops
             disable_qos(self.pipeline)
 
-            # Step 6: Start the new pipeline
+            # Step 7: Start the new pipeline
             hailo_logger.debug("Starting new pipeline")
             ret = self.pipeline.set_state(Gst.State.PLAYING)
             if ret == Gst.StateChangeReturn.FAILURE:
@@ -603,6 +667,14 @@ class GStreamerApp:
                 return False
 
             hailo_logger.debug("Pipeline rebuilt and restarted successfully")
+
+            # Restart display process if use_frame is enabled
+            if self.options_menu.use_frame:
+                hailo_logger.debug("Restarting display process after rebuild")
+                self.display_process = multiprocessing.Process(
+                    target=display_user_data_frame, args=(self.user_data,)
+                )
+                self.display_process.start()
 
             # Resume watchdog monitoring
             self.watchdog_paused = False
@@ -616,6 +688,11 @@ class GStreamerApp:
         return False
 
     def shutdown(self, signum=None, frame=None):
+        # Prevent re-entrant shutdown (e.g. bus ERROR during teardown)
+        if getattr(self, '_shutting_down', False):
+            return
+        self._shutting_down = True
+
         hailo_logger.warning("Shutdown initiated")
 
         # Stop watchdog first
@@ -629,13 +706,23 @@ class GStreamerApp:
         # signal.signal() may only be called from the main thread (e.g. EOS/shutdown from pipeline thread)
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGINT, signal.SIG_DFL)
+
         self.pipeline.set_state(Gst.State.PAUSED)
-        GLib.usleep(100000)
+        self.pipeline.get_state(2 * Gst.SECOND)
 
         self.pipeline.set_state(Gst.State.READY)
-        GLib.usleep(100000)
+        self.pipeline.get_state(2 * Gst.SECOND)
 
         self.pipeline.set_state(Gst.State.NULL)
+        # Wait for NULL to complete so HailoRT device is fully released
+        # before the process exits — prevents the std::system_error race
+        self.pipeline.get_state(5 * Gst.SECOND)
+
+        # Remove bus signal watch after NULL — messages drain cleanly
+        # during state transitions, no "early exit" warnings
+        bus = self.pipeline.get_bus()
+        bus.remove_signal_watch()
+
         GLib.idle_add(self.loop.quit)
 
     def update_fps_caps(self, new_fps=30, source_name="source"):
@@ -705,18 +792,19 @@ class GStreamerApp:
 
         disable_qos(self.pipeline)
 
+        self.display_process = None
         if self.options_menu.use_frame:
             hailo_logger.debug("Starting display_user_data_frame process")
-            display_process = multiprocessing.Process(
+            self.display_process = multiprocessing.Process(
                 target=display_user_data_frame, args=(self.user_data,)
             )
-            display_process.start()
+            self.display_process.start()
 
         if self.source_type == RPI_NAME_I:
             hailo_logger.debug("Starting picamera_thread")
             picam_thread = threading.Thread(
                 target=picamera_thread,
-                args=(self.pipeline, self.video_width, self.video_height, self.video_format),
+                args=(self.pipeline, self.video_width, self.video_height, self.video_format, self.frame_rate),
             )
             self.threads.append(picam_thread)
             picam_thread.start()
@@ -733,16 +821,24 @@ class GStreamerApp:
         if self.options_menu.dump_dot:
             GLib.timeout_add_seconds(3, self.dump_dot_file)
 
+        run_duration = getattr(self.options_menu, "run_duration", None)
+        if run_duration is not None:
+            GLib.timeout_add(int(run_duration * 1000), self.shutdown)
+            hailo_logger.info(f"Pipeline will shut down after {run_duration}s")
+
         self.loop.run()
         # Gtk.main()
 
         try:
             hailo_logger.debug("Cleaning up after loop exit")
             self.user_data.running = False
-            self.pipeline.set_state(Gst.State.NULL)
-            if self.options_menu.use_frame:
-                display_process.terminate()
-                display_process.join()
+            # Pipeline is already NULL from shutdown() — only set if still active
+            if self.pipeline.get_state(0).state != Gst.State.NULL:
+                self.pipeline.set_state(Gst.State.NULL)
+                self.pipeline.get_state(5 * Gst.SECOND)
+            if self.display_process is not None:
+                self.display_process.terminate()
+                self.display_process.join()
             for t in self.threads:
                 t.join()
         except Exception as e:
@@ -756,7 +852,7 @@ class GStreamerApp:
                 sys.exit(0)
 
 
-def picamera_thread(pipeline, video_width, video_height, video_format, picamera_config=None):
+def picamera_thread(pipeline, video_width, video_height, video_format, frame_rate=30, picamera_config=None):
     hailo_logger.debug("picamera_thread started")
     appsrc = pipeline.get_by_name("app_source")
     appsrc.set_property("is-live", True)
@@ -768,8 +864,8 @@ def picamera_thread(pipeline, video_width, video_height, video_format, picamera_
             # Determine main stream size: must be >= lores for Picamera2.
             # get_camera_resolution returns the nearest standard resolution >= requested.
             main_width, main_height = get_camera_resolution(video_width, video_height)
-            main = {"size": (main_width, main_height), "format": "RGB888"}
-            controls = {"FrameRate": 30}
+            main = {"size": (main_width, main_height), "format": "BGR888"}
+            controls = {"FrameRate": frame_rate}
 
             # If the main and requested sizes match, Picamera2 requires lores < main,
             # so we skip lores and capture directly from the main stream.
@@ -777,7 +873,7 @@ def picamera_thread(pipeline, video_width, video_height, video_format, picamera_
                 config = picam2.create_preview_configuration(main=main, controls=controls)
                 capture_stream = "main"
             else:
-                lores = {"size": (video_width, video_height), "format": "RGB888"}
+                lores = {"size": (video_width, video_height), "format": "BGR888"}
                 config = picam2.create_preview_configuration(
                     main=main, lores=lores, controls=controls
                 )
@@ -788,14 +884,17 @@ def picamera_thread(pipeline, video_width, video_height, video_format, picamera_
 
         picam2.configure(config)
         stream_config = config.get(capture_stream, config["main"])
-        format_str = "RGB" if stream_config["format"] == "RGB888" else video_format
+        # Picamera2 BGR888 stores RGB bytes; RGB888 stores BGR bytes.
+        picam_format = stream_config["format"]
+        needs_channel_swap = picam_format == "RGB888"
+        format_str = "RGB" if picam_format in ("RGB888", "BGR888") else video_format
         width, height = stream_config["size"]
         hailo_logger.debug(f"Picamera2 config: width={width}, height={height}, format={format_str}")
 
         appsrc.set_property(
             "caps",
             Gst.Caps.from_string(
-                f"video/x-raw, format={format_str}, width={width}, height={height}, framerate=30/1, pixel-aspect-ratio=1/1"
+                f"video/x-raw, format={format_str}, width={width}, height={height}, framerate={frame_rate}/1, pixel-aspect-ratio=1/1"
             ),
         )
         picam2.start()
@@ -808,9 +907,9 @@ def picamera_thread(pipeline, video_width, video_height, video_format, picamera_
                 hailo_logger.error("Failed to capture frame")
                 break
 
-            frame = cv2.cvtColor(frame_data, cv2.COLOR_BGR2RGB)
+            frame = cv2.cvtColor(frame_data, cv2.COLOR_BGR2RGB) if needs_channel_swap else frame_data
             buffer = Gst.Buffer.new_wrapped(frame.tobytes())
-            buffer_duration = Gst.util_uint64_scale_int(1, Gst.SECOND, 30)
+            buffer_duration = Gst.util_uint64_scale_int(1, Gst.SECOND, frame_rate)
             buffer.pts = frame_count * buffer_duration
             buffer.duration = buffer_duration
             ret = appsrc.emit("push-buffer", buffer)

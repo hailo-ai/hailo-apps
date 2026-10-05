@@ -270,6 +270,9 @@ def run_pipeline_test(
         elif run_method == "pythonpath":
             stdout, stderr = run_func(pipeline_config["script"], args, log_file, **kwargs)
         elif run_method == "cli":
+            if not pipeline_config.get("cli"):
+                logger.info("Skipping cli run method: no cli path configured for this app")
+                return b"", b"", True
             stdout, stderr = run_func(pipeline_config["cli"], args, log_file, **kwargs)
         else:
             return b"", b"Invalid run method".encode(), False

@@ -56,13 +56,17 @@ def disable_qos(pipeline):
 def display_user_data_frame(user_data):
     """
     Displays frames from user_data in a window.
+
+    The window title defaults to "User Frame" and can be customized per-app
+    by setting user_data.window_title before app.run().
     """
-    hailo_logger.debug("display_user_data_frame() started")
+    title = getattr(user_data, "window_title", "User Frame")
+    hailo_logger.debug("display_user_data_frame() started (title=%s)", title)
     while user_data.running:
         frame = user_data.get_frame()
         if frame is not None:
             hailo_logger.debug("Displaying user frame")
-            cv2.imshow("User Frame", frame)
+            cv2.imshow(title, frame)
         cv2.waitKey(1)
     hailo_logger.debug("display_user_data_frame() exiting")
     cv2.destroyAllWindows()

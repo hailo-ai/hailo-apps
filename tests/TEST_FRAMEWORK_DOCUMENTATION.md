@@ -267,10 +267,10 @@ pytest -m sanity -v
 | Test Class | Validates |
 |------------|-----------|
 | `TestHailoAppsPackage` | Package import, pip installation |
-| `TestPythonEnvironment` | Python version, packages, HailoRT/TAPPAS bindings |
+| `TestPythonEnvironment` | Python version, packages, HailoRT/GStreamer bindings |
 | `TestHailoRuntime` | hailortcli, device detection, architecture |
 | `TestGStreamer` | GStreamer installation, critical elements |
-| `TestEnvironmentConfiguration` | .env file, host arch, TAPPAS config |
+| `TestEnvironmentConfiguration` | .env file, host arch, GStreamer config |
 
 ### 2. Installation Tests (`test_installation.py`)
 

@@ -10,15 +10,15 @@ echo "Removing pip packages..."
 # Try removing as regular user (in case installed with --user or --break-system-packages)
 if [ -n "$SUDO_USER" ]; then
     echo "Trying to remove pip packages as user $SUDO_USER..."
-    sudo -u "$SUDO_USER" pip uninstall -y --break-system-packages hailo-tappas-core-python-binding hailort 2>/dev/null || true
+    sudo -u "$SUDO_USER" pip uninstall -y --break-system-packages hailo-apps-core-python-binding hailo-tappas-core-python-binding hailort 2>/dev/null || true
 fi
 # Try removing as root (in case installed system-wide with sudo)
 echo "Trying to remove pip packages as root..."
-pip uninstall -y --break-system-packages hailo-tappas-core-python-binding hailort 2>/dev/null || true
+pip uninstall -y --break-system-packages hailo-apps-core-python-binding hailo-tappas-core-python-binding hailort 2>/dev/null || true
 
 # Uninstall apt packages
 echo "Removing apt packages..."
-sudo apt purge -y hailo-tappas-core hailort hailort-pcie-driver 2>/dev/null || true
+sudo apt purge -y hailo-apps-core hailo-tappas-core hailort hailort-pcie-driver 2>/dev/null || true
 
 # Remove kernel modules
 echo "Removing kernel modules..."

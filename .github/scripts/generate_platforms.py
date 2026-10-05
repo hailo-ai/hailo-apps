@@ -420,6 +420,19 @@ def generate_copilot():
             out_path = GITHUB_DIR / "scripts" / src_file.name
             generated_files[out_path] = content
 
+    # 8. .copilotignore — prevent Copilot from scanning .claude/ (which it now
+    #    recognizes natively), avoiding duplicate agents since the same agents
+    #    already exist in .github/agents/.
+    copilotignore_content = (
+        "# Prevent Copilot from scanning .claude/ directory\n"
+        "# Copilot now recognizes .claude/agents/ format, which causes duplicate agents\n"
+        "# since the same agents already exist in .github/agents/ (Copilot's native format).\n"
+        "# Both .claude/ and .github/ are generated from .hailo/ — only .github/ should be\n"
+        "# used by Copilot.\n"
+        ".claude/\n"
+    )
+    generated_files[REPO_ROOT / ".copilotignore"] = copilotignore_content
+
     return generated_files
 
 

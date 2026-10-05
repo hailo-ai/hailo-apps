@@ -82,7 +82,7 @@ void preprocess_callback(const std::vector<cv::Mat>& org_frames,
         // 2) Resize to target
         if (rgb.cols != static_cast<int>(target_width) || rgb.rows != static_cast<int>(target_height)) {
             cv::resize(rgb, rgb, cv::Size(static_cast<int>(target_width), static_cast<int>(target_height)),
-                       0.0, 0.0, cv::INTER_AREA);
+                       0.0, 0.0, cv::INTER_LINEAR);
         }
         // 3) Ensure contiguous buffer
         if (!rgb.isContinuous()) {
@@ -117,19 +117,29 @@ void postprocess_callback(
 
     const uint8_t *labels = buf;
 
-    // colorize into float32 scratch
-    static CityScapeLabels pal;
-    cv::Mat seg_f32(H, W, CV_32FC3);
-    for (int r = 0; r < H; ++r) {
-        const uint8_t *src = labels + r * W; 
-        auto *dst = seg_f32.ptr<cv::Vec3f>(r);
-        for (int c = 0; c < W; ++c) {
-            dst[c] = pal.id_2_color(src[c]);
+    // Build flat BGR lookup table once (pre-scaled ×1.6 +10, clamped to uint8)
+    static uint8_t lut[256][3];
+    static bool lut_ready = false;
+    if (!lut_ready) {
+        CityScapeLabels pal;
+        for (int i = 0; i < 256; ++i) {
+            cv::Vec3f c = pal.id_2_color(static_cast<uint8_t>(i));
+            lut[i][0] = cv::saturate_cast<uchar>(c[0] * 1.6f + 10.f);
+            lut[i][1] = cv::saturate_cast<uchar>(c[1] * 1.6f + 10.f);
+            lut[i][2] = cv::saturate_cast<uchar>(c[2] * 1.6f + 10.f);
         }
+        lut_ready = true;
     }
 
-    cv::GaussianBlur(seg_f32, seg_f32, cv::Size(5, 5), 0, 0);
-    seg_f32.convertTo(frame_to_draw, CV_8UC3, 1.6, 10.0);
+    cv::Mat colored(H, W, CV_8UC3);
+    uint8_t *dst = colored.ptr<uint8_t>(0);
+    for (int i = 0; i < H * W; ++i) {
+        const uint8_t *e = lut[labels[i]];
+        dst[i*3+0] = e[0];
+        dst[i*3+1] = e[1];
+        dst[i*3+2] = e[2];
+    }
+    cv::resize(colored, frame_to_draw, frame_to_draw.size(), 0, 0, cv::INTER_NEAREST);
 }
 
 
@@ -188,6 +198,7 @@ int main(int argc, char** argv)
                                     std::ref(args.output_dir),
                                     std::ref(args.output_resolution),
                                     results_queue,
+                                    input_queues,
                                     postprocess_callback);
 
         hailo_status status = wait_and_check_threads(

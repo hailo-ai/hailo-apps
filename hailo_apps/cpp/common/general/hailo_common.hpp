@@ -1,6 +1,5 @@
 /**
  * Copyright (c) 2021-2022 Hailo Technologies Ltd. All rights reserved.
- * Distributed under the LGPL license (https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt)
  **/
 /* __BEGIN_DECLS should be used at the beginning of your declarations,
    so that C++ compilers don't mangle their names.  Use __END_DECLS at

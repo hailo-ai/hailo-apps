@@ -8,6 +8,11 @@ It runs on Hailo-8, Hailo-8l and Hailo-10h devices, accepts input from an image,
 Requirements
 ------------
 
+- yaml-cpp and libcurl development libraries (Linux):
+    ```shell
+    sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+    ```
+
 - HailoRT  
   - For Hailo-8: `HailoRT==4.23.0`  
   - For Hailo-10: `HailoRT==5.3.0`
@@ -27,7 +32,7 @@ Usage
 
 1. Clone the repository:
     ```shell script
-    git clone https://github.com/hailo-ai/hailo-apps.git
+    git clone --recurse-submodules https://github.com/hailo-ai/hailo-apps.git
     cd hailo-apps/hailo_apps/cpp/semantic_segmentation
     ``` 
 2. Compile the project on the development machine  
@@ -42,7 +47,7 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called semantic_segmentation
+    This builds `semantic_segmentation` at `build/semantic_segmentation` on Linux and `build/Release/semantic_segmentation.exe` on Windows.
 
 3. Run the example:
 
@@ -59,6 +64,7 @@ Arguments
 - `-i, --input`:
   - An **input source** such as an image (`bus.jpg`), a video (`video.mp4`), a directory of images, or `usb` to use the system camera.
     - On Raspberry Pi, you can also use `rpi` to enable the Raspberry Pi camera.
+    - On Astrial/IMX8 (Yocto-based systems), use `csi` to auto-detect and open the CSI camera. The ISP must be initialized first: `cd /opt/imx8-isp/bin && ./run.sh -lm -c dual_imx219_1080p60 &`
   - A **predefined input name** from `inputs.json` (e.g., `bus`, `street`).
     - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
 - `-b, --batch-size`: [optional] Number of images in one batch. Defaults to 1.
@@ -74,33 +80,33 @@ Example
 -------------------
 - List supported networks:
     ```shell script
-    ./build/x86_64/semantic_segmentation --list-nets
+    ./build/semantic_segmentation --list-nets
     ```
 - List available input resources:
     ```shell script
-    ./build/x86_64/semantic_segmentation --list-inputs
+    ./build/semantic_segmentation --list-inputs
     ```
 - For a video:
     ```shell script
-    ./build/x86_64/semantic_segmentation -n fcn8_resnet_v1_18.hef -i full_mov_slow.mp4 --batch-size 16
+    ./build/semantic_segmentation -n fcn8_resnet_v1_18.hef -i full_mov_slow.mp4 --batch-size 16
     ```
     Output video is saved as processed_video.mp4
 
 - For a single image:
     ```shell script
-    ./build/x86_64/semantic_segmentation -n fcn8_resnet_v1_18.hef -i zidane.jpg
+    ./build/semantic_segmentation -n fcn8_resnet_v1_18.hef -i dog_bicycle.jpg
     ```
     Output image is saved as processed_image_0.jpg
 
 - For a directory of images:
     ```shell script
-    ./build/x86_64/semantic_segmentation -n fcn8_resnet_v1_18.hef -i images -b 4
+    ./build/semantic_segmentation -n fcn8_resnet_v1_18.hef -i images -b 4
     ````
     Each image is saved as processed_image_i.jpg
     
 - For camera, enabling saving the output:
     ```shell script
-    ./build/x86_64/semantic_segmentation -n fcn8_resnet_v1_18.hef --input /dev/video0 --batch-size 2 -s
+    ./build/semantic_segmentation -n fcn8_resnet_v1_18.hef --input /dev/video0 --batch-size 2 -s
     ```
     Output video is saved as processed_video.mp4
 

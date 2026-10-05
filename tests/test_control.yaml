@@ -88,6 +88,18 @@ logging:
         default: "./logs/standalone/paddle_ocr/default"
         extra: "./logs/standalone/paddle_ocr/extra"
         all: "./logs/standalone/paddle_ocr/all"
+      object_detection_onnx_postproc_standalone:
+        default: "./logs/standalone/yolo26_object_detection/default"
+        extra: "./logs/standalone/yolo26_object_detection/extra"
+        all: "./logs/standalone/yolo26_object_detection/all"
+      pose_estimation_onnx_postproc_standalone:
+        default: "./logs/standalone/yolo26_pose_estimation/default"
+        extra: "./logs/standalone/yolo26_pose_estimation/extra"
+        all: "./logs/standalone/yolo26_pose_estimation/all"
+      oriented_object_detection_standalone:
+        default: "./logs/standalone/oriented_object_detection/default"
+        extra: "./logs/standalone/oriented_object_detection/extra"
+        all: "./logs/standalone/oriented_object_detection/all"
 
 # ============================================================================
 # Test combinations configuration
@@ -206,6 +218,18 @@ standalone_tests:
       test_suite_mode: "default"
       model_selection: "default"
       description: "Standalone Paddle OCR (smoke + show-fps only)"
+    object_detection_onnx_postproc_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone yolo26 object detection (non-NMS)"
+    pose_estimation_onnx_postproc_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone yolo26 pose estimation (non-NMS)"
+    oriented_object_detection_standalone:
+      test_suite_mode: "default"
+      model_selection: "default"
+      description: "Standalone oriented object detection"
 
 # GenAI tests configuration
 genai_tests:

@@ -1,40 +1,28 @@
 cmake_minimum_required(VERSION 3.16)
 project(zero_shot_classification LANGUAGES C CXX)
 
-# ============================================================
-# Settings
-# ============================================================
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(HAILO_USE_SYSTEM_DEPS "Use system-installed yaml-cpp/libcurl instead of submodules" OFF)
-
-# Submodules live here:
-# <repo>/hailo_apps/cpp/zero_shot_classification
-# <repo>/hailo_apps/cpp/external/{yaml-cpp,curl}
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../external")
 
-# ============================================================
-# Core dependencies
-# ============================================================
 find_package(Threads REQUIRED)
-find_package(HailoRT REQUIRED)
+# Prefer system-installed HailoRT over a separate /usr/local installation.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT HailoRT_DIR)
+    find_package(HailoRT CONFIG QUIET PATHS /usr NO_DEFAULT_PATH)
+endif()
+find_package(HailoRT CONFIG REQUIRED)
+message(STATUS "HailoRT configuration: ${HailoRT_DIR}")
 find_package(OpenCV REQUIRED)
 
 message(STATUS "Found OpenCV includes: ${OpenCV_INCLUDE_DIRS}")
 
-# ============================================================
 # ZLIB (required by cnpy for .npz support)
-#   - Linux usually has it preinstalled
-#   - Windows often doesn't -> FetchContent fallback (no external installs)
-# ============================================================
 include(FetchContent)
 
-# First try: system/vcpkg
 find_package(ZLIB QUIET)
 
-# Fallback: fetch/build zlib if missing
 if(NOT ZLIB_FOUND)
     message(STATUS "ZLIB not found - fetching zlib via FetchContent")
 
@@ -48,7 +36,6 @@ if(NOT ZLIB_FOUND)
 
     FetchContent_MakeAvailable(zlib)
 
-    # zlib's CMake exports a target named "zlibstatic" or "zlib"
     if(TARGET zlibstatic)
         add_library(ZLIB::ZLIB ALIAS zlibstatic)
     elseif(TARGET zlib)
@@ -58,28 +45,22 @@ if(NOT ZLIB_FOUND)
     endif()
 endif()
 
-# ============================================================
-# yaml-cpp
-# ============================================================
-if(HAILO_USE_SYSTEM_DEPS)
-    find_package(yaml-cpp REQUIRED)
+find_package(yaml-cpp QUIET)
+
+if(yaml-cpp_FOUND)
+    message(STATUS "yaml-cpp: using system ${yaml-cpp_VERSION}")
 else()
+    message(STATUS "yaml-cpp: building from submodule")
     if(NOT EXISTS "${THIRD_PARTY_DIR}/yaml-cpp/CMakeLists.txt")
         message(FATAL_ERROR
-            "Missing submodule: yaml-cpp\n"
-            "Expected: ${THIRD_PARTY_DIR}/yaml-cpp\n"
-            "Fix:\n"
-            "  git submodule update --init --recursive\n")
+            "yaml-cpp submodule missing.\n"
+            "Run:  git submodule update --init --recursive\n"
+            "Or:   sudo apt-get install libyaml-cpp-dev")
     endif()
-
-    set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+    set(YAML_CPP_BUILD_TESTS   OFF CACHE BOOL "" FORCE)
+    set(YAML_CPP_BUILD_TOOLS   OFF CACHE BOOL "" FORCE)
     set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
-
-    add_subdirectory(
-        "${THIRD_PARTY_DIR}/yaml-cpp"
-        "${CMAKE_BINARY_DIR}/_deps/yaml-cpp"
-    )
+    add_subdirectory("${THIRD_PARTY_DIR}/yaml-cpp" "${CMAKE_BINARY_DIR}/_deps/yaml-cpp")
 endif()
 
 if(TARGET yaml-cpp::yaml-cpp)
@@ -87,58 +68,58 @@ if(TARGET yaml-cpp::yaml-cpp)
 elseif(TARGET yaml-cpp)
     set(YAMLCPP_TARGET yaml-cpp)
 else()
-    message(FATAL_ERROR "yaml-cpp target was not created. Check yaml-cpp submodule/build.")
+    message(FATAL_ERROR "yaml-cpp target was not created.")
 endif()
 
-# ============================================================
-# libcurl
-# ============================================================
-if(HAILO_USE_SYSTEM_DEPS)
-    find_package(CURL REQUIRED)
+find_package(CURL QUIET)
+
+if(CURL_FOUND)
+    message(STATUS "curl: using system ${CURL_VERSION_STRING}")
 else()
+    message(STATUS "curl: building HTTP-only from submodule")
     if(NOT EXISTS "${THIRD_PARTY_DIR}/curl/CMakeLists.txt")
         message(FATAL_ERROR
-            "Missing submodule: curl\n"
-            "Expected: ${THIRD_PARTY_DIR}/curl\n"
-            "Fix:\n"
-            "  git submodule update --init --recursive\n")
+            "curl submodule missing.\n"
+            "Run:  git submodule update --init --recursive\n"
+            "Or:   sudo apt-get install libcurl4-openssl-dev")
     endif()
-
-    set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
-    set(CURL_DISABLE_TESTS ON CACHE BOOL "" FORCE)
-    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-
-    # Avoid optional deps that often break Windows builds
-    set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
-    set(CURL_BROTLI OFF CACHE BOOL "" FORCE)
-    set(CURL_ZSTD OFF CACHE BOOL "" FORCE)
-    set(USE_NGHTTP2 OFF CACHE BOOL "" FORCE)
-    set(CURL_DISABLE_LDAP ON CACHE BOOL "" FORCE)
-    set(CURL_DISABLE_LDAPS ON CACHE BOOL "" FORCE)
-
+    set(BUILD_CURL_EXE      OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS   OFF CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_TESTS  ON  CACHE BOOL "" FORCE)
+    set(CURL_USE_LIBPSL     OFF CACHE BOOL "" FORCE)
+    set(CURL_BROTLI         OFF CACHE BOOL "" FORCE)
+    set(CURL_ZSTD           OFF CACHE BOOL "" FORCE)
+    set(USE_NGHTTP2         OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_LIBSSH2    OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_GSSAPI     OFF CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_DICT   ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_FILE   ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_FTP    ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_GOPHER ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_IMAP   ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_LDAP   ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_LDAPS  ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_MQTT   ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_POP3   ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_RTSP   ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_SMB    ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_SMTP   ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_TELNET ON  CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_TFTP   ON  CACHE BOOL "" FORCE)
     if(WIN32)
-        set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
-        set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
+        set(CURL_USE_SCHANNEL ON  CACHE BOOL "" FORCE)
+        set(CURL_USE_OPENSSL  OFF CACHE BOOL "" FORCE)
     endif()
-
-    add_subdirectory(
-        "${THIRD_PARTY_DIR}/curl"
-        "${CMAKE_BINARY_DIR}/_deps/curl"
-    )
-
-    # Some curl builds export "libcurl" not "CURL::libcurl"
+    add_subdirectory("${THIRD_PARTY_DIR}/curl" "${CMAKE_BINARY_DIR}/_deps/curl")
     if(TARGET libcurl AND NOT TARGET CURL::libcurl)
         add_library(CURL::libcurl ALIAS libcurl)
     endif()
 endif()
 
 if(NOT TARGET CURL::libcurl)
-    message(FATAL_ERROR "libcurl target missing (CURL::libcurl). Check curl submodule/build.")
+    message(FATAL_ERROR "libcurl target missing. Check curl submodule or system install.")
 endif()
 
-# ============================================================
-# Sources
-# ============================================================
 set(SOURCES
     ./tokenizer/tokenizer.cpp
     ./tokenizer/cnpy.cpp
@@ -156,12 +137,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../common
 )
 
-# ============================================================
-# Compile options (MSVC vs GCC/Clang)
-# ============================================================
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE
-        /W4
+        /w
         /O2
         /EHsc
         /permissive-
@@ -171,17 +149,11 @@ if(MSVC)
 else()
     target_compile_options(${PROJECT_NAME} PRIVATE
         -O3
-        -Wall -Wextra -Wconversion
-        -Wno-ignored-qualifiers
-        -Wno-reorder
-        -Wno-extra
-        -Wno-stringop-truncation
+        -w
+
     )
 endif()
 
-# ============================================================
-# Link
-# ============================================================
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Threads::Threads
     HailoRT::libhailort
@@ -191,14 +163,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ZLIB::ZLIB
 )
 
-# ============================================================
-# Copy config files to runtime folder
-# ============================================================
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
         $<TARGET_FILE_DIR:${PROJECT_NAME}>/config
 
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${CMAKE_SOURCE_DIR}/../../config/resources_config.yaml
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../config/resources_config.yaml
         $<TARGET_FILE_DIR:${PROJECT_NAME}>/config/resources_config.yaml
 )

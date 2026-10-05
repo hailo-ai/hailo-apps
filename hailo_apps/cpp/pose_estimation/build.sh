@@ -1,17 +1,8 @@
 #!/bin/bash
+set -e
 
-declare -A COMPILER=( [x86_64]=/usr/bin/gcc
-                      [aarch64]=/usr/bin/aarch64-linux-gnu-gcc
-                      [armv7l]=/usr/bin/arm-linux-gnueabi-gcc )
+mkdir -p build
+cmake -H. -Bbuild -DCMAKE_BUILD_TYPE=Release
+cmake --build build -- -j"$(nproc)"
 
-for ARCH in x86_64 # aarch64
-do
-    echo "-I- Building ${ARCH}"
-    mkdir -p build/${ARCH}
-    cmake -H. -Bbuild/${ARCH}
-    cmake --build build/${ARCH}
-done
-
-if [[ -f "hailort.log" ]]; then
-    rm hailort.log
-fi
+rm -f hailort.log

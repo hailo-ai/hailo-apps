@@ -9,6 +9,11 @@ The application receives a HEF and images/video/camera as input, and returns the
 Requirements
 ------------
 
+- yaml-cpp and libcurl development libraries (Linux):
+    ```shell
+    sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+    ```
+
 - HailoRT  
   - For Hailo-8: `HailoRT==4.23.0`  
   - For Hailo-10: `HailoRT==5.3.0`
@@ -26,7 +31,7 @@ Usage
 
 1. Clone the repository:
     ```shell script
-    git clone https://github.com/hailo-ai/hailo-apps.git
+    git clone --recurse-submodules https://github.com/hailo-ai/hailo-apps.git
     cd hailo-apps/hailo_apps/cpp/pose_estimation
     ``` 
 
@@ -42,12 +47,12 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called pose_estimation
+    This builds `pose_estimation` at `build/pose_estimation` on Linux and `build/Release/pose_estimation.exe` on Windows.
 
 3. Run the example:
 
     ```shell script
-    ./build/x86_64/pose_estimation --net <hef_path> --input <image_or_video_or_camera_path>
+    ./build/pose_estimation --net <hef_path> --input <image_or_video_or_camera_path>
     ```
 
 Arguments
@@ -59,6 +64,7 @@ Arguments
 - `-i, --input`:
   - An **input source** such as an image (`bus.jpg`), a video (`video.mp4`), a directory of images, or `usb` to use the system camera.
     - On Raspberry Pi, you can also use `rpi` to enable the Raspberry Pi camera.
+    - On Astrial/IMX8 (Yocto-based systems), use `csi` to auto-detect and open the CSI camera. The ISP must be initialized first: `cd /opt/imx8-isp/bin && ./run.sh -lm -c dual_imx219_1080p60 &`
   - A **predefined input name** from `inputs.json` (e.g., `bus`, `street`).
     - If you choose a predefined name, the input will be **automatically downloaded** if it doesn't already exist.
 - `-b, --batch-size`: [optional] Number of images in one batch. Defaults to 1.
@@ -75,33 +81,33 @@ Example
 -------------------
 - List supported networks:
     ```shell script
-    ./build/x86_64/pose_estimation --list-nets
+    ./build/pose_estimation --list-nets
     ```
 - List available input resources:
     ```shell script
-    ./build/x86_64/pose_estimation --list-inputs
+    ./build/pose_estimation --list-inputs
     ```
 - For a video:
     ```shell script
-    ./build/x86_64/pose_estimation --net yolov8m_pose.hef --input full_mov_slow.mp4 --batch-size 16
+    ./build/pose_estimation --net yolov8m_pose.hef --input full_mov_slow.mp4 --batch-size 16
     ```
     Output video is saved as processed_video.mp4
 
 - For a single image:
     ```shell script
-    ./build/x86_64/pose_estimation -n yolov8m_pose.hef -i zidane.jpg
+    ./build/pose_estimation -n yolov8m_pose.hef -i dog_bicycle.jpg
     ```
     Output image is saved as processed_image_0.jpg
 
 - For a directory of images:
     ```shell script
-    ./build/x86_64/pose_estimation -n yolov8m_pose.hef -i images -b 4
+    ./build/pose_estimation -n yolov8m_pose.hef -i images -b 4
     ````
     Each image is saved as processed_image_i.jpg
     
 - For camera, enabling saving the output:
     ```shell script
-    ./build/x86_64/pose_estimation --net yolov8m_pose.hef --input /dev/video0 --batch-size 2 -s
+    ./build/pose_estimation --net yolov8m_pose.hef --input /dev/video0 --batch-size 2 -s
     ```
     Output video is saved as processed_video.mp4
 

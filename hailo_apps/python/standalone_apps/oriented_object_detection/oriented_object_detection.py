@@ -109,7 +109,7 @@ def run_inference_pipeline(
     """
 
     labels = get_labels(labels)
-    config_data = load_json_file("config.json")
+    config_data = load_json_file(str(Path(__file__).parent / "config.json"))
 
     stop_event = threading.Event()
     fps_tracker = None

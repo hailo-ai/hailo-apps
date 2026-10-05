@@ -46,15 +46,35 @@ const std::unordered_map<std::string, std::pair<int,int>> RESOLUTION_MAP = {
     {"fhd", {1920, 1080}}
 };
 
+fs::path get_executable_dir()
+{
+#ifdef _WIN32
+    char buf[MAX_PATH];
+    DWORD len = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    if (len == 0 || len == MAX_PATH)
+        throw std::runtime_error("GetModuleFileNameA failed");
+    return fs::path(std::string(buf, len)).parent_path();
+#else
+    char buf[4096];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len <= 0)
+        throw std::runtime_error("readlink(/proc/self/exe) failed");
+    buf[len] = '\0';
+    return fs::path(buf).parent_path();
+#endif
+}
+
 VisualizationParams load_visualization_params(const std::string &path)
 {
     YAML::Node root;
 
+    fs::path resolved = get_executable_dir() / "config" / fs::path(path).filename();
+
     try {
-        root = YAML::LoadFile(path);
+        root = YAML::LoadFile(resolved.string());
     } catch (const std::exception &e) {
         throw std::runtime_error(
-            "Failed to load visualization config file: " + path +
+            "Failed to load visualization config file: " + resolved.string() +
             " | " + e.what());
     }
 
@@ -119,6 +139,26 @@ void validate_visualization_params(const VisualizationParams &vis, AppVisMode mo
     }
 }
 
+static bool has_gstreamer_element(const std::string &element_name);
+
+static std::string make_csi_gst_pipeline(const std::string &device, int w, int h)
+{
+    // On Astrial/IMX8: use hardware G2D scaler/converter if available,
+    // fall back to software.
+    if (has_gstreamer_element("imxvideoconvert_g2d")) {
+        return "v4l2src device=" + device +
+               " ! imxvideoconvert_g2d ! video/x-raw,format=BGRx"
+               ",width=" + std::to_string(w) + ",height=" + std::to_string(h) +
+               " ! videoconvert ! video/x-raw,format=BGR"
+               " ! appsink max-buffers=1 drop=true sync=false";
+    }
+    return "v4l2src device=" + device +
+           " ! videoscale ! videoconvert"
+           " ! video/x-raw,format=BGR,width=" + std::to_string(w) +
+           ",height=" + std::to_string(h) +
+           " ! appsink max-buffers=1 drop=true sync=false";
+}
+
 static std::string make_rpi_gst_pipeline(int w, int h, int fps)
 {
     return "libcamerasrc ! "
@@ -147,6 +187,41 @@ static bool is_raspberry_pi()
     std::getline(f, model);
 
     return model.find(RPI_POSSIBLE_NAME) != std::string::npos;
+#endif
+}
+
+static bool is_yocto()
+{
+#ifdef _WIN32
+    return false;
+#else
+    // Known identifiers for Yocto/OpenEmbedded-based distros.
+    // Checked case-insensitively against the ID, ID_LIKE, and CPE_NAME fields.
+    static const std::vector<std::string> YOCTO_MARKERS = {
+        "poky", "yocto", "openembedded", "fsl-imx", "buildroot", "openwrt"
+    };
+
+    std::ifstream f("/etc/os-release");
+    if (!f.is_open()) return false;
+
+    std::string line;
+    while (std::getline(f, line)) {
+        // Only inspect relevant keys
+        const bool relevant =
+            line.rfind("ID=", 0)       == 0 ||
+            line.rfind("ID_LIKE=", 0)  == 0 ||
+            line.rfind("CPE_NAME=", 0) == 0;
+        if (!relevant) continue;
+
+        std::string lower = line;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+        for (const auto &marker : YOCTO_MARKERS) {
+            if (lower.find(marker) != std::string::npos)
+                return true;
+        }
+    }
+    return false;
 #endif
 }
 
@@ -451,6 +526,38 @@ static std::vector<CameraDevice> get_usb_video_devices_linux()
 
     return usb_video_devices;
 }
+
+static std::string find_csi_video_device_linux()
+{
+    std::vector<std::string> candidates;
+    for (const auto &entry : fs::directory_iterator("/dev")) {
+        const std::string name = entry.path().filename().string();
+        if (name.rfind("video", 0) == 0)
+            candidates.push_back("/dev/" + name);
+    }
+    std::sort(candidates.begin(), candidates.end());
+
+    for (const auto &device : candidates) {
+        const std::string info = run_command(
+            "udevadm info --query=all --name=" + device + " 2>/dev/null");
+
+        if (info.find("ID_BUS=usb") != std::string::npos)
+            continue;
+
+        // Check capture capability: prefer udev property, fall back to v4l2-ctl
+        if (info.find("ID_V4L_CAPABILITIES") != std::string::npos) {
+            if (info.find(":capture:") == std::string::npos) continue;
+        } else {
+            const std::string cap = run_command(
+                "v4l2-ctl --device=" + device + " --info 2>/dev/null");
+            if (cap.find("Video Capture") == std::string::npos) continue;
+        }
+
+        std::cout << "CSI camera detected: " << device << "\n";
+        return device;
+    }
+    return "";
+}
 #endif
 
 #ifdef _WIN32
@@ -523,7 +630,7 @@ InputType determine_input_type(const std::string& input_path,
     } else if (is_video(input_path)) {
         input_type.is_video = true;
         capture = open_video_capture(input_path, capture, org_height, org_width, frame_count,
-                                     false /*is_camera*/);
+                                     false /*is_camera*/, "");
     // --------------------------------------------
     // 2) Camera inputs
     // --------------------------------------------
@@ -583,6 +690,29 @@ InputType determine_input_type(const std::string& input_path,
         capture = open_video_capture(input_path, capture, org_height, org_width, frame_count,
                                      true /*is_camera*/, camera_resolution);
 
+    //5. CSI camera shortcut (Astrial/IMX8 and other platform CSI cameras)
+    } else if (input_path == "csi") {
+#ifdef _WIN32
+        throw std::runtime_error("'csi' camera input is not supported on Windows.");
+#else
+        if (!is_yocto()) {
+            throw std::runtime_error(
+                "'csi' camera input is only supported on Yocto-based embedded systems (e.g. Astrial/IMX8).\n"
+                "Use '-i usb' for a USB camera or '-i rpi' on Raspberry Pi.");
+        }
+        const std::string csi_device = find_csi_video_device_linux();
+        if (csi_device.empty()) {
+            std::cerr << "-W- No CSI camera detected.\n"
+                      << "-W- On Astrial/IMX8, initialize the ISP first:\n"
+                      << "-W-   cd /opt/imx8-isp/bin && ./run.sh -lm -c dual_imx219_1080p60 &\n";
+            throw std::runtime_error("No CSI camera detected");
+        }
+        input_type.is_camera = true;
+        std::cout << "Using CSI camera: " << csi_device << "\n";
+        capture = open_video_capture("csi:" + csi_device, capture, org_height, org_width,
+                                     frame_count, true /*is_camera*/, camera_resolution);
+#endif
+
     } else {
         throw std::runtime_error("Unsupported input type: " + input_path);
     }
@@ -593,6 +723,10 @@ InputType determine_input_type(const std::string& input_path,
 
 void show_progress_helper(size_t current, size_t total)
 {
+    if (total == 0) {
+        std::cout << "\rProcessed: " << (current + 1) << " frames" << std::flush;
+        return;
+    }
     int progress = static_cast<int>((static_cast<float>(current + 1) / static_cast<float>(total)) * 100);
     int bar_width = 50; 
     int pos = static_cast<int>(bar_width * (current + 1) / total);
@@ -655,9 +789,14 @@ void print_net_banner(const std::string &detection_model_name,
 }
 
 void init_video_writer(const std::string &output_path, cv::VideoWriter &video, double framerate, int org_width, int org_height) {
-    video.open(output_path, cv::VideoWriter::fourcc('m', 'p', '4', 'v'), framerate, cv::Size(org_width, org_height));
+    cv::Size sz(org_width, org_height);
+    video.open(output_path, cv::VideoWriter::fourcc('m','p','4','v'), framerate, sz);
     if (!video.isOpened()) {
-        throw std::runtime_error("Error when writing video");
+        std::string avi_path = output_path.substr(0, output_path.rfind('.')) + ".avi";
+        video.open(avi_path, cv::VideoWriter::fourcc('M','J','P','G'), framerate, sz);
+        if (!video.isOpened()) {
+            std::cerr << "-W- VideoWriter failed to open (tried mp4v + MJPG). Output will not be saved.\n";
+        }
     }
 }
 
@@ -676,15 +815,16 @@ cv::VideoCapture open_video_capture(const std::string &input_path,
     double &org_width,
     size_t &frame_count,
     bool is_camera,
-    const std::string &camera_resolution) 
+    const std::string &camera_resolution)
     {
     const bool is_rpi_input = (input_path == "rpi");
+    const bool is_csi       = (input_path.rfind("csi:", 0) == 0);
+    const std::string device = is_csi ? input_path.substr(4) : input_path;
     // Validate platform
     if (is_rpi_input && !is_raspberry_pi()) {
         throw std::runtime_error(
             "You requested '-i rpi', but this system is not a Raspberry Pi.\n"
-            "Use '-i usb' or a video file instead."
-        );
+            "Use '-i usb' or a video file instead.");
     }
 
     // Default camera resolution
@@ -716,13 +856,16 @@ cv::VideoCapture open_video_capture(const std::string &input_path,
         org_height = height = 600;
         std::string pipeline = make_rpi_gst_pipeline(width, height, fps);
         capture.open(pipeline, cv::CAP_GSTREAMER);
+    } else if (is_csi) {
+        std::string pipeline = make_csi_gst_pipeline(device, width, height);
+        capture.open(pipeline, cv::CAP_GSTREAMER);
     } else {
     #ifdef _WIN32
         if (is_camera) {
             // Windows: open camera by index (e.g. "0"), not by a device path
             int idx = 0;
             try { idx = std::stoi(input_path); } catch (...) { idx = 0; }
-    
+
             // Prefer DirectShow; if it fails on some machines you can try MSMF
             capture.open(idx, cv::CAP_DSHOW);
         } else {
@@ -730,11 +873,60 @@ cv::VideoCapture open_video_capture(const std::string &input_path,
             capture.open(input_path, cv::CAP_ANY);
         }
     #else
-        // Linux: camera can be /dev/video0, or file path
-        capture.open(input_path, cv::CAP_ANY);
+        if (!is_camera && has_gstreamer_element("v4l2h264dec") &&
+            has_gstreamer_element("imxvideoconvert_g2d")) {
+            // On NXP i.MX8: VPU decode + G2D GPU scale/convert.
+            // Key fix: decodebin's internal multiqueue defaults to max-size-bytes=1MB,
+            // which only fits ~1 decoded NV12 frame (614KB for 640x640).
+            // We add an explicit queue after the decoder (max-size-bytes=0 = unlimited,
+            // max-size-buffers=15) so the VPU can stay 15 frames ahead of consumption,
+            // matching the throughput seen with the USB camera path.
+            // Output BGRx (4 channels) directly - no software videoconvert needed.
+            // preprocess_callback handles BGRA2RGB in one pass.
+            // Strategy 1: explicit qtdemux+h264parse+v4l2h264dec with large pre/post-decode queues
+            // G2D converts format only (NV12→BGRx); preprocess_callback handles resize to model size.
+            // This preserves original video resolution in org_frames for proper display output.
+            std::string pipeline =
+                "filesrc location=" + input_path +
+                " ! qtdemux"
+                " ! queue max-size-buffers=200 max-size-bytes=0 max-size-time=0"
+                " ! h264parse"
+                " ! v4l2h264dec"
+                " ! queue max-size-buffers=15 max-size-bytes=0 max-size-time=0"
+                " ! imxvideoconvert_g2d ! video/x-raw,format=BGRx"
+                " ! appsink name=appsink0 sync=false async=false";
+            capture.open(pipeline, cv::CAP_GSTREAMER);
+
+            if (!capture.isOpened()) {
+                // Strategy 2: decodebin with explicit queue to work around the 1MB buffer limit
+                std::string pipeline2 =
+                    "filesrc location=" + input_path +
+                    " ! decodebin"
+                    " ! queue max-size-buffers=15 max-size-bytes=0 max-size-time=0"
+                    " ! imxvideoconvert_g2d ! video/x-raw,format=BGRx"
+                    " ! appsink name=appsink0 sync=false async=false";
+                capture.open(pipeline2, cv::CAP_GSTREAMER);
+            }
+
+            if (!capture.isOpened()) {
+                std::cerr << "-W- HW G2D pipeline failed, falling back to software decode\n";
+                capture.open(input_path, cv::CAP_ANY);
+            }
+        } else {
+            // Linux: camera or platform without HW decoder
+            capture.open(input_path, cv::CAP_ANY);
+        }
     #endif
-    
+
         if (is_camera) { // apply camera settings
+            // Request MJPG to reduce USB bandwidth vs raw YUYV; industrial/CSI cameras may
+            // not support it, so we check whether the driver actually accepted the fourcc
+            // and fall back silently rather than aborting.
+            double mjpg = cv::VideoWriter::fourcc('M','J','P','G');
+            capture.set(cv::CAP_PROP_FOURCC, mjpg);
+            if (capture.get(cv::CAP_PROP_FOURCC) != mjpg) {
+                std::cerr << "-W- Camera did not accept MJPG fourcc, using default format\n";
+            }
             capture.set(cv::CAP_PROP_FRAME_WIDTH,  width);
             capture.set(cv::CAP_PROP_FRAME_HEIGHT, height);
             capture.set(cv::CAP_PROP_FPS, fps);
@@ -748,9 +940,25 @@ cv::VideoCapture open_video_capture(const std::string &input_path,
     if (!is_rpi_input) {
         org_width  = capture.get(cv::CAP_PROP_FRAME_WIDTH);
         org_height = capture.get(cv::CAP_PROP_FRAME_HEIGHT);
+        // GStreamer pipelines without explicit size caps return 0 — probe with one frame
+        if ((org_width == 0 || org_height == 0) && !is_camera) {
+            cv::Mat probe;
+            if (capture.read(probe) && !probe.empty()) {
+                org_width  = probe.cols;
+                org_height = probe.rows;
+            }
+        }
     }
 
     frame_count = is_camera ? 0 : static_cast<size_t>(capture.get(cv::CAP_PROP_FRAME_COUNT));
+    // GStreamer custom pipelines may return 0 — fall back to querying the file directly
+    if (!is_camera && frame_count == 0) {
+        cv::VideoCapture tmp(input_path, cv::CAP_ANY);
+        if (tmp.isOpened()) {
+            frame_count = static_cast<size_t>(tmp.get(cv::CAP_PROP_FRAME_COUNT));
+            tmp.release();
+        }
+    }
     return capture;
 }
 
@@ -800,6 +1008,7 @@ void preprocess_video_frames(cv::VideoCapture &capture,
             preprocessed_frames.clear();
             preprocess_callback(org_frames, preprocessed_frames, width, height);
             preprocessed_batch_queue->push(std::make_pair(org_frames, preprocessed_frames));
+            if (preprocessed_batch_queue->is_stopped()) break;
             org_frames.clear();
         }
 
@@ -893,6 +1102,7 @@ static inline cv::Mat pad_crop_to_target(const cv::Mat &img,
     return padded(roi).clone();
 }
 
+cv::Mat resize_with_letterbox(const cv::Mat &src, int target_w, int target_h);
 
 void preprocess_frames(const std::vector<cv::Mat>& org_frames,
                          std::vector<cv::Mat>& preprocessed_frames,
@@ -921,8 +1131,8 @@ void preprocess_frames(const std::vector<cv::Mat>& org_frames,
             } break;
         }
 
-        // 2) Geometry-preserving fit: pad (bottom/right) then crop (top-left) to target
-        cv::Mat fitted = pad_crop_to_target(rgb, static_cast<int>(target_height), static_cast<int>(target_width));
+        // 2) Letterbox-scale to target: preserve full frame, pad with black to fill
+        cv::Mat fitted = resize_with_letterbox(rgb, static_cast<int>(target_width), static_cast<int>(target_height));
         
         // 3) Ensure contiguous buffer
         if (!fitted.isContinuous()) {
@@ -976,6 +1186,7 @@ hailo_status run_post_process(
     const std::string &output_dir,
     const std::string &output_resolution,
     std::shared_ptr<BoundedTSQueue<InferenceResult>> results_queue,
+    ModelInputQueuesMap preprocess_queues,
     PostprocessCallback postprocess_callback)
 {
     size_t i = 0;
@@ -1012,20 +1223,11 @@ hailo_status run_post_process(
         std::cout << "-I- Using output resolution: "  << out_w << "x" << out_h << "\n";
     }
 
-    // Only init writer if we’re actually saving a stream
+    std::string video_path;
     if (save_stream_output && is_stream) {
-        std::string video_path =
-            output_dir.empty()
-                ? "processed_video.mp4"
-                : (output_dir + "/processed_video.mp4");
-
-        int base_w = static_cast<int>(org_width);
-        int base_h = static_cast<int>(org_height);
-
-        int writer_w = have_output_res ? out_w : base_w;
-        int writer_h = have_output_res ? out_h : base_h;
-
-        init_video_writer(video_path, video, framerate, writer_w, writer_h);
+        video_path = output_dir.empty()
+            ? "processed_video.mp4"
+            : (output_dir + "/processed_video.mp4");
         std::cout << "-I- Saving processed video to: " << video_path << "\n";
     }
 
@@ -1041,12 +1243,29 @@ hailo_status run_post_process(
             const int key = cv::waitKey(1);
             if (key == 'q' || key == 27) {
                 std::cout << "\nUser requested stop.\n";
+                for (auto &[name, q] : preprocess_queues) q->stop();
                 return false;
             }
         }
 
         if (save_stream_output) {
-            video.write(frame);
+            if (!video.isOpened() && !frame.empty()) {
+                int writer_w = have_output_res ? out_w : frame.cols;
+                int writer_h = have_output_res ? out_h : frame.rows;
+                try {
+                    init_video_writer(video_path, video, framerate, writer_w, writer_h);
+                } catch (const std::exception &e) {
+                    std::cerr << "-W- VideoWriter init failed: " << e.what() << "\n";
+                }
+            }
+            if (video.isOpened()) {
+                cv::Mat write_frame;
+                if (frame.channels() == 4)
+                    cv::cvtColor(frame, write_frame, cv::COLOR_BGRA2BGR);
+                else
+                    write_frame = frame;
+                video.write(write_frame);
+            }
         }
 
         return true;
@@ -1079,11 +1298,14 @@ hailo_status run_post_process(
 
             cv::imwrite(img_path, frame_to_save);
             if (i + 1 == frame_count) {
-                break; // stop after writing the last image
+                break;
             }
         }
         i++;
     }
+
+    if (input_type.is_video)
+        frame_count = i;
 
     release_resources(capture, video, input_type, no_display, nullptr, results_queue);
     return HAILO_SUCCESS;
@@ -1186,7 +1408,6 @@ void release_resources(cv::VideoCapture &capture, cv::VideoWriter &video, InputT
                       std::shared_ptr<BoundedTSQueue<InferenceResult>> results_queue) {
 
     if (input_type.is_video || input_type.is_camera) {
-        capture.release();
         video.release();
 
         if (!no_display) {

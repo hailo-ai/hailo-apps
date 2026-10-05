@@ -102,10 +102,10 @@ Quick environment validation tests that verify the runtime is properly configure
 | Class | Tests |
 |-------|-------|
 | `TestHailoAppsPackage` | Package import, pip installation |
-| `TestPythonEnvironment` | Python version, critical packages (gi, numpy, opencv, yaml), HailoRT/TAPPAS bindings |
+| `TestPythonEnvironment` | Python version, critical packages (gi, numpy, opencv, yaml), HailoRT/GStreamer bindings |
 | `TestHailoRuntime` | hailortcli availability, device detection, architecture validation |
 | `TestGStreamer` | GStreamer installation, critical elements, Hailo elements |
-| `TestEnvironmentConfiguration` | .env file, host arch detection, TAPPAS variant, postproc path |
+| `TestEnvironmentConfiguration` | .env file, host arch detection, GStreamer variant, postproc path |
 | `TestHostArchitectureSpecific` | RPi-specific tests (picamera2, libcamera) |
 
 **Run:**
@@ -464,7 +464,7 @@ shared_library('depth_postprocess', ...)
 │•Env    │ │•YAML ok  │ │•Dir struct │ │•Functional  │ │•Smoke test │ │•LLM    │
 │•Pkgs   │ │•Cross-   │ │•Models    │ │ tests       │ │•Subprocess │ │•VLM    │
 │•GStr   │ │ validate │ │•Videos    │ │•All apps    │ │•Exit code  │ │•Whisper│
-│•SDK    │ │•Drift    │ │•SO files  │ │             │ │            │ │•Agent  │
+│•RT     │ │•Drift    │ │•SO files  │ │             │ │            │ │•Agent  │
 └────────┘ └──────────┘ └────────────┘ └─────────────┘ └────────────┘ └────────┘
 ```
 

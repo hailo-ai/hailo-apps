@@ -38,7 +38,7 @@ yolov8pose_postprocess_sources = [
 ]
 shared_library('yolov8pose_postprocess',
     yolov8pose_postprocess_sources,
-    dependencies : postprocess_dep,
+    dependencies : [postprocess_dep, hailo_common_compat_dep],
     gnu_symbol_visibility : 'default',
     install: true,
     install_dir: '/usr/local/hailo/resources/so',
@@ -53,7 +53,7 @@ yolov5seg_post_sources = [
 
 shared_library('yolov5seg_postprocess',
     yolov5seg_post_sources,
-    dependencies : postprocess_dep,
+    dependencies : [postprocess_dep, hailo_common_compat_dep],
     gnu_symbol_visibility : 'default',
     install: true,
     install_dir: '/usr/local/hailo/resources/so',
@@ -68,7 +68,7 @@ depth_postprocess_sources = [
 ]
 shared_library('depth_postprocess',
     depth_postprocess_sources,
-    dependencies : postprocess_dep,
+    dependencies : [postprocess_dep, hailo_common_compat_dep],
     gnu_symbol_visibility : 'default',
     install: true,
     install_dir: '/usr/local/hailo/resources/so',
@@ -107,7 +107,7 @@ scrfd_post_sources = [
 
 shared_library('scrfd',
     scrfd_post_sources,
-    dependencies : postprocess_dep,
+    dependencies : [postprocess_dep, hailo_common_compat_dep],
     gnu_symbol_visibility : 'default',
     install: true,
     install_dir: '/usr/local/hailo/resources/so',
@@ -122,7 +122,7 @@ arcface_post_sources = [
 
 shared_library('face_recognition_post',
     arcface_post_sources,
-    dependencies : postprocess_dep,
+    dependencies : [postprocess_dep, hailo_common_compat_dep],
     gnu_symbol_visibility : 'default',
     install: true,
     install_dir: '/usr/local/hailo/resources/so',
@@ -162,7 +162,7 @@ repvgg_reid_sources = [
 shared_library('repvgg_reid_postprocess',
     repvgg_reid_sources,
     include_directories : rapidjson_inc,
-    dependencies : postprocess_dep,
+    dependencies : [postprocess_dep, hailo_common_compat_dep],
     gnu_symbol_visibility : 'default',
     install: true,
     install_dir: '/usr/local/hailo/resources/so',
@@ -214,7 +214,7 @@ clip_sources = [
 shared_library('clip_postprocess',
     clip_sources,
     include_directories : rapidjson_inc,
-    dependencies : postprocess_dep,
+    dependencies : [postprocess_dep, hailo_common_compat_dep],
     gnu_symbol_visibility : 'default',
     install: true,
     install_dir: '/usr/local/hailo/resources/so',
@@ -267,3 +267,31 @@ shared_library('ocr_postprocess',
     install: true,
     install_dir: '/usr/local/hailo/resources/so',
 )
+
+################################################
+# HAILOOVERLAY_COMMUNITY (custom overlay GStreamer element)
+# Only built when yaml-cpp and GStreamer dependencies are available.
+################################################
+yaml_cpp_dep = dependency('yaml-cpp', required : false)
+
+if yaml_cpp_dep.found() and gst_dep.found() and gst_base_dep.found() and gst_video_dep.found()
+    overlay_community_inc = include_directories('overlay_community')
+
+    overlay_community_deps = [postprocess_dep, gst_dep, gst_base_dep, gst_video_dep, yaml_cpp_dep]
+    if opencv_dep.found()
+        overlay_community_deps += opencv_dep
+    endif
+
+    shared_library('gsthailooverlay_community',
+        ['overlay_community/gsthailooverlay_community.cpp',
+         'overlay_community/overlay.cpp'],
+        include_directories : [rapidjson_inc, overlay_community_inc],
+        dependencies : overlay_community_deps,
+        cpp_args : ['-DPACKAGE="hailooverlay_community"'],
+        gnu_symbol_visibility : 'default',
+        install: true,
+        install_dir: '/usr/local/hailo/resources/so',
+    )
+else
+    message('Skipping hailooverlay_community (missing yaml-cpp or GStreamer dependencies)')
+endif

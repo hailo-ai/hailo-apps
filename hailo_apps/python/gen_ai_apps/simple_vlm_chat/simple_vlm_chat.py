@@ -87,7 +87,7 @@ def main():
         if len(image.shape) == 3 and image.shape[2] == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        image = cv2.resize(image, (336, 336), interpolation=cv2.INTER_LINEAR).astype(np.uint8)
+        image = cv2.resize(image, (336, 336), interpolation=cv2.INTER_LINEAR).astype(np.uint8)  # Qwen2-VL-2B-Instruct VLM expects 336x336 RGB images, other models may have different requirements
         print("✓ Image preprocessed (resized to 336x336, converted to RGB)")
 
         print("[5/5] Sending prompt with image to VLM...")

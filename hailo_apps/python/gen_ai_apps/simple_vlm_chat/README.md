@@ -14,7 +14,7 @@ A simple example application demonstrating image analysis and description using 
 
 - Hailo AI accelerator device (H10 or compatible)
 - Python 3.10+
-- Hailo Platform SDK
+- HailoRT runtime library and Python bindings
 
 ## Installation
 
@@ -90,7 +90,7 @@ The example uses the `VLM_MODEL_NAME_H10` model which is automatically downloade
 - The script uses a relative path from the repository root
 
 ### Import errors
-- Ensure Hailo Platform SDK is properly installed
+- Ensure HailoRT runtime library and Python bindings is properly installed
 - Verify Python environment has all required packages (OpenCV, NumPy)
 
 ## How it works
@@ -98,7 +98,7 @@ The example uses the `VLM_MODEL_NAME_H10` model which is automatically downloade
 The example demonstrates basic VLM image analysis:
 1. Creates a VDevice for Hailo hardware access
 2. Initializes a VLM instance with the model
-3. Loads and preprocesses an image (resizes to 336x336, converts to RGB)
+3. Loads and preprocesses an image (in the case of Qwen2-VL-2B-Instruct resizes to 336x336, converts to RGB)
 4. Constructs a prompt with system message and user question
 5. Generates a response using the VLM with the image frame
 6. Cleans up resources properly

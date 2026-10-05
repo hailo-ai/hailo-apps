@@ -44,11 +44,6 @@ static std::string getenv_str(const char *k)
     return v ? std::string(v) : std::string();
 }
 
-static bool is_url(const std::string &s)
-{
-    return s.rfind("http://", 0) == 0 || s.rfind("https://", 0) == 0;
-}
-
 static std::string stem_no_ext(const std::string &name)
 {
     fs::path p(name);
@@ -136,18 +131,16 @@ static HeadInfo head_request(const std::string &url)
     curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);        // HEAD request
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "hailo-apps-resources/1.0");
 
-    const CURLcode res = curl_easy_perform(curl);
+    curl_easy_perform(curl);
 
-    // Always try to get HTTP status (even if res != CURLE_OK)
     long http_code = 0;
     if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code) == CURLE_OK) {
         info.status = http_code;
     }
 
-    // Content length might not be provided by server (then it stays -1)
-    double cl = -1.0;
-    if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl) == CURLE_OK) {
-        if (cl >= 0) info.size = (curl_off_t)cl;
+    curl_off_t cl = -1;
+    if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl) == CURLE_OK) {
+        if (cl >= 0) info.size = cl;
     }
 
     curl_easy_cleanup(curl);
@@ -491,7 +484,8 @@ static bool is_hef_compatible_with_device(const std::filesystem::path &hef_path,
  */
 static std::string modelzoo_version_for(const std::string &hw_arch, const std::string &hailort_ver)
 {
-    // hailo10h: 5.x -> v5.x
+    // hailo10h: 5.x -> v5.x (kept in sync with config.yaml's model_zoo_mapping comment:
+    // HailoRT 5.1.x -> v5.1.0, 5.2.x -> v5.2.0, 5.3.x -> v5.3.0, 5.4.x -> v5.4.0)
     static const std::unordered_map<std::string,std::string> compat_10h = {
         {"5.0.1","v5.0.0"},
         {"5.0.0","v5.0.0"},
@@ -499,14 +493,18 @@ static std::string modelzoo_version_for(const std::string &hw_arch, const std::s
         {"5.1.1","v5.1.0"},
         {"5.1.2","v5.1.0"},
         {"5.2.0","v5.2.0"},
+        {"5.3.0","v5.3.0"},
+        {"5.4.0","v5.4.0"},
     };
 
-    // hailo8/8l: 4.x -> v2.xx
+    // hailo8/8l: 4.x -> v2.xx (kept in sync with config.yaml's model_zoo_mapping comment:
+    // HailoRT 4.23.x -> v2.18.0, HailoRT 4.24.x -> v2.19.0)
     static const std::unordered_map<std::string,std::string> compat_8 = {
-        {"4.23.0","v2.17.0"},
+        {"4.23.0","v2.18.0"},
         {"4.22.0","v2.16.0"},
         {"4.21.0","v2.15.0"},
         {"4.20.0","v2.14.0"},
+        {"4.24.0","v2.19.0"},
     };
 
     if (hw_arch == "hailo10h") {
@@ -617,8 +615,12 @@ static std::string build_hef_url(const std::string &source,
     }
 
     if (source == "s3") {
-        // Example style: https://hailo-csdata.s3.amazonaws.com/resources/hefs/<mz_ver>/<arch>/<name>
-        return "https://hailo-csdata.s3.amazonaws.com/resources/hefs/" + mz_ver + "/" + hw_arch + "/" + name;
+        // s3 uses short arch names (h8/h8l/h10h) with no version component
+        std::string short_arch = hw_arch;
+        if      (hw_arch == "hailo8")  short_arch = "h8";
+        else if (hw_arch == "hailo8l") short_arch = "h8l";
+        else if (hw_arch == "hailo10h") short_arch = "h10h";
+        return "https://hailo-csdata.s3.amazonaws.com/resources/hefs/" + short_arch + "/" + name;
     }
 
     if (source == "gen-ai-mz") {
@@ -720,20 +722,25 @@ static std::string download_hef_yaml(const YAML::Node &root,
         throw std::runtime_error("Net '" + net + "' does not support hw-arch=" + hw_arch + " (or not found).");
     }
 
-    const std::string hv = hailort_version();
-    if (hv.empty()) {
-        throw std::runtime_error("Cannot parse HailoRT version. Is hailortcli installed?");
-    }
-    const std::string mz_ver = modelzoo_version_for(hw_arch, hv);
-
     const auto m = find_model_entry(root, app, hw_arch, net);
 
     fs::create_directories(dest_dir);
 
+    // Only resolve the installed HailoRT -> Model Zoo version mapping when it's
+    // actually needed to build the download URL. Explicit "url" entries and the
+    // version-less "s3" source don't depend on it, so they must not fail just
+    // because the installed HailoRT version isn't in the (hardcoded) compat map.
     std::string url;
     if (!m.url.empty()) {
         url = m.url; // explicit URL in YAML
+    } else if (m.source == "s3") {
+        url = build_hef_url(m.source, /*mz_ver=*/{}, hw_arch, m.name);
     } else {
+        const std::string hv = hailort_version();
+        if (hv.empty()) {
+            throw std::runtime_error("Cannot parse HailoRT version. Is hailortcli installed?");
+        }
+        const std::string mz_ver = modelzoo_version_for(hw_arch, hv);
         url = build_hef_url(m.source, mz_ver, hw_arch, m.name);
     }
 
@@ -854,7 +861,7 @@ std::string ResourcesManager::resolve_input_arg(const std::string &app,
     //  - "usb" / "rpi"
     //  - Windows: "0", "1", ...
     //  - Linux: "/dev/videoX"
-    if (input_arg == "usb" || input_arg == "rpi" ||
+    if (input_arg == "usb" || input_arg == "rpi" || input_arg == "csi" ||
         (!input_arg.empty() && std::all_of(input_arg.begin(), input_arg.end(), ::isdigit)) ||
         (input_arg.rfind("/dev/video", 0) == 0))
     {
@@ -872,15 +879,15 @@ std::string ResourcesManager::resolve_input_arg(const std::string &app,
             if (!fs::exists(candidate)) {
                 throw std::runtime_error("Input path does not exist: " + candidate.string());
             }
-            if (!fs::is_regular_file(candidate)) {
-                throw std::runtime_error("Input path is not a file: " + candidate.string());
+            if (!fs::is_regular_file(candidate) && !fs::is_directory(candidate)) {
+                throw std::runtime_error("Input path is not a file or directory: " + candidate.string());
             }
             return fs::absolute(candidate).string();
         }
 
         // If it's a filename-only and exists in current working directory -> use it.
         fs::path cwd_candidate = fs::current_path() / candidate;
-        if (fs::exists(cwd_candidate) && fs::is_regular_file(cwd_candidate)) {
+        if (fs::exists(cwd_candidate) && (fs::is_regular_file(cwd_candidate) || fs::is_directory(cwd_candidate))) {
             return fs::absolute(cwd_candidate).string();
         }
     }
@@ -915,7 +922,20 @@ std::string ResourcesManager::resolve_input_arg(const std::string &app,
     // ------------------------------------------------
     // (4) Non-empty input that was NOT an explicit path and
     //     was NOT found locally -> treat as YAML resource name.
+    //     Determine kind (image/video) to pick the right download dir.
     // ------------------------------------------------
+    const auto images = collect_resources_by_tag(root, "images", app);
+    for (const auto &e : images) {
+        if (e.name == input_arg) {
+            return download_input_yaml(root, app, input_arg, inputs_dir_for_kind("images"));
+        }
+    }
+    const auto videos = collect_resources_by_tag(root, "videos", app);
+    for (const auto &e : videos) {
+        if (e.name == input_arg) {
+            return download_input_yaml(root, app, input_arg, inputs_dir_for_kind("videos"));
+        }
+    }
     return download_input_yaml(root, app, input_arg, target_dir);
 }
 
@@ -1106,8 +1126,8 @@ std::string ResourcesManager::get_model_meta_value(const std::string &app,
         v = find_in_group(models["extra"]);
         if (v != "N/A") return v;
 
-        std::cerr << "Warning: model '" << model_name << "' not found for app '" << app
-                  << "' arch '" << arch << "'\n";
+        std::cerr << "Warning: metadata key '" << key << "' not found for model '"
+                  << model_name << "' (app='" << app << "', arch='" << arch << "')\n";
         return "N/A";
     }
     catch (const std::exception &e) {

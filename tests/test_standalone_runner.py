@@ -333,6 +333,13 @@ def generate_test_cases(
 
             for model in model_list:
                 for run_method in run_methods:
+                    # Skip CLI run method if app has no CLI entry point
+                    if run_method == "cli" and not app_def.cli:
+                        logger.debug(
+                            "Skipping CLI run method for %s (no CLI entry point defined)",
+                            app_name,
+                        )
+                        continue
                     for suite in suites:
                         test_cases.append(
                             {

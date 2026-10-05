@@ -23,7 +23,7 @@ import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -185,22 +185,23 @@ def map_arch_to_s3_path(hailo_arch: str) -> str:
 
 def get_model_zoo_version_for_arch(hailo_arch: str) -> tuple[str, str]:
     """Get Model Zoo version and download architecture for a given Hailo architecture.
-    
-    For H10: Derives from HailoRT version (5.1.x -> v5.1.0, 5.2.x -> v5.2.0)
-    For H8/H8L: Uses static mapping v2.17.0
+
+    For H10: Derives from HailoRT version (5.1.x -> v5.1.0, 5.2.x -> v5.2.0, etc.)
+    For H8/H8L: Derives from HailoRT version (4.24.x -> v2.19.0, 4.23.x -> v2.18.0)
     """
     download_arch = hailo_arch
-    
+
     # First check if explicitly set via environment
     model_zoo_version = os.getenv(MODEL_ZOO_VERSION_KEY)
-    
+
     if model_zoo_version is None:
+        hailort_version = os.getenv(
+            HAILORT_VERSION_KEY,
+            auto_detect_hailort_version()
+        )
+
         # Auto-select default model zoo version based on device architecture
         if hailo_arch == HAILO10H_ARCH:
-            hailort_version = os.getenv(
-                HAILORT_VERSION_KEY,
-                auto_detect_hailort_version()
-            )
             if not hailort_version:
                 raise RuntimeError(
                     "Failed to determine HailoRT version for Hailo-10H. "
@@ -213,15 +214,24 @@ def get_model_zoo_version_for_arch(hailo_arch: str) -> tuple[str, str]:
                 # For newer versions, use the exact HailoRT version
                 model_zoo_version = f"v{hailort_version}"
         else:
-            # H8/H8L uses the fixed Model Zoo release
-            model_zoo_version = "v2.17.0"
-    
-    # Validate the version
-    if hailo_arch == HAILO10H_ARCH and model_zoo_version not in VALID_H10_MODEL_ZOO_VERSION:
+            # H8/H8L: Derive from HailoRT version
+            if hailort_version and hailort_version.startswith("4.24"):
+                model_zoo_version = "v2.19.0"
+            elif hailort_version and hailort_version.startswith("4.23"):
+                model_zoo_version = "v2.18.0"
+            else:
+                # Fallback to newest
+                model_zoo_version = VALID_H8_MODEL_ZOO_VERSION[0]
+
+    if hailo_arch == HAILO10H_ARCH and model_zoo_version.startswith("v5.1."):
         model_zoo_version = "v5.1.0"
+
+    # Validate the version; fall back to the config default if invalid
+    if hailo_arch == HAILO10H_ARCH and model_zoo_version not in VALID_H10_MODEL_ZOO_VERSION:
+        model_zoo_version = VALID_H10_MODEL_ZOO_VERSION[0]
     if hailo_arch in (HAILO8_ARCH, HAILO8L_ARCH) and model_zoo_version not in VALID_H8_MODEL_ZOO_VERSION:
-        model_zoo_version = "v2.17.0"
-    
+        model_zoo_version = VALID_H8_MODEL_ZOO_VERSION[0]
+
     return model_zoo_version, download_arch
 
 
@@ -482,6 +492,24 @@ class ResourceDownloader:
                     except Exception:
                         pass
                 
+                # Fall back only for an unavailable MZ artifact, not network errors.
+                if (
+                    isinstance(e, urllib.error.HTTPError) and e.code in (403, 404)
+                    and task.name == "stereonet" and self.hailo_arch == HAILO10H_ARCH
+                    and self.model_zoo_version.startswith("v5.1.")
+                    and url == f"{MODEL_ZOO_URL}/{self.model_zoo_version}/{self.download_arch}/stereonet{HAILO_FILE_EXTENSION}"
+                ):
+                    latest = max(VALID_H10_MODEL_ZOO_VERSION,
+                                 key=lambda version: tuple(map(int, version.lstrip("v").split("."))))
+                    fallback_url = f"{MODEL_ZOO_URL}/{latest}/{self.download_arch}/stereonet{HAILO_FILE_EXTENSION}"
+                    if fallback_url != url:
+                        hailo_logger.warning(
+                            f"StereoNet unavailable in {self.model_zoo_version}; trying latest Model Zoo {latest}"
+                        )
+                        return self._download_file_with_retry(
+                            replace(task, url=fallback_url, expected_size=None)
+                        )
+
                 # Exponential backoff
                 if attempt < self.download_config.max_retries - 1:
                     delay = self.download_config.retry_delay * (2 ** attempt)
@@ -1122,7 +1150,12 @@ class ResourceDownloader:
             for result in self._results:
                 if not result.success:
                     hailo_logger.warning(f"  - {result.task.name}: {result.message}")
-        
+            failures = "; ".join(
+                f"{result.task.name}: {result.message}"
+                for result in self._results if not result.success
+            )
+            raise RuntimeError(f"{failed} resource download(s) failed: {failures}")
+
         return self._results
     
     def _execute_sequential(self, tasks: list[DownloadTask]) -> list[DownloadResult]:
@@ -1344,7 +1377,7 @@ def download_resources(
 ):
     """
     Download resources based on the specified options.
-    
+
     Args:
         resource_config_path: Path to resources config file
         arch: Hailo architecture override (hailo8, hailo8l, hailo10h)
@@ -1357,7 +1390,8 @@ def download_resources(
         parallel: If True, download files in parallel
         include_gen_ai: If True, include gen-ai models in downloads
     """
-    
+    load_environment()
+
     # ------------------------------------------------------------
     # Targeted mode:
     # Download exactly ONE resource (model OR image OR video).

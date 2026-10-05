@@ -36,6 +36,7 @@ RUN_INSTALL=true
 RUN_PIPELINES=true
 RUN_STANDALONE=true
 RUN_GENAI=false
+RUN_CPP=false
 DOWNLOAD_RESOURCES=true
 APPS_FILTER=""
 PYTEST_K_EXPR=""
@@ -89,6 +90,15 @@ while [[ $# -gt 0 ]]; do
             RUN_GENAI=true
             shift
             ;;
+        --cpp)
+            if [ "$EXPLICIT_SUITE_SELECTION" = false ]; then
+                RUN_SANITY=false; RUN_INSTALL=false; RUN_PIPELINES=false
+                RUN_STANDALONE=false; RUN_GENAI=false; RUN_CPP=false
+                EXPLICIT_SUITE_SELECTION=true
+            fi
+            RUN_CPP=true
+            shift
+            ;;
         --no-download)
             DOWNLOAD_RESOURCES=false
             shift
@@ -101,11 +111,12 @@ while [[ $# -gt 0 ]]; do
             APPS_FILTER="$2"
             if [ "$EXPLICIT_SUITE_SELECTION" = false ]; then
                 RUN_SANITY=false; RUN_INSTALL=false; RUN_PIPELINES=false
-                RUN_STANDALONE=false; RUN_GENAI=false
+                RUN_STANDALONE=false; RUN_GENAI=false; RUN_CPP=false
                 EXPLICIT_SUITE_SELECTION=true
             fi
             RUN_PIPELINES=true
             RUN_STANDALONE=true
+            # RUN_CPP is NOT auto-enabled by --apps; combine with --cpp to include C++ tests
             shift 2
             ;;
         --help|-h)
@@ -126,9 +137,12 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --apps detection,pose_estimation"
             echo "  $0 --standalone"
             echo "  $0 --genai"
+            echo "  $0 --cpp"
+            echo "  $0 --cpp --apps object_detection"
+            echo "  $0 --cpp --pipelines --standalone"
             echo "  $0 --pipelines --standalone"
             echo ""
-            echo "Without options, runs: sanity -> install -> pipelines"
+            echo "Without options, runs: sanity -> install -> pipelines -> standalone"
             exit 0
             ;;
         *)
@@ -265,6 +279,24 @@ if [ "$RUN_GENAI" = true ]; then
         echo "✓ GenAI tests passed"
     else
         echo "✗ GenAI tests failed"
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+    fi
+fi
+
+# 6. C++ App Tests — build + image + video + camera
+if [ "$RUN_CPP" = true ]; then
+    echo ""
+    echo "--- Running C++ App Tests (build + image + video) ---"
+    CPP_PYTEST_ARGS=("${TESTS_DIR}/test_cpp_runner.py" -v --log-cli-level=INFO
+                     -m "cpp")
+    if [[ -n "$PYTEST_K_EXPR" ]]; then
+        echo "Filtering C++ tests to apps: ${APPS_FILTER}"
+        CPP_PYTEST_ARGS+=( -k "$PYTEST_K_EXPR" )
+    fi
+    if python -m pytest "${CPP_PYTEST_ARGS[@]}"; then
+        echo "✓ C++ tests passed"
+    else
+        echo "✗ C++ tests failed"
         FAILED_TESTS=$((FAILED_TESTS + 1))
     fi
 fi

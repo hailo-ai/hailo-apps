@@ -1,0 +1,6 @@
+# Prevent Copilot from scanning .claude/ directory
+# Copilot now recognizes .claude/agents/ format, which causes duplicate agents
+# since the same agents already exist in .github/agents/ (Copilot's native format).
+# Both .claude/ and .github/ are generated from .hailo/ — only .github/ should be
+# used by Copilot.
+.claude/

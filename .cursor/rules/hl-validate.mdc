@@ -1,0 +1,290 @@
+---
+description: "Skill: Validate and Test"
+alwaysApply: false
+---
+
+````instructions
+# Skill: Validate and Test
+
+> Systematic validation skill for verifying that agent-built code is correct, convention-compliant, and production-ready. Used at every phase gate in the plan-and-execute loop.
+
+## When to Use This Skill
+
+- At every phase gate in the orchestration flow
+- After a sub-agent returns code
+- Before marking any implementation todo as complete
+- As the final check before declaring work done
+
+---
+
+## Validation Levels
+
+### Level 1: Structural Validation (Phase 1 Gate)
+
+Verify the file structure exists and is correctly organized.
+
+```bash
+# Check directory exists
+ls -la hailo_apps/python/gen_ai_apps/<app_name>/
+
+# Check __init__.py
+test -f hailo_apps/python/gen_ai_apps/<app_name>/__init__.py && echo "PASS" || echo "FAIL"
+
+# Check all expected files exist
+for f in __init__.py main_module.py support_module.py README.md; do
+  test -f hailo_apps/python/gen_ai_apps/<app_name>/$f && echo "PASS: $f" || echo "FAIL: $f"
+done
+```
+
+### Level 2: Import Validation (Phase 2 Gate)
+
+Verify all modules can be imported without errors.
+
+```bash
+# Test each module independently
+python3 -c "from hailo_apps.python.gen_ai_apps.<app>.<module> import <Class>; print('OK')"
+
+# Test cross-module imports
+python3 -c "
+from hailo_apps.python.gen_ai_apps.<app>.module_a import ClassA
+from hailo_apps.python.gen_ai_apps.<app>.module_b import ClassB
+print('All imports OK')
+"
+```
+
+**Common failure causes and fixes**:
+
+| Error | Cause | Fix |
+|---|---|---|
+| `ModuleNotFoundError` | Wrong import path | Check `defines.py` and `__init__.py` |
+| `ImportError: cannot import name` | Class not defined in module | Check class name spelling and `__all__` |
+| `SyntaxError` | Python syntax issue | Check indentation, missing colons, unclosed brackets |
+| `NameError` inside import | Module uses undefined name at import time | Move runtime code out of module scope |
+
+### Level 3: Functional Validation (Phase 3 Gate)
+
+Verify the app actually works.
+
+```bash
+# CLI argument parsing
+python3 -m hailo_apps.python.gen_ai_apps.<app>.<main> --help
+# Expected: exit code 0, help text shows all expected arguments
+
+# Argument validation (should fail gracefully)
+python3 -m hailo_apps.python.gen_ai_apps.<app>.<main> --invalid-arg 2>&1
+# Expected: error message, not a traceback
+
+# Dry-run test (if supported)
+python3 -c "
+from hailo_apps.python.gen_ai_apps.<app>.<main> import <MainClass>
+# Instantiate without connecting to hardware
+# Verify the object can be created
+print('Instantiation OK')
+"
+```
+
+### Level 4: Convention Compliance (every .py file)
+
+Run the convention checklist on each file:
+
+```bash
+FILE="hailo_apps/python/gen_ai_apps/<app>/<module>.py"
+
+echo "=== Convention Check: $FILE ==="
+
+# 1. No relative imports
+RELATIVE=$(grep -c "^from \.\|^import \." "$FILE" 2>/dev/null || echo 0)
+[[ "$RELATIVE" -eq 0 ]] && echo "PASS: No relative imports" || echo "FAIL: Found $RELATIVE relative imports"
+
+# 2. Logger usage
+grep -q "get_logger" "$FILE" && echo "PASS: Uses get_logger" || echo "WARN: No get_logger found"
+
+# 3. No hardcoded paths
+HARDCODED=$(grep -c "/home/\|/tmp/\|C:\\\\" "$FILE" 2>/dev/null || echo 0)
+[[ "$HARDCODED" -eq 0 ]] && echo "PASS: No hardcoded paths" || echo "FAIL: Found $HARDCODED hardcoded paths"
+
+# 4. No print statements (use logger instead)
+PRINTS=$(grep -c "^[[:space:]]*print(" "$FILE" 2>/dev/null || echo 0)
+[[ "$PRINTS" -eq 0 ]] && echo "PASS: No print() calls" || echo "WARN: Found $PRINTS print() calls"
+
+# 5. Has docstring
+grep -q '"""' "$FILE" && echo "PASS: Has docstrings" || echo "WARN: No docstrings found"
+
+# 6. Type hints on functions
+FUNCS=$(grep -c "def " "$FILE" 2>/dev/null || echo 0)
+TYPED=$(grep -c "def .*->.*:" "$FILE" 2>/dev/null || echo 0)
+echo "INFO: $TYPED/$FUNCS functions have return type hints"
+```
+
+### Level 5: Lint & Error Check (IDE integration)
+
+```
+Use the get_errors tool on each new/modified file:
+  get_errors(["hailo_apps/python/gen_ai_apps/<app>/module_a.py",
+              "hailo_apps/python/gen_ai_apps/<app>/module_b.py"])
+
+Expected: No errors.
+Acceptable: Warnings about unused imports (if __all__ is defined).
+Not acceptable: Any import errors, syntax errors, or type errors.
+```
+
+---
+
+## Validation Sub-Agent
+
+For complex apps, delegate the full validation suite to a sub-agent:
+
+```
+runSubagent:
+  description: "Validate new app"
+  prompt: |
+    ## Task
+    Run a full validation suite on the newly created app at
+    hailo_apps/python/gen_ai_apps/<app_name>/
+
+    ## Checks to Run (in order)
+    
+    1. STRUCTURAL: List all files in the directory, verify __init__.py exists
+    
+    2. IMPORTS: Run these commands in terminal:
+       python3 -c "from hailo_apps.python.gen_ai_apps.<app>.module_a import ClassA; print('OK')"
+       python3 -c "from hailo_apps.python.gen_ai_apps.<app>.module_b import ClassB; print('OK')"
+       python3 -c "from hailo_apps.python.gen_ai_apps.<app>.main import MainClass; print('OK')"
+    
+    3. CLI: Run in terminal:
+       python3 -m hailo_apps.python.gen_ai_apps.<app>.main --help
+    
+    4. CONVENTIONS: For each .py file, check:
+       - No relative imports (grep "^from \." or "^import \.")
+       - Uses get_logger (grep "get_logger")
+       - No hardcoded paths (grep "/home/")
+       - Has entry point in main module (grep "def main\|__name__")
+    
+    5. ERRORS: Use get_errors tool on all .py files
+    
+    6. DOCS: Verify README.md exists and contains:
+       - App description
+       - Requirements section
+       - Usage examples with actual command lines
+    
+    ## Output Format
+    Return a validation report:
+    ```
+    STRUCTURAL:   PASS/FAIL  [details]
+    IMPORTS:      PASS/FAIL  [details]
+    CLI:          PASS/FAIL  [details]
+    CONVENTIONS:  PASS/FAIL  [details per file]
+    ERRORS:       PASS/FAIL  [error list]
+    DOCS:         PASS/FAIL  [details]
+    
+    OVERALL: PASS/FAIL
+    ISSUES: [numbered list of issues to fix]
+    ```
+```
+
+---
+
+## Test Writing Patterns
+
+When the app needs automated tests:
+
+### Unit Test Template
+
+```python
+"""Tests for <app_name>."""
+import pytest
+from unittest.mock import MagicMock, patch
+
+from hailo_apps.python.gen_ai_apps.<app>.event_tracker import (
+    EventTracker,
+    EventType,
+    Event,
+)
+
+
+class TestEventTracker:
+    """Test the EventTracker class."""
+    
+    def test_classify_response_activity(self):
+        tracker = EventTracker()
+        result = tracker.classify_response("A person is walking through the room")
+        assert result == EventType.WALKING
+    
+    def test_classify_response_no_activity(self):
+        tracker = EventTracker()
+        result = tracker.classify_response("Nothing notable visible in the frame")
+        assert result == EventType.IDLE
+    
+    def test_add_event_increments_count(self):
+        tracker = EventTracker()
+        tracker.add_event(EventType.WALKING, "Person walking through room")
+        tracker.add_event(EventType.WALKING, "Person still walking")
+        counts = tracker.get_counts()
+        assert counts[EventType.WALKING] == 2
+    
+    def test_get_summary_includes_all_events(self):
+        tracker = EventTracker()
+        tracker.add_event(EventType.WALKING, "Person walking")
+        tracker.add_event(EventType.ALERT, "Unusual activity detected")
+        summary = tracker.get_summary()
+        assert "WALKING" in summary
+        assert "ALERT" in summary
+    
+    def test_empty_tracker_returns_empty_summary(self):
+        tracker = EventTracker()
+        summary = tracker.get_summary()
+        assert "No events" in summary or len(summary) > 0
+
+
+class TestMyVlmApp:
+    """Test the MyVlmApp class (mocked hardware)."""
+    
+    @patch("hailo_apps.python.gen_ai_apps.<app>.my_vlm_app.Backend")
+    def test_app_creation(self, mock_backend):
+        """Test that the app can be instantiated."""
+        from hailo_apps.python.gen_ai_apps.<app>.my_vlm_app import MyVlmApp
+        # Just verify no crash on import + class exists
+        assert MyVlmApp is not None
+```
+
+### Integration Test Pattern
+
+```python
+def test_cli_help():
+    """Test that --help works and shows expected arguments."""
+    import subprocess
+    result = subprocess.run(
+        ["python3", "-m", "hailo_apps.python.gen_ai_apps.<app>.my_vlm_app", "--help"],
+        capture_output=True, text=True, timeout=10
+    )
+    assert result.returncode == 0
+    assert "--interval" in result.stdout
+    assert "--input" in result.stdout
+```
+
+---
+
+## Validation Checklist (Copy-Paste Ready)
+
+Use this at the final gate:
+
+```markdown
+## Final Validation Checklist
+
+- [ ] All files created in correct directory
+- [ ] __init__.py exists
+- [ ] All modules import successfully
+- [ ] CLI --help shows all expected arguments
+- [ ] No relative imports in any file
+- [ ] get_logger(__name__) in every module
+- [ ] resolve_hef_path() for model paths (no hardcoded paths)
+- [ ] SHARED_VDEVICE_GROUP_ID for VDevice creation
+- [ ] Signal handling (SIGINT) with graceful shutdown
+- [ ] Error handling with try/except and logging
+- [ ] README.md with description, requirements, usage
+- [ ] No lint errors from get_errors tool
+- [ ] App constant registered in defines.py (only if using `resolve_hef_path()`)
+- [ ] Memory files updated (if new patterns discovered)
+```
+
+````

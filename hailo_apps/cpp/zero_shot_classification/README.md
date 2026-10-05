@@ -6,6 +6,11 @@ This example performs zero-shot classification using a Hailo8 device, allowing y
 Requirements
 ------------
 
+- yaml-cpp and libcurl development libraries (Linux):
+    ```shell
+    sudo apt-get install libyaml-cpp-dev libcurl4-openssl-dev
+    ```
+
 - `hailo_platform` >= 4.19.0
 - `OpenCV` >= 4.2.X
 - `CMake` >= 3.20
@@ -40,12 +45,12 @@ Usage
         cmake --build build --config Release
         ```
 
-    This creates the directory hierarchy build/Release and compile an executable file called zero_shot_classification
+    This builds `zero_shot_classification` at `build/zero_shot_classification` on Linux and `build/Release/zero_shot_classification.exe` on Windows.
 
 3. Run the example:
 
 	```shell script
-    ./build/x86_64/zero_shot_classification  -te=<text-encoder-hef> -ie=<image-encoder-hef> -t=<path-to-tokenized-prompt> -i=<input-image-or-video> -n=<number-of-frames>
+    ./build/zero_shot_classification  -te=<text-encoder-hef> -ie=<image-encoder-hef> -t=<path-to-tokenized-prompt> -i=<input-image-or-video> -n=<number-of-frames>
     ```
 	
 Arguments
@@ -61,7 +66,7 @@ Example
 ---------------
 
 ```shell script
-./build/x86_64/zero_shot_classification  -te=clip_text_encoder_vit_l_14_laion2B.hef -ie=clip_vit_l_14_laion2B_image_encoder.hef -p="a bird","a bus","a boat" -i=bus.jpg -n=30
+./build/zero_shot_classification  -te=clip_text_encoder_vit_l_14_laion2B.hef -ie=clip_vit_l_14_laion2B_image_encoder.hef -p="a bird","a bus","a boat" -i=bus.jpg -n=30
 ```
 
 Notes

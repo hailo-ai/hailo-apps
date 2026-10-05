@@ -1,8 +1,8 @@
 #!/bin/bash
+set -e
 
-cmake -H. -Bbuild -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=$PWD/build/x86_64
-cmake --build build
+mkdir -p build
+cmake -H. -Bbuild -DCMAKE_BUILD_TYPE=Release
+cmake --build build -- -j"$(nproc)"
 
-if [[ -f "hailort.log" ]]; then
-    rm hailort.log
-fi
+rm -f hailort.log

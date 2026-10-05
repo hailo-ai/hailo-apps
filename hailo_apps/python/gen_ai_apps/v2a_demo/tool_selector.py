@@ -69,6 +69,15 @@ def _descriptions_hash() -> str:
     return hashlib.md5(serialized.encode()).hexdigest()
 
 
+def _hef_attention_mask(attention_mask: np.ndarray) -> np.ndarray:
+    """Build the HEF mask input (batch, 1, seq, seq) from a (batch, seq) token mask.
+
+    The HEF is compiled with the mask applied inside softmax, so it expects a
+    multiplicative 0/1 mask
+    """
+    return np.repeat(attention_mask[:, None, None, :], MAX_SEQ_LEN, axis=2).astype(np.float32)
+
+
 class ToolSelector:
     """Selects the appropriate tool using sentence-transformer embeddings on Hailo HEF."""
 
@@ -112,10 +121,7 @@ class ToolSelector:
         # Word embedding lookup
         input_embeddings = self._text_embeddings[input_ids].astype(np.float32)
 
-        # Build 2D additive attention mask
-        mask_2d = attention_mask[:, :, None] * attention_mask[:, None, :]
-        mask_2d = mask_2d[:, None, :, :].astype(np.float32)
-        attn_mask = (1.0 - mask_2d) * (-10000.0)
+        attn_mask = _hef_attention_mask(attention_mask)
 
         # HEF inference
         self._bindings.input(EMBEDDING_INPUT_NAME).set_buffer(input_embeddings)
@@ -182,9 +188,7 @@ class ToolSelector:
             attention_mask = all_attention_masks[i:i+1]
 
             input_embeddings = self._text_embeddings[input_ids].astype(np.float32)
-            mask_2d = attention_mask[:, :, None] * attention_mask[:, None, :]
-            mask_2d = mask_2d[:, None, :, :].astype(np.float32)
-            attn_mask = (1.0 - mask_2d) * (-10000.0)
+            attn_mask = _hef_attention_mask(attention_mask)
 
             self._bindings.input(EMBEDDING_INPUT_NAME).set_buffer(input_embeddings)
             self._bindings.input(MASK_INPUT_NAME).set_buffer(attn_mask)

@@ -1,0 +1,135 @@
+---
+description: "Skill: Model Management & HEF Resolution"
+alwaysApply: false
+---
+
+# Skill: Model Management & HEF Resolution
+
+> Manage HEF model files, resolve paths, and configure model resources.
+
+## When to Use This Skill
+
+- User needs to **resolve HEF model paths** for their application
+- User wants to **add a new model** to the configuration
+- User needs to understand the **model download and caching** system
+- User wants to **list available models** for an app
+
+## HEF Path Resolution
+
+### The Golden Rule
+
+**Always** use `resolve_hef_path()` — never hardcode model paths:
+
+```python
+from hailo_apps.python.core.common.core import resolve_hef_path
+
+hef_path = resolve_hef_path(
+    user_provided_path,   # From --hef-path CLI arg (may be None)
+    app_name="my_app",    # Registered app name from defines.py
+    arch="hailo10h",      # Target architecture
+)
+```
+
+### Resolution Order
+
+1. **User provided path**: If `--hef-path` is given and file exists → use it
+2. **Default model lookup**: Query `resources_config.yaml` for default model
+3. **Resource directory**: Check `/usr/local/hailo/resources/models/{arch}/`
+4. **Auto-download**: Download from Model Zoo or S3 if not found locally
+
+### Resource Paths
+
+```
+/usr/local/hailo/resources/
+├── models/
+│   ├── hailo8/         # Hailo-8 models
+│   ├── hailo8l/        # Hailo-8L models
+│   └── hailo10h/       # Hailo-10H models (including Gen AI)
+├── videos/             # Test/demo videos
+├── images/             # Test/demo images
+├── json/               # Label files, configs
+├── npy/                # Numpy data files
+└── so/                 # Compiled postprocess libraries
+```
+
+## Listing Available Models
+
+```python
+from hailo_apps.python.core.common.core import list_models_for_app, handle_list_models_flag
+
+# Programmatic listing
+list_models_for_app(app_name="detection", arch="hailo8")
+
+# CLI integration
+parser = get_standalone_parser()
+handle_list_models_flag(parser, "my_app")  # Handles --list-models flag
+```
+
+## Config Manager API
+
+```python
+from hailo_apps.config.config_manager import (
+    get_available_apps,          # List all registered apps
+    get_supported_architectures, # Architectures for an app
+    get_default_models,          # Default models for app+arch
+    get_extra_models,            # Additional models for app+arch
+    get_default_model_name,      # Default model name string
+    get_model_info,              # Full model metadata (source, url)
+    get_model_names,             # All model names for app+arch
+)
+
+# Examples
+apps = get_available_apps()  # ["detection", "pose_estimation", "vlm_chat", ...]
+models = get_default_models("detection", "hailo8")  # [ModelEntry(...)]
+name = get_default_model_name("vlm_chat", "hailo10h")  # "Qwen2-VL-2B-Instruct"
+```
+
+## Adding a New App to resources_config.yaml
+
+```yaml
+# In hailo_apps/config/resources_config.yaml
+my_new_app:
+  models:
+    hailo10h:
+      default:
+        - name: "Qwen2-VL-2B-Instruct"
+          source: "gen-ai-mz"
+      extra:
+        - name: "Qwen2-VL-7B-Instruct"
+          source: "gen-ai-mz"
+```
+
+## Model Sources
+
+| Source | Description | Example |
+|---|---|---|
+| `mz` | Hailo Model Zoo (standard models) | YOLOv8, ResNet, etc. |
+| `gen-ai-mz` | Gen AI Model Zoo (LLM/VLM/Whisper) | Qwen2-VL, Whisper-Base |
+| `s3` | Direct S3 URL download | Custom models |
+
+## HEF File Utilities
+
+```python
+from hailo_apps.python.core.common.hef_utils import (
+    get_hef_input_size,    # Returns (height, width)
+    get_hef_input_shape,   # Returns full shape (H, W, C)
+    get_hef_labels_json,   # Extract embedded labels
+)
+
+height, width = get_hef_input_size(hef_path)
+shape = get_hef_input_shape(hef_path)  # e.g., (640, 640, 3)
+```
+
+## Architecture Constants
+
+```python
+from hailo_apps.python.core.common.defines import (
+    HAILO8_ARCH,    # "hailo8"
+    HAILO8L_ARCH,   # "hailo8l"
+    HAILO10H_ARCH,  # "hailo10h"
+)
+from hailo_apps.python.core.common.installation_utils import detect_hailo_arch
+
+arch = detect_hailo_arch()  # Auto-detect connected hardware
+```
+

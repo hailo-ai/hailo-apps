@@ -207,9 +207,7 @@ apps:
     script: "hailo_apps/python/standalone_apps/lane_detection/lane_detection.py"
     cli: ""
     default_test_suites:
-      - "basic_image_smoke"
-      - "basic_show_fps"
-      - "input_video_with_hef"
+      - "input_video_with_hef_no_fps"
     extra_test_suites: []
 
   super_resolution_standalone:
@@ -233,6 +231,42 @@ apps:
     default_test_suites:
       - "basic_image_smoke"
       - "basic_show_fps"
+    extra_test_suites: []
+
+  object_detection_onnx_postproc_standalone:
+    name: "YOLO26 Object Detection Standalone"
+    description: "Standalone yolo26 object detection (non-NMS, ONNX postproc)"
+    module: "hailo_apps.python.standalone_apps.yolo26.object_detection.object_detection_onnx_postproc"
+    script: "hailo_apps/python/standalone_apps/yolo26/object_detection/object_detection_onnx_postproc.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  pose_estimation_onnx_postproc_standalone:
+    name: "YOLO26 Pose Estimation Standalone"
+    description: "Standalone yolo26 pose estimation (non-NMS, ONNX postproc)"
+    module: "hailo_apps.python.standalone_apps.yolo26.pose_estimation.pose_estimation_onnx_postproc"
+    script: "hailo_apps/python/standalone_apps/yolo26/pose_estimation/pose_estimation_onnx_postproc.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
+    extra_test_suites: []
+
+  oriented_object_detection_standalone:
+    name: "Oriented Object Detection Standalone"
+    description: "Standalone oriented object detection app"
+    module: "hailo_apps.python.standalone_apps.oriented_object_detection.oriented_object_detection"
+    script: "hailo_apps/python/standalone_apps/oriented_object_detection/oriented_object_detection.py"
+    cli: ""
+    default_test_suites:
+      - "basic_image_smoke"
+      - "basic_show_fps"
+      - "input_video_with_hef"
     extra_test_suites: []
 
 # Test suites with flag combinations (aligned with FLAG_COMBINATIONS.md)
@@ -284,6 +318,14 @@ test_suites:
       - "${HEF_PATH}"
       - "--show-fps"
     description: "Video file with explicit HEF path"
+
+  input_video_with_hef_no_fps:
+    flags:
+      - "--input"
+      - "${VIDEO_PATH}"
+      - "--hef-path"
+      - "${HEF_PATH}"
+    description: "Video file with explicit HEF path (no --show-fps, for apps with minimal parsers)"
 
   input_usb_with_hef:
     flags:
@@ -625,7 +667,6 @@ resources:
 
   photos:
     - name: "dog_bicycle.jpg"
-    - name: "zidane.jpg"
     - name: "bus.jpg"
     - name: "input_image.png"
     - name: "ocr_img1.png"

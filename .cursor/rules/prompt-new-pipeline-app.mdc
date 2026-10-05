@@ -1,0 +1,10 @@
+---
+description: "Prompt template: Create New Pipeline Application"
+alwaysApply: false
+---
+
+# Prompt: new-pipeline-app
+
+Create New Pipeline Application
+
+Read `.hailo/prompts/new-pipeline-app.md` for the complete prompt template.

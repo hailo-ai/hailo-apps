@@ -179,9 +179,14 @@ int main(int argc, char** argv)
                                             preprocessed_batch_queue_right,
                                             preprocess_frames);
 
+        const auto &names = model.get_infer_model()->get_input_names();
+        auto by_suffix = [&](std::string_view s) {
+            for (const auto &n : names) if (n.ends_with(s)) return n;
+            throw std::runtime_error("input not found: " + std::string(s));
+        };
         ModelInputQueuesMap input_queues = {
-            { model.get_infer_model()->get_input_names().at(0), preprocessed_batch_queue_left },
-            { model.get_infer_model()->get_input_names().at(1), preprocessed_batch_queue_right }
+            { by_suffix("input_layer1"), preprocessed_batch_queue_left  },
+            { by_suffix("input_layer2"), preprocessed_batch_queue_right },
         };
 
         auto inference_thread = std::async(run_inference_async,
@@ -203,6 +208,7 @@ int main(int argc, char** argv)
                                     std::ref(args.output_dir),
                                     std::ref(args.output_resolution),
                                     results_queue,
+                                    input_queues,
                                     postprocess_callback);
 
         hailo_status status = wait_and_check_threads(

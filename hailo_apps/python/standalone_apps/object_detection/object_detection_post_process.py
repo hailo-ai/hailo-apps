@@ -10,7 +10,6 @@ except ImportError:
     sys.path.insert(0, str(core_dir))
     from common.toolbox import id_to_color
 
-import os
 from collections import deque
 
 # Dictionary to store a limited history of tracklet coordinates.
@@ -25,19 +24,132 @@ def inference_result_handler(original_frame, infer_results, labels, config_data,
     """
     Processes inference results and draw detections (with optional tracking).
 
+    Supports two model output formats:
+    - Single NMS buffer (HailoRT-NMS models like yolov8m): per-class list of [x1,y1,x2,y2,score]
+    - Multi-tensor dict (raw anchor-free models like yolo26): decoded via pure Python
+
     Args:
-        infer_results (list): Raw output from the model.
+        infer_results: Either a list (HailoRT-NMS) or dict (raw tensors).
         original_frame (np.ndarray): Original image frame.
         labels (list): List of class labels.
-        enable_tracking (bool): Whether tracking is enabled.
         tracker (BYTETracker, optional): ByteTrack tracker instance.
 
     Returns:
         np.ndarray: Frame with detections or tracks drawn.
     """
-    detections = extract_detections(original_frame, infer_results, config_data)  # Should return dict with boxes, classes, scores
+    if isinstance(infer_results, dict):
+        detections = decode_multioutput_detections(original_frame, infer_results, config_data)
+    else:
+        detections = extract_detections(original_frame, infer_results, config_data)
     frame_with_detections = draw_detections(detections, original_frame, labels, tracker=tracker, draw_trail=draw_trail)
     return frame_with_detections
+
+
+_ANCHOR_FREE_INPUT_SIZE = 640
+_ANCHOR_FREE_STRIDES = {80: 8, 40: 16, 20: 32}
+
+
+def decode_multioutput_detections(image: np.ndarray, infer_results: dict, config_data: dict) -> dict:
+    """
+    Decode raw anchor-free YOLO outputs (e.g. yolo26n/s/m) to detection format.
+
+    Expects 6 tensors per frame: 3 bbox (H,W,4) and 3 class-score (H,W,C) at
+    strides 8/16/32. Tensors are identified by their last-dimension channel count.
+    Applies sigmoid to class scores, decodes ltrb distances to xyxy, then NMS.
+    """
+    params = config_data.get("visualization_params", {})
+    score_threshold = params.get("score_thres", 0.3)
+    max_boxes = params.get("max_boxes_to_draw", 50)
+    iou_threshold = params.get("iou_thres", 0.45)
+
+    img_h, img_w = image.shape[:2]
+    img_size = max(img_h, img_w)
+    pad = int(abs(img_h - img_w) / 2)
+
+    bbox_tensors = {}
+    cls_tensors = {}
+    for tensor in infer_results.values():
+        arr = tensor[0] if tensor.ndim == 4 else tensor
+        h, c = arr.shape[0], arr.shape[-1]
+        if c == 4:
+            bbox_tensors[h] = arr.astype(np.float32)
+        else:
+            cls_tensors[h] = arr.astype(np.float32)
+
+    all_boxes, all_scores, all_classes = [], [], []
+
+    for grid_h in sorted(bbox_tensors.keys(), reverse=True):
+        if grid_h not in cls_tensors:
+            continue
+        stride = _ANCHOR_FREE_STRIDES.get(grid_h, _ANCHOR_FREE_INPUT_SIZE // grid_h)
+        bbox = bbox_tensors[grid_h]
+        cls = cls_tensors[grid_h]
+
+        H, W = bbox.shape[:2]
+        gy, gx = np.meshgrid(np.arange(H), np.arange(W), indexing="ij")
+        cx = (gx + 0.5) * stride
+        cy = (gy + 0.5) * stride
+
+        x1 = np.clip(cx - bbox[..., 0] * stride, 0, _ANCHOR_FREE_INPUT_SIZE) / _ANCHOR_FREE_INPUT_SIZE
+        y1 = np.clip(cy - bbox[..., 1] * stride, 0, _ANCHOR_FREE_INPUT_SIZE) / _ANCHOR_FREE_INPUT_SIZE
+        x2 = np.clip(cx + bbox[..., 2] * stride, 0, _ANCHOR_FREE_INPUT_SIZE) / _ANCHOR_FREE_INPUT_SIZE
+        y2 = np.clip(cy + bbox[..., 3] * stride, 0, _ANCHOR_FREE_INPUT_SIZE) / _ANCHOR_FREE_INPUT_SIZE
+
+        cls_scores = 1.0 / (1.0 + np.exp(-np.clip(cls, -88, 88)))
+        max_scores = cls_scores.max(axis=-1)
+        max_classes = cls_scores.argmax(axis=-1)
+
+        mask = max_scores > score_threshold
+        if not mask.any():
+            continue
+
+        all_boxes.append(np.stack([x1[mask], y1[mask], x2[mask], y2[mask]], axis=-1))
+        all_scores.append(max_scores[mask])
+        all_classes.append(max_classes[mask])
+
+    if not all_boxes:
+        return {"detection_boxes": [], "detection_classes": [], "detection_scores": [], "num_detections": 0}
+
+    boxes = np.concatenate(all_boxes)
+    scores = np.concatenate(all_scores)
+    classes = np.concatenate(all_classes)
+
+    keep = _nms(boxes, scores, iou_threshold)
+    keep = keep[:max_boxes]
+    boxes, scores, classes = boxes[keep], scores[keep], classes[keep]
+
+    boxes_out = []
+    for b in boxes:
+        xmin = int(b[0] * img_size) - (pad if img_h == img_size else 0)
+        ymin = int(b[1] * img_size) - (pad if img_w == img_size else 0)
+        xmax = int(b[2] * img_size) - (pad if img_h == img_size else 0)
+        ymax = int(b[3] * img_size) - (pad if img_w == img_size else 0)
+        boxes_out.append([xmin, ymin, xmax, ymax])
+
+    return {
+        "detection_boxes": boxes_out,
+        "detection_classes": classes.tolist(),
+        "detection_scores": scores.tolist(),
+        "num_detections": len(boxes_out),
+    }
+
+
+def _nms(boxes: np.ndarray, scores: np.ndarray, iou_threshold: float) -> list:
+    x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+    areas = (x2 - x1) * (y2 - y1)
+    order = scores.argsort()[::-1]
+    keep = []
+    while order.size:
+        i = order[0]
+        keep.append(i)
+        xx1 = np.maximum(x1[i], x1[order[1:]])
+        yy1 = np.maximum(y1[i], y1[order[1:]])
+        xx2 = np.minimum(x2[i], x2[order[1:]])
+        yy2 = np.minimum(y2[i], y2[order[1:]])
+        inter = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
+        iou = inter / (areas[i] + areas[order[1:]] - inter + 1e-6)
+        order = order[1:][iou <= iou_threshold]
+    return keep
 
 
 def draw_detection(image: np.ndarray, box: list, labels: list, score: float, color: tuple, track=False):

@@ -92,6 +92,7 @@ def get_base_parser() -> argparse.ArgumentParser:
         "--frame-rate",
         "-f",
         type=int,
+        default=30,
         help=(
             "Target frame rate for video processing in frames per second. "
             "Controls the playback speed and processing rate for video sources. "
@@ -242,6 +243,17 @@ def get_pipeline_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Enable vertical mirror (flip) of the video source. Useful when camera is mounted upside down.",
+    )
+
+    parser.add_argument(
+        "--run-duration",
+        type=float,
+        default=None,
+        help=(
+            "Run the pipeline for the specified number of seconds, then shut down gracefully. "
+            "Useful for profiling, benchmarking, and automated testing. "
+            "The pipeline performs a clean shutdown (EOS) so that trace data is flushed."
+        ),
     )
 
     return parser
