@@ -221,6 +221,12 @@ def _build_cmd(cfg: _AppCfg, input_type: str, arch: str, output_dir: Optional[Pa
 
     Calls pytest.skip() when required resources are absent.
     """
+    if cfg.name == "instance_segmentation" and arch == "hailo10h":
+        pytest.skip(
+            "instance_segmentation: Hailo-10H with-NMS model is not supported yet; "
+            "the default yolov5m_seg output layout is unsupported by this C++ app"
+        )
+
     binary = str(_binary(cfg))
 
     # ---------------------------------------------------------------- zero_shot
