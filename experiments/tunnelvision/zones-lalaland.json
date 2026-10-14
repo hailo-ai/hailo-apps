@@ -1,0 +1,38 @@
+{
+  "_comment": "Local test cameras (192.168.1.121 ingress / 192.168.1.125 egress). PLACEHOLDER full-frame polygons — we do not have tuned polygons for these specific cameras anywhere in the codebase. Tune against actual frames at first live test before relying on visit data.",
+  "_doc_polygon": "Polygon points as [x, y] in normalized 0.0-1.0 coordinates (fraction of frame width/height)",
+  "_doc_camera_id": "Per-zone camera_id is the LOGICAL role (0=ingress, 1=egress). For lalaland: physical cam1 (bowtie@192.168.1.121) → camera_id=0, physical cam2 (admin@192.168.1.125) → camera_id=1.",
+
+  "zones": [
+    {
+      "name": "ingress_gate",
+      "zone_type": "trigger",
+      "camera_id": 0,
+      "action": "start_visit",
+      "_description": "PLACEHOLDER full-frame trigger — tune against 2560x1440 cam1 frames",
+      "polygon": [
+        [0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]
+      ]
+    },
+    {
+      "name": "lpr_zone",
+      "zone_type": "alpr",
+      "camera_id": 0,
+      "action": "capture_plate",
+      "_description": "PLACEHOLDER full-frame alpr capture — tune to where plates are actually readable on the local cam1 feed",
+      "polygon": [
+        [0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]
+      ]
+    },
+    {
+      "name": "egress_gate",
+      "zone_type": "trigger",
+      "camera_id": 1,
+      "action": "end_visit",
+      "_description": "PLACEHOLDER full-frame end_visit — tune against 3072x2048 cam2 frames",
+      "polygon": [
+        [0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]
+      ]
+    }
+  ]
+}
