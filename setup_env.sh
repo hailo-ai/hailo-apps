@@ -15,9 +15,9 @@ VENV_NAME="venv_hailo_apps"
 
 # Function to check if the script is being sourced
 is_sourced() {
-    if [ -n "$ZSH_VERSION" ]; then
+    if [ -n "${ZSH_VERSION:-}" ]; then
         [[ -o sourced ]]
-    elif [ -n "$BASH_VERSION" ]; then
+    elif [ -n "${BASH_VERSION:-}" ]; then
         [[ "${BASH_SOURCE[0]}" != "$0" ]]
     else
         echo "Unsupported shell. Please use bash or zsh."
