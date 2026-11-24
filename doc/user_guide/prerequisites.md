@@ -1,7 +1,5 @@
 # Prerequisites
 
-> The most recent HailoRT version tested with Hailo Apps is v5.4.0.
-
 Set up the Hailo software for your platform before installing Hailo Apps.
 
 * [Ubuntu x86_64](#ubuntu-x86_64)

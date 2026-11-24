@@ -1087,4 +1087,4 @@ metadata:
   model_zoo_versions:
     hailo8: "v2.19.0"
     hailo8l: "v2.19.0"
-    hailo10h: "v5.4.0"
+    hailo10h: "v5.5.0"
