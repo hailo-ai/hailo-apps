@@ -1,3 +1,8 @@
+## 26.11.0
+
+### Added
+- Support for TAPPAS Core 5.5.0.
+
 ## 26.10.0
 
 ### Fixed

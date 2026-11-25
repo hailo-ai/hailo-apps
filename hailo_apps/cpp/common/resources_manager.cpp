@@ -485,7 +485,7 @@ static bool is_hef_compatible_with_device(const std::filesystem::path &hef_path,
 static std::string modelzoo_version_for(const std::string &hw_arch, const std::string &hailort_ver)
 {
     // hailo10h: 5.x -> v5.x (kept in sync with config.yaml's model_zoo_mapping comment:
-    // HailoRT 5.1.x -> v5.1.0, 5.2.x -> v5.2.0, 5.3.x -> v5.3.0, 5.4.x -> v5.4.0)
+    // HailoRT 5.1.x -> v5.1.0, 5.2.x -> v5.2.0, 5.3.x -> v5.3.0, 5.4.x -> v5.4.0, 5.5.x -> v5.5.0)
     static const std::unordered_map<std::string,std::string> compat_10h = {
         {"5.0.1","v5.0.0"},
         {"5.0.0","v5.0.0"},
@@ -495,6 +495,7 @@ static std::string modelzoo_version_for(const std::string &hw_arch, const std::s
         {"5.2.0","v5.2.0"},
         {"5.3.0","v5.3.0"},
         {"5.4.0","v5.4.0"},
+        {"5.5.0","v5.5.0"},
     };
 
     // hailo8/8l: 4.x -> v2.xx (kept in sync with config.yaml's model_zoo_mapping comment:

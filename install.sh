@@ -46,7 +46,7 @@ readonly CONFIG_FILE="${SCRIPT_DIR}/hailo_apps/config/config.yaml"
 # Fallback version used only when no compatible HailoRT version is detected
 # (see select_tappas_version_for_hailort()); otherwise the version is chosen
 # to match the installed HailoRT via valid_combinations in config.yaml.
-readonly TAPPAS_RESOURCES_VERSION="5.4.0"
+readonly TAPPAS_RESOURCES_VERSION="5.5.0"
 readonly TAPPAS_DOWNLOAD_DIR="/tmp/hailo_tappas_download"
 
 # Log file path (not readonly - may be updated if log dir not writable)
@@ -479,11 +479,14 @@ get_model_zoo_version() {
             ;;
         hailo10h)
             # H10: Derive from HailoRT version
+            # HailoRT 5.5.x -> Model Zoo v5.5.0
             # HailoRT 5.4.x -> Model Zoo v5.4.0
             # HailoRT 5.3.x -> Model Zoo v5.3.0
             # HailoRT 5.2.x -> Model Zoo v5.2.0
             # HailoRT 5.1.x (default) -> Model Zoo v5.1.0
-            if [[ "$hailort_ver" == 5.4.* ]]; then
+            if [[ "$hailort_ver" == 5.5.* ]]; then
+                mz_version="v5.5.0"
+            elif [[ "$hailort_ver" == 5.4.* ]]; then
                 mz_version="v5.4.0"
             elif [[ "$hailort_ver" == 5.3.* ]]; then
                 mz_version="v5.3.0"
