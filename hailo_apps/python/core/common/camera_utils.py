@@ -6,6 +6,7 @@ import time
 import platform
 import cv2
 import sys
+import threading
 from enum import Enum
 from typing import Any, Optional
 from .defines import UDEV_CMD, CAMERA_RESOLUTION_MAP
